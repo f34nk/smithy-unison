@@ -5,6 +5,7 @@
 ### Added
 
 #### Runtime Modules
+- `aws_s3.u` runtime module with S3 URL building and bucket validation
 - `aws_http.u` runtime module with HTTP request/response utilities
 - `aws_xml.u` runtime module with XML encoding/decoding utilities
 - `aws_sigv4.u` runtime module with SigV4 signing implementation

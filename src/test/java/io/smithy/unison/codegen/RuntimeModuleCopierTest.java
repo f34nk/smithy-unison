@@ -472,4 +472,130 @@ class RuntimeModuleCopierTest {
         assertEquals("HTTP request helpers", http.getDescription());
         assertEquals("runtime/aws_http.u", http.getResourcePath());
     }
+    
+    // ========== S3 Module Tests ==========
+    
+    @Test
+    void testS3ModuleIsAvailable() {
+        assertTrue(copier.isModuleAvailable(RuntimeModule.AWS_S3),
+            "aws_s3.u module should be available as a resource");
+    }
+    
+    @Test
+    void testGetS3ModuleContent() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_S3);
+        
+        assertNotNull(content, "Module content should not be null");
+        assertFalse(content.isEmpty(), "Module content should not be empty");
+        
+        // Verify expected content
+        assertTrue(content.contains("Aws.S3.buildUrl"),
+            "Module should define Aws.S3.buildUrl function");
+        assertTrue(content.contains("Aws.S3.isValidBucketName"),
+            "Module should define Aws.S3.isValidBucketName function");
+        assertTrue(content.contains("Aws.S3.urlEncodeKey"),
+            "Module should define Aws.S3.urlEncodeKey function");
+    }
+    
+    @Test
+    void testS3ModuleHasUrlBuilding() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_S3);
+        
+        assertTrue(content.contains("Aws.S3.buildUrl"),
+            "Module should have buildUrl function");
+        assertTrue(content.contains("Aws.S3.buildUrlWithQuery"),
+            "Module should have buildUrlWithQuery function");
+        assertTrue(content.contains("Aws.S3.buildBucketUrl"),
+            "Module should have buildBucketUrl function");
+        assertTrue(content.contains("usePathStyle"),
+            "Module should support path-style addressing");
+        assertTrue(content.contains("Virtual-hosted"),
+            "Module should document virtual-hosted style");
+    }
+    
+    @Test
+    void testS3ModuleHasBucketValidation() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_S3);
+        
+        assertTrue(content.contains("Aws.S3.isValidBucketName"),
+            "Module should have isValidBucketName function");
+        assertTrue(content.contains("Aws.S3.isValidBucketChar"),
+            "Module should have isValidBucketChar function");
+        assertTrue(content.contains("xn--"),
+            "Module should check for xn-- prefix");
+        assertTrue(content.contains("-s3alias"),
+            "Module should check for -s3alias suffix");
+    }
+    
+    @Test
+    void testS3ModuleHasEndpointHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_S3);
+        
+        assertTrue(content.contains("Aws.S3.defaultEndpoint"),
+            "Module should have defaultEndpoint function");
+        assertTrue(content.contains("Aws.S3.accelerateEndpoint"),
+            "Module should have accelerateEndpoint constant");
+        assertTrue(content.contains("Aws.S3.dualStackEndpoint"),
+            "Module should have dualStackEndpoint function");
+        assertTrue(content.contains("Aws.S3.localStackEndpoint"),
+            "Module should have localStackEndpoint function");
+    }
+    
+    @Test
+    void testS3ModuleHasKeyHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_S3);
+        
+        assertTrue(content.contains("Aws.S3.getFileName"),
+            "Module should have getFileName function");
+        assertTrue(content.contains("Aws.S3.getDirectory"),
+            "Module should have getDirectory function");
+        assertTrue(content.contains("Aws.S3.getExtension"),
+            "Module should have getExtension function");
+        assertTrue(content.contains("Aws.S3.joinKey"),
+            "Module should have joinKey function");
+    }
+    
+    @Test
+    void testS3ModuleHasDocumentation() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_S3);
+        
+        assertTrue(content.contains("{{"),
+            "Module should have doc comments");
+        assertTrue(content.contains("Build an S3 URL with bucket routing"),
+            "Module should document buildUrl function");
+        assertTrue(content.contains("S3 bucket naming rules"),
+            "Module should document bucket naming rules");
+    }
+    
+    @Test
+    void testCopyS3Module() {
+        boolean result = copier.copyModule(RuntimeModule.AWS_S3);
+        
+        assertTrue(result, "Copy should succeed");
+        assertTrue(manifest.hasFile("src/aws_s3.u"),
+            "Module should be written to manifest");
+    }
+    
+    @Test
+    void testCopyAwsModulesIncludesS3() {
+        List<String> copied = copier.copyAwsModules();
+        
+        assertTrue(copied.contains("aws_s3.u"),
+            "Should copy aws_s3.u");
+        assertTrue(copied.contains("aws_http.u"),
+            "Should also copy aws_http.u");
+        assertTrue(copied.contains("aws_sigv4.u"),
+            "Should also copy aws_sigv4.u");
+        assertTrue(copied.contains("aws_xml.u"),
+            "Should also copy aws_xml.u");
+    }
+    
+    @Test
+    void testS3ModuleEnum() {
+        RuntimeModule s3 = RuntimeModule.AWS_S3;
+        
+        assertEquals("aws_s3.u", s3.getFilename());
+        assertEquals("S3-specific utilities", s3.getDescription());
+        assertEquals("runtime/aws_s3.u", s3.getResourcePath());
+    }
 }

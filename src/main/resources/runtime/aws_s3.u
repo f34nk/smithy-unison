@@ -1,0 +1,289 @@
+-- AWS S3 Utilities Runtime Module
+-- S3-specific helpers for URL building and bucket name validation
+--
+-- S3 uses special URL patterns based on bucket addressing style:
+-- - Virtual-Hosted Style (default): bucket.s3.region.amazonaws.com/key
+-- - Path Style: s3.region.amazonaws.com/bucket/key
+
+-- =============================================================================
+-- S3 URL Building
+-- =============================================================================
+
+{{
+Build an S3 URL with bucket routing.
+
+Supports two addressing styles:
+- Virtual-hosted style (default): https://bucket.endpoint/key
+- Path style: https://endpoint/bucket/key
+
+The style is determined by the usePathStyle parameter.
+
+Example (virtual-hosted): buildUrl "s3.us-east-1.amazonaws.com" "mybucket" "path/to/file.txt" false
+  -> "https://mybucket.s3.us-east-1.amazonaws.com/path/to/file.txt"
+
+Example (path-style): buildUrl "s3.us-east-1.amazonaws.com" "mybucket" "path/to/file.txt" true
+  -> "https://s3.us-east-1.amazonaws.com/mybucket/path/to/file.txt"
+}}
+Aws.S3.buildUrl : Text -> Text -> Text -> Boolean -> Text
+Aws.S3.buildUrl endpoint bucket key usePathStyle =
+  let
+    encodedKey = Aws.S3.urlEncodeKey key
+  if usePathStyle then
+    -- Path style: https://endpoint/bucket/key
+    "https://" ++ endpoint ++ "/" ++ bucket ++ "/" ++ encodedKey
+  else
+    -- Virtual-hosted style: https://bucket.endpoint/key
+    "https://" ++ bucket ++ "." ++ endpoint ++ "/" ++ encodedKey
+
+{{
+Build an S3 URL with query string.
+
+Combines bucket routing with query parameters.
+}}
+Aws.S3.buildUrlWithQuery : Text -> Text -> Text -> Boolean -> Text -> Text
+Aws.S3.buildUrlWithQuery endpoint bucket key usePathStyle queryString =
+  let
+    baseUrl = Aws.S3.buildUrl endpoint bucket key usePathStyle
+  if Text.isEmpty queryString then baseUrl
+  else baseUrl ++ "?" ++ queryString
+
+{{
+Build an S3 URL for bucket-only operations (no key).
+
+Used for operations like ListObjects, CreateBucket, etc.
+
+Example: buildBucketUrl "s3.us-east-1.amazonaws.com" "mybucket" false
+  -> "https://mybucket.s3.us-east-1.amazonaws.com/"
+}}
+Aws.S3.buildBucketUrl : Text -> Text -> Boolean -> Text
+Aws.S3.buildBucketUrl endpoint bucket usePathStyle =
+  if usePathStyle then
+    "https://" ++ endpoint ++ "/" ++ bucket
+  else
+    "https://" ++ bucket ++ "." ++ endpoint
+
+-- =============================================================================
+-- S3 Key Encoding
+-- =============================================================================
+
+{{
+URL encode an S3 object key.
+
+S3 keys can contain slashes for "folder-like" structures.
+This function encodes special characters but preserves slashes.
+
+Example: urlEncodeKey "path/to/my file.txt"
+  -> "path/to/my%20file.txt"
+}}
+Aws.S3.urlEncodeKey : Text -> Text
+Aws.S3.urlEncodeKey key =
+  key
+    |> Text.replace " " "%20"
+    |> Text.replace "!" "%21"
+    |> Text.replace "#" "%23"
+    |> Text.replace "$" "%24"
+    |> Text.replace "&" "%26"
+    |> Text.replace "'" "%27"
+    |> Text.replace "(" "%28"
+    |> Text.replace ")" "%29"
+    |> Text.replace "*" "%2A"
+    |> Text.replace "+" "%2B"
+    |> Text.replace "," "%2C"
+    |> Text.replace ":" "%3A"
+    |> Text.replace ";" "%3B"
+    |> Text.replace "=" "%3D"
+    |> Text.replace "?" "%3F"
+    |> Text.replace "@" "%40"
+    |> Text.replace "[" "%5B"
+    |> Text.replace "]" "%5D"
+
+{{
+URL encode an S3 path segment, including slashes.
+
+Use this for bucket names or when you need to encode slashes.
+
+Example: urlEncodeSegment "my/bucket"
+  -> "my%2Fbucket"
+}}
+Aws.S3.urlEncodeSegment : Text -> Text
+Aws.S3.urlEncodeSegment text =
+  Aws.S3.urlEncodeKey text |> Text.replace "/" "%2F"
+
+-- =============================================================================
+-- Bucket Name Validation
+-- =============================================================================
+
+{{
+Check if a bucket name is valid according to S3 naming rules.
+
+S3 bucket naming rules:
+- Must be between 3 and 63 characters
+- Can only contain lowercase letters, numbers, and hyphens
+- Must start with a letter or number
+- Must not start with "xn--"
+- Must not end with "-s3alias"
+- Must not be formatted as an IP address
+
+Example: isValidBucketName "my-bucket-123" -> true
+Example: isValidBucketName "My_Bucket" -> false (uppercase and underscore)
+Example: isValidBucketName "ab" -> false (too short)
+}}
+Aws.S3.isValidBucketName : Text -> Boolean
+Aws.S3.isValidBucketName name =
+  let
+    len = Text.size name
+    startsWithValid = 
+      let c = Text.take 1 name
+      in Aws.S3.isLowercaseLetter c || Aws.S3.isDigit c
+    endsWithValid =
+      let c = Text.takeRight 1 name
+      in Aws.S3.isLowercaseLetter c || Aws.S3.isDigit c
+    allCharsValid = Text.all Aws.S3.isValidBucketChar name
+    notXnPrefix = not (Text.startsWith "xn--" name)
+    notS3AliasSuffix = not (Text.endsWith "-s3alias" name)
+    notIpAddress = not (Aws.S3.looksLikeIpAddress name)
+  len >= 3 
+    && len <= 63 
+    && startsWithValid 
+    && endsWithValid
+    && allCharsValid
+    && notXnPrefix
+    && notS3AliasSuffix
+    && notIpAddress
+
+{{
+Check if a character is valid in an S3 bucket name.
+
+Valid characters: lowercase letters (a-z), digits (0-9), hyphen (-)
+}}
+Aws.S3.isValidBucketChar : Char -> Boolean
+Aws.S3.isValidBucketChar c =
+  Aws.S3.isLowercaseLetter (Char.toText c) 
+    || Aws.S3.isDigit (Char.toText c)
+    || c == ?-
+
+{{
+Check if a single character (as Text) is a lowercase letter.
+}}
+Aws.S3.isLowercaseLetter : Text -> Boolean
+Aws.S3.isLowercaseLetter c =
+  List.contains c ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
+
+{{
+Check if a single character (as Text) is a digit.
+}}
+Aws.S3.isDigit : Text -> Boolean
+Aws.S3.isDigit c =
+  List.contains c ["0","1","2","3","4","5","6","7","8","9"]
+
+{{
+Check if a string looks like an IP address (very basic check).
+}}
+Aws.S3.looksLikeIpAddress : Text -> Boolean
+Aws.S3.looksLikeIpAddress name =
+  -- Very basic check: if all characters are digits and dots
+  Text.all (\c -> c == ?. || Aws.S3.isDigit (Char.toText c)) name
+    && Text.contains "." name
+
+-- =============================================================================
+-- S3 Endpoint Helpers
+-- =============================================================================
+
+{{
+Build the default S3 endpoint for a region.
+
+Example: defaultEndpoint "us-east-1" -> "s3.us-east-1.amazonaws.com"
+Example: defaultEndpoint "us-east-1" -> "s3.us-east-1.amazonaws.com"
+}}
+Aws.S3.defaultEndpoint : Text -> Text
+Aws.S3.defaultEndpoint region =
+  "s3." ++ region ++ ".amazonaws.com"
+
+{{
+Build the S3 accelerate endpoint.
+
+S3 Transfer Acceleration uses a special endpoint for faster uploads.
+
+Example: accelerateEndpoint -> "s3-accelerate.amazonaws.com"
+}}
+Aws.S3.accelerateEndpoint : Text
+Aws.S3.accelerateEndpoint = "s3-accelerate.amazonaws.com"
+
+{{
+Build the S3 dual-stack endpoint for a region.
+
+Dual-stack endpoints support both IPv4 and IPv6.
+
+Example: dualStackEndpoint "us-east-1" -> "s3.dualstack.us-east-1.amazonaws.com"
+}}
+Aws.S3.dualStackEndpoint : Text -> Text
+Aws.S3.dualStackEndpoint region =
+  "s3.dualstack." ++ region ++ ".amazonaws.com"
+
+{{
+Build a LocalStack S3 endpoint for testing.
+
+Example: localStackEndpoint 4566 -> "localhost:4566"
+}}
+Aws.S3.localStackEndpoint : Nat -> Text
+Aws.S3.localStackEndpoint port =
+  "localhost:" ++ Nat.toText port
+
+-- =============================================================================
+-- S3 Object Key Helpers
+-- =============================================================================
+
+{{
+Get the file name from an S3 object key.
+
+Example: getFileName "path/to/my-file.txt" -> "my-file.txt"
+Example: getFileName "simple.txt" -> "simple.txt"
+}}
+Aws.S3.getFileName : Text -> Text
+Aws.S3.getFileName key =
+  match Text.lastIndexOf "/" key with
+    Some idx -> Text.drop (idx + 1) key
+    None -> key
+
+{{
+Get the directory path from an S3 object key.
+
+Example: getDirectory "path/to/my-file.txt" -> "path/to/"
+Example: getDirectory "simple.txt" -> ""
+}}
+Aws.S3.getDirectory : Text -> Text
+Aws.S3.getDirectory key =
+  match Text.lastIndexOf "/" key with
+    Some idx -> Text.take (idx + 1) key
+    None -> ""
+
+{{
+Get the file extension from an S3 object key.
+
+Example: getExtension "path/to/my-file.txt" -> "txt"
+Example: getExtension "no-extension" -> ""
+}}
+Aws.S3.getExtension : Text -> Text
+Aws.S3.getExtension key =
+  let
+    fileName = Aws.S3.getFileName key
+  match Text.lastIndexOf "." fileName with
+    Some idx -> Text.drop (idx + 1) fileName
+    None -> ""
+
+{{
+Join path segments into an S3 key.
+
+Handles leading/trailing slashes appropriately.
+
+Example: joinKey ["path", "to", "file.txt"] -> "path/to/file.txt"
+}}
+Aws.S3.joinKey : [Text] -> Text
+Aws.S3.joinKey segments =
+  segments
+    |> List.filter (s -> not (Text.isEmpty s))
+    |> List.map (s -> 
+        let
+          trimmed = if Text.startsWith "/" s then Text.drop 1 s else s
+        if Text.endsWith "/" trimmed then Text.dropRight 1 trimmed else trimmed)
+    |> Text.join "/"

@@ -180,6 +180,7 @@ public final class RuntimeModuleCopier {
      *   <li>{@code aws_sigv4.u} - Required for all AWS services</li>
      *   <li>{@code aws_xml.u} - Required for REST-XML protocol services</li>
      *   <li>{@code aws_http.u} - HTTP utilities for all services</li>
+     *   <li>{@code aws_s3.u} - S3-specific utilities</li>
      * </ul>
      * 
      * @return List of successfully copied module names
@@ -200,6 +201,11 @@ public final class RuntimeModuleCopier {
         // HTTP utilities for request/response handling
         if (copyModule(RuntimeModule.AWS_HTTP)) {
             copied.add(RuntimeModule.AWS_HTTP.getFilename());
+        }
+        
+        // S3-specific utilities (URL building, bucket validation)
+        if (copyModule(RuntimeModule.AWS_S3)) {
+            copied.add(RuntimeModule.AWS_S3.getFilename());
         }
         
         return copied;
