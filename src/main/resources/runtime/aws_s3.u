@@ -124,9 +124,9 @@ S3 bucket naming rules:
 - Must not end with "-s3alias"
 - Must not be formatted as an IP address
 
-Example: isValidBucketName "my-bucket-123" -> true
-Example: isValidBucketName "My_Bucket" -> false (uppercase and underscore)
-Example: isValidBucketName "ab" -> false (too short)
+  isValidBucketName "my-bucket-123" ==> true
+  isValidBucketName "My_Bucket" ==> false (uppercase and underscore)
+  isValidBucketName "ab" ==> false (too short)
 }}
 Aws.S3.isValidBucketName : Text -> Boolean
 Aws.S3.isValidBucketName name =
@@ -192,8 +192,7 @@ Aws.S3.looksLikeIpAddress name =
 {{
 Build the default S3 endpoint for a region.
 
-Example: defaultEndpoint "us-east-1" -> "s3.us-east-1.amazonaws.com"
-Example: defaultEndpoint "us-east-1" -> "s3.us-east-1.amazonaws.com"
+  defaultEndpoint "us-east-1" ==> "s3.us-east-1.amazonaws.com"
 }}
 Aws.S3.defaultEndpoint : Text -> Text
 Aws.S3.defaultEndpoint region =
@@ -201,20 +200,18 @@ Aws.S3.defaultEndpoint region =
 
 {{
 Build the S3 accelerate endpoint.
-
 S3 Transfer Acceleration uses a special endpoint for faster uploads.
 
-Example: accelerateEndpoint -> "s3-accelerate.amazonaws.com"
+  accelerateEndpoint ==> "s3-accelerate.amazonaws.com"
 }}
 Aws.S3.accelerateEndpoint : Text
 Aws.S3.accelerateEndpoint = "s3-accelerate.amazonaws.com"
 
 {{
 Build the S3 dual-stack endpoint for a region.
-
 Dual-stack endpoints support both IPv4 and IPv6.
 
-Example: dualStackEndpoint "us-east-1" -> "s3.dualstack.us-east-1.amazonaws.com"
+  dualStackEndpoint "us-east-1" ==> "s3.dualstack.us-east-1.amazonaws.com"
 }}
 Aws.S3.dualStackEndpoint : Text -> Text
 Aws.S3.dualStackEndpoint region =
@@ -223,7 +220,7 @@ Aws.S3.dualStackEndpoint region =
 {{
 Build a LocalStack S3 endpoint for testing.
 
-Example: localStackEndpoint 4566 -> "localhost:4566"
+  localStackEndpoint 4566 ==> "localhost:4566"
 }}
 Aws.S3.localStackEndpoint : Nat -> Text
 Aws.S3.localStackEndpoint port =
@@ -236,8 +233,8 @@ Aws.S3.localStackEndpoint port =
 {{
 Get the file name from an S3 object key.
 
-Example: getFileName "path/to/my-file.txt" -> "my-file.txt"
-Example: getFileName "simple.txt" -> "simple.txt"
+  getFileName "path/to/my-file.txt" ==> "my-file.txt"
+  getFileName "simple.txt" ==> "simple.txt"
 }}
 Aws.S3.getFileName : Text -> Text
 Aws.S3.getFileName key =
@@ -248,8 +245,8 @@ Aws.S3.getFileName key =
 {{
 Get the directory path from an S3 object key.
 
-Example: getDirectory "path/to/my-file.txt" -> "path/to/"
-Example: getDirectory "simple.txt" -> ""
+  getDirectory "path/to/my-file.txt" ==> "path/to/"
+  getDirectory "simple.txt" ==> ""
 }}
 Aws.S3.getDirectory : Text -> Text
 Aws.S3.getDirectory key =
@@ -260,8 +257,8 @@ Aws.S3.getDirectory key =
 {{
 Get the file extension from an S3 object key.
 
-Example: getExtension "path/to/my-file.txt" -> "txt"
-Example: getExtension "no-extension" -> ""
+  getExtension "path/to/my-file.txt" ==> "txt"
+  getExtension "no-extension" ==> ""
 }}
 Aws.S3.getExtension : Text -> Text
 Aws.S3.getExtension key =
@@ -273,10 +270,9 @@ Aws.S3.getExtension key =
 
 {{
 Join path segments into an S3 key.
-
 Handles leading/trailing slashes appropriately.
 
-Example: joinKey ["path", "to", "file.txt"] -> "path/to/file.txt"
+  joinKey ["path", "to", "file.txt"] ==> "path/to/file.txt"
 }}
 Aws.S3.joinKey : [Text] -> Text
 Aws.S3.joinKey segments =

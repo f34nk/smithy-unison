@@ -11,8 +11,8 @@
 {{
 Check if an HTTP status code indicates success (2xx).
 
-Example: isSuccess 200 -> true
-Example: isSuccess 404 -> false
+  isSuccess 200 ==> true
+  isSuccess 404 ==> false
 }}
 Aws.Http.isSuccess : Nat -> Boolean
 Aws.Http.isSuccess statusCode =
@@ -21,8 +21,8 @@ Aws.Http.isSuccess statusCode =
 {{
 Check if an HTTP status code indicates a client error (4xx).
 
-Example: isClientError 400 -> true
-Example: isClientError 500 -> false
+  isClientError 400 ==> true
+  isClientError 500 ==> false
 }}
 Aws.Http.isClientError : Nat -> Boolean
 Aws.Http.isClientError statusCode =
@@ -31,8 +31,8 @@ Aws.Http.isClientError statusCode =
 {{
 Check if an HTTP status code indicates a server error (5xx).
 
-Example: isServerError 500 -> true
-Example: isServerError 400 -> false
+  isServerError 500 ==> true
+  isServerError 400 ==> false
 }}
 Aws.Http.isServerError : Nat -> Boolean
 Aws.Http.isServerError statusCode =
@@ -41,8 +41,8 @@ Aws.Http.isServerError statusCode =
 {{
 Check if an HTTP status code indicates an error (4xx or 5xx).
 
-Example: isError 404 -> true
-Example: isError 200 -> false
+  isError 404 ==> true
+  isError 200 ==> false
 }}
 Aws.Http.isError : Nat -> Boolean
 Aws.Http.isError statusCode =
@@ -75,7 +75,7 @@ Aws.Http.isRetryable statusCode =
 {{
 Get a header value from a list of headers (case-insensitive).
 
-Example: getHeader "Content-Type" headers -> Some "application/xml"
+  getHeader "Content-Type" headers ==> Some "application/xml"
 }}
 Aws.Http.getHeader : Text -> [(Text, Text)] -> Optional Text
 Aws.Http.getHeader name headers =
@@ -93,7 +93,7 @@ Aws.Http.getHeader name headers =
 {{
 Get a header value with a default if not found.
 
-Example: getHeaderOrDefault "X-Custom" "default" headers -> "default"
+  getHeaderOrDefault "X-Custom" "default" headers ==> "default"
 }}
 Aws.Http.getHeaderOrDefault : Text -> Text -> [(Text, Text)] -> Text
 Aws.Http.getHeaderOrDefault name defaultValue headers =
@@ -104,7 +104,7 @@ Aws.Http.getHeaderOrDefault name defaultValue headers =
 {{
 Check if a header exists (case-insensitive).
 
-Example: hasHeader "Content-Type" headers -> true
+  hasHeader "Content-Type" headers ==> true
 }}
 Aws.Http.hasHeader : Text -> [(Text, Text)] -> Boolean
 Aws.Http.hasHeader name headers =
@@ -162,11 +162,10 @@ Aws.Http.mergeHeaders base override =
 
 {{
 Build a query string from key-value pairs.
-
-Example: buildQueryString [("key", "value"), ("foo", "bar")]
-  -> "key=value&foo=bar"
-
 Values are URL-encoded.
+
+  buildQueryString [("key", "value"), ("foo", "bar")]
+    ==> "key=value&foo=bar"
 }}
 Aws.Http.buildQueryString : [(Text, Text)] -> Text
 Aws.Http.buildQueryString params =
@@ -177,11 +176,10 @@ Aws.Http.buildQueryString params =
 
 {{
 Append a query string to a URL.
-
-Example: appendQueryString "https://example.com/path" "key=value"
-  -> "https://example.com/path?key=value"
-
 If URL already has a query string, appends with &.
+
+  appendQueryString "https://example.com/path" "key=value"
+    ==> "https://example.com/path?key=value"
 }}
 Aws.Http.appendQueryString : Text -> Text -> Text
 Aws.Http.appendQueryString url queryString =
@@ -252,8 +250,8 @@ Aws.Http.urlDecode text =
 {{
 Build a full URL from components.
 
-Example: buildUrl "https" "s3.amazonaws.com" "/bucket/key" "version=1"
-  -> "https://s3.amazonaws.com/bucket/key?version=1"
+  buildUrl "https" "s3.amazonaws.com" "/bucket/key" "version=1"
+    ==> "https://s3.amazonaws.com/bucket/key?version=1"
 }}
 Aws.Http.buildUrl : Text -> Text -> Text -> Text -> Text
 Aws.Http.buildUrl scheme host path queryString =
@@ -264,8 +262,8 @@ Aws.Http.buildUrl scheme host path queryString =
 {{
 Extract the host from a URL.
 
-Example: extractHost "https://s3.amazonaws.com/bucket/key"
-  -> "s3.amazonaws.com"
+  extractHost "https://s3.amazonaws.com/bucket/key"
+    ==> "s3.amazonaws.com"
 }}
 Aws.Http.extractHost : Text -> Text
 Aws.Http.extractHost url =
@@ -284,8 +282,8 @@ Aws.Http.extractHost url =
 {{
 Extract the path from a URL.
 
-Example: extractPath "https://s3.amazonaws.com/bucket/key?version=1"
-  -> "/bucket/key"
+  extractPath "https://s3.amazonaws.com/bucket/key?version=1"
+    ==> "/bucket/key"
 }}
 Aws.Http.extractPath : Text -> Text
 Aws.Http.extractPath url =
