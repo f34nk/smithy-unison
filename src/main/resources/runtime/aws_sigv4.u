@@ -1,0 +1,300 @@
+-- AWS SigV4 Authentication Runtime Module
+-- Implementation of AWS Signature Version 4 for request signing
+--
+-- Reference: https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html
+
+-- =============================================================================
+-- Types
+-- =============================================================================
+
+{{
+AWS credentials for signing requests.
+
+Contains the access key ID, secret access key, and optional session token
+for temporary credentials (e.g., from STS AssumeRole).
+}}
+type Aws.Credentials = {
+  accessKeyId : Text,
+  secretAccessKey : Text,
+  sessionToken : Optional Text
+}
+
+{{ Create credentials without a session token. }}
+Aws.Credentials.basic : Text -> Text -> Aws.Credentials
+Aws.Credentials.basic accessKey secretKey =
+  Aws.Credentials accessKey secretKey None
+
+{{ Create credentials with a session token (for temporary credentials). }}
+Aws.Credentials.withSessionToken : Text -> Text -> Text -> Aws.Credentials
+Aws.Credentials.withSessionToken accessKey secretKey token =
+  Aws.Credentials accessKey secretKey (Some token)
+
+{{
+Configuration for signing AWS requests.
+
+Contains the region, service name, and credentials needed for signing.
+}}
+type Aws.SigningConfig = {
+  region : Text,
+  service : Text,
+  credentials : Aws.Credentials
+}
+
+{{
+Credential scope for AWS SigV4 signing.
+
+Format: YYYYMMDD/region/service/aws4_request
+}}
+type Aws.CredentialScope = {
+  date : Text,
+  region : Text,
+  service : Text
+}
+
+{{ Convert credential scope to string format: YYYYMMDD/region/service/aws4_request }}
+Aws.CredentialScope.toText : Aws.CredentialScope -> Text
+Aws.CredentialScope.toText scope =
+  scope.date ++ "/" ++ scope.region ++ "/" ++ scope.service ++ "/aws4_request"
+
+-- =============================================================================
+-- Timestamp Functions
+-- =============================================================================
+
+{{
+Get the current AWS-formatted timestamp.
+
+Returns timestamp in ISO 8601 basic format: YYYYMMDD'T'HHMMSS'Z'
+Example: "20231215T143052Z"
+}}
+Aws.SigV4.getTimestamp : '{IO} Text
+Aws.SigV4.getTimestamp _ =
+  -- Get current UTC time and format as AWS timestamp
+  -- Format: YYYYMMDD'T'HHMMSS'Z' (ISO 8601 basic format)
+  now = !systemTime
+  Instant.toBasicISO8601 now
+
+{{ Extract the date stamp (YYYYMMDD) from an AWS timestamp. }}
+Aws.SigV4.getDateStamp : Text -> Text
+Aws.SigV4.getDateStamp timestamp =
+  Text.take 8 timestamp
+
+-- =============================================================================
+-- Hashing Functions
+-- =============================================================================
+
+{{
+Hash the request payload using SHA-256.
+
+Returns the lowercase hex-encoded hash of the body.
+For GET requests with no body, use Bytes.empty.
+}}
+Aws.SigV4.hashPayload : Bytes -> Text
+Aws.SigV4.hashPayload body =
+  hashBytes Sha2_256 body |> Bytes.toHex
+
+-- =============================================================================
+-- Canonical Request Building
+-- =============================================================================
+
+{{
+Create canonical headers string for signing.
+
+Headers are lowercased, sorted alphabetically, and formatted as:
+header-name:header-value\n
+
+Multiple values for the same header are joined with commas.
+Leading/trailing whitespace is trimmed from values.
+}}
+Aws.SigV4.canonicalHeaders : [(Text, Text)] -> Text
+Aws.SigV4.canonicalHeaders headers =
+  headers
+    |> List.map (cases (name, value) -> (Text.toLowercase name, Text.trim value))
+    |> List.sortBy Tuple.at1
+    |> List.map (cases (name, value) -> name ++ ":" ++ value)
+    |> Text.join "\n"
+    |> (t -> t ++ "\n")
+
+{{
+Create the signed headers list.
+
+Returns a semicolon-separated list of lowercase header names.
+Example: "content-type;host;x-amz-date"
+}}
+Aws.SigV4.signedHeaders : [(Text, Text)] -> Text
+Aws.SigV4.signedHeaders headers =
+  headers
+    |> List.map (cases (name, _) -> Text.toLowercase name)
+    |> List.sort
+    |> Text.join ";"
+
+{{
+Build the canonical request string.
+
+The canonical request is a standardized format of the HTTP request used
+in the signing process. Format:
+  METHOD\n
+  CanonicalURI\n
+  CanonicalQueryString\n
+  CanonicalHeaders\n
+  SignedHeaders\n
+  HashedPayload
+}}
+Aws.SigV4.canonicalRequest : Text -> Text -> Text -> [(Text, Text)] -> Bytes -> Text
+Aws.SigV4.canonicalRequest method path queryString headers body =
+  let
+    canonicalHeaders = Aws.SigV4.canonicalHeaders headers
+    signedHeaders = Aws.SigV4.signedHeaders headers
+    hashedPayload = Aws.SigV4.hashPayload body
+  Text.join "\n" [
+    method,
+    path,
+    queryString,
+    canonicalHeaders,
+    signedHeaders,
+    hashedPayload
+  ]
+
+-- =============================================================================
+-- Signing Functions
+-- =============================================================================
+
+{{
+Build the string to sign.
+
+The string to sign includes the algorithm, timestamp, credential scope,
+and hashed canonical request. Format:
+  AWS4-HMAC-SHA256\n
+  Timestamp\n
+  CredentialScope\n
+  HashedCanonicalRequest
+}}
+Aws.SigV4.stringToSign : Text -> Aws.CredentialScope -> Text -> Text
+Aws.SigV4.stringToSign timestamp scope canonicalRequest =
+  let
+    hashedCanonicalRequest = hashBytes Sha2_256 (Text.toUtf8 canonicalRequest) |> Bytes.toHex
+    credentialScope = Aws.CredentialScope.toText scope
+  Text.join "\n" [
+    "AWS4-HMAC-SHA256",
+    timestamp,
+    credentialScope,
+    hashedCanonicalRequest
+  ]
+
+{{
+Derive the signing key using HMAC-SHA256.
+
+The signing key is derived by successively applying HMAC-SHA256:
+  kDate = HMAC("AWS4" + secretKey, dateStamp)
+  kRegion = HMAC(kDate, region)
+  kService = HMAC(kRegion, service)
+  kSigning = HMAC(kService, "aws4_request")
+}}
+Aws.SigV4.deriveSigningKey : Text -> Text -> Text -> Text -> Bytes
+Aws.SigV4.deriveSigningKey secretKey dateStamp region service =
+  let
+    kSecret = Text.toUtf8 ("AWS4" ++ secretKey)
+    kDate = hmacBytes Sha2_256 kSecret (Text.toUtf8 dateStamp)
+    kRegion = hmacBytes Sha2_256 kDate (Text.toUtf8 region)
+    kService = hmacBytes Sha2_256 kRegion (Text.toUtf8 service)
+    kSigning = hmacBytes Sha2_256 kService (Text.toUtf8 "aws4_request")
+  kSigning
+
+{{
+Calculate the request signature.
+
+Uses HMAC-SHA256 with the signing key to sign the string to sign.
+Returns the lowercase hex-encoded signature.
+}}
+Aws.SigV4.signature : Bytes -> Text -> Text
+Aws.SigV4.signature signingKey stringToSign =
+  hmacBytes Sha2_256 signingKey (Text.toUtf8 stringToSign) |> Bytes.toHex
+
+{{
+Build the Authorization header value.
+
+Format:
+  AWS4-HMAC-SHA256 Credential=accessKey/scope,SignedHeaders=headers,Signature=sig
+}}
+Aws.SigV4.authorizationHeader : Text -> Aws.CredentialScope -> Text -> Text -> Text
+Aws.SigV4.authorizationHeader accessKeyId scope signedHeaders signature =
+  let
+    credential = accessKeyId ++ "/" ++ Aws.CredentialScope.toText scope
+  "AWS4-HMAC-SHA256 Credential=" ++ credential ++ ",SignedHeaders=" ++ signedHeaders ++ ",Signature=" ++ signature
+
+-- =============================================================================
+-- Main Entry Points
+-- =============================================================================
+
+{{
+Sign an HTTP request using AWS SigV4.
+
+This is the main entry point for request signing. It performs the full
+SigV4 signing process and returns the headers to add to the request:
+- Authorization header with the signature
+- X-Amz-Date header with the timestamp
+- X-Amz-Security-Token header (if using session credentials)
+- X-Amz-Content-Sha256 header with the payload hash
+
+Parameters:
+- config: Signing configuration with region, service, and credentials
+- method: HTTP method (GET, PUT, POST, DELETE, etc.)
+- path: Request path (e.g., "/bucket/key")
+- queryString: Query string without leading ? (e.g., "version-id=123")
+- headers: Request headers as name-value pairs
+- body: Request body bytes
+}}
+Aws.SigV4.signRequest : Aws.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+Aws.SigV4.signRequest config method path queryString headers body _ =
+  let
+    -- Get timestamp
+    timestamp = !Aws.SigV4.getTimestamp
+    dateStamp = Aws.SigV4.getDateStamp timestamp
+
+    -- Build credential scope
+    scope = Aws.CredentialScope dateStamp config.region config.service
+
+    -- Hash payload
+    payloadHash = Aws.SigV4.hashPayload body
+
+    -- Add required headers for signing
+    headersWithAmz = headers
+      |> List.cons ("x-amz-date", timestamp)
+      |> List.cons ("x-amz-content-sha256", payloadHash)
+
+    -- Build canonical request
+    canonicalReq = Aws.SigV4.canonicalRequest method path queryString headersWithAmz body
+
+    -- Build string to sign
+    strToSign = Aws.SigV4.stringToSign timestamp scope canonicalReq
+
+    -- Derive signing key and calculate signature
+    signingKey = Aws.SigV4.deriveSigningKey config.credentials.secretAccessKey dateStamp config.region config.service
+    sig = Aws.SigV4.signature signingKey strToSign
+
+    -- Build authorization header
+    signedHdrs = Aws.SigV4.signedHeaders headersWithAmz
+    authHeader = Aws.SigV4.authorizationHeader config.credentials.accessKeyId scope signedHdrs sig
+
+    -- Build final headers list
+    baseHeaders = [
+      ("Authorization", authHeader),
+      ("X-Amz-Date", timestamp),
+      ("X-Amz-Content-Sha256", payloadHash)
+    ]
+
+  -- Add session token header if present
+  match config.credentials.sessionToken with
+    Some token -> List.cons ("X-Amz-Security-Token", token) baseHeaders
+    None -> baseHeaders
+
+{{
+Add SigV4 signing headers to an existing header list.
+
+Convenience function that signs the request and merges the signing
+headers with the original headers.
+}}
+Aws.SigV4.addSigningHeaders : Aws.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+Aws.SigV4.addSigningHeaders config method path queryString headers body _ =
+  let
+    signingHeaders = Aws.SigV4.signRequest config method path queryString headers body !
+  headers ++ signingHeaders

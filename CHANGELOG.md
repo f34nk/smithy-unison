@@ -4,6 +4,10 @@
 
 ### Added
 
+#### Runtime Modules
+- `aws_sigv4.u` runtime module with SigV4 signing implementation
+- RuntimeModuleCopier for bundling runtime modules with generated code
+
 #### Pagination Support
 - PaginationGenerator for `@paginated` operations
 - Auto-paginating helper functions (e.g., `listObjectsV2All`)

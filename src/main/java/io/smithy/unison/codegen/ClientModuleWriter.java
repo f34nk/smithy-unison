@@ -141,6 +141,9 @@ public final class ClientModuleWriter {
         // Write to file
         writeToFile(writer);
         
+        // Copy runtime modules
+        copyRuntimeModules();
+        
         if (useProtocolGenerator) {
             LOGGER.info("Client generation completed with full operation implementations");
         } else {
@@ -190,17 +193,23 @@ public final class ClientModuleWriter {
     /**
      * Copies all required runtime modules to the output directory.
      * 
-     * <p><b>NOT IMPLEMENTED</b>: Planned for Phase 7.
+     * <p>Copies pre-written Unison runtime modules that provide common
+     * functionality needed by generated code, such as:
+     * <ul>
+     *   <li>{@code aws_sigv4.u} - AWS SigV4 request signing</li>
+     * </ul>
+     * 
+     * @return List of copied module filenames
      */
-    public void copyRuntimeModules() throws IOException {
-        LOGGER.info("Runtime module copying not yet implemented (Phase 7)");
+    public java.util.List<String> copyRuntimeModules() throws IOException {
+        RuntimeModuleCopier copier = new RuntimeModuleCopier(fileManifest, outputDir);
+        java.util.List<String> copied = copier.copyAwsModules();
         
-        // TODO: Implement runtime module copying
-        // Runtime modules for Unison would include:
-        // - aws_sigv4.u (SigV4 signing)
-        // - aws_http.u (HTTP helpers)
-        // - aws_xml.u (XML parsing)
-        // - aws_json.u (JSON helpers)
+        if (!copied.isEmpty()) {
+            LOGGER.info("Copied runtime modules: " + String.join(", ", copied));
+        }
+        
+        return copied;
     }
     
     /**
