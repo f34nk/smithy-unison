@@ -110,5 +110,5 @@ build/test-results/
 .m2/
 target/
 
-# Ignore test branch
-unison-aws/
+# Ignore unison scratch spaces
+unison-*/
