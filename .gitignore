@@ -111,4 +111,4 @@ build/test-results/
 target/
 
 # Ignore test branch
-generate-aws-sdk/
+unison-aws/
