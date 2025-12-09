@@ -291,6 +291,165 @@ class ServiceErrorGeneratorTest {
         assertEquals("NoSuchBucket", variant.errorTypeName());
     }
     
+    // ========== fromCodeAndMessage Tests ==========
+    
+    @Test
+    void generateFromCodeAndMessage_simpleService() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("NotFound", "NotFound"),
+            new ServiceErrorGenerator.ErrorVariant("AccessDenied", "AccessDenied")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Example", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateFromCodeAndMessageFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("ExampleServiceError.fromCodeAndMessage : Text -> Text -> ExampleServiceError"));
+        assertTrue(output.contains("ExampleServiceError.fromCodeAndMessage code message = match code with"));
+        assertTrue(output.contains("\"NotFound\" -> ExampleServiceError'NotFound { message }"));
+        assertTrue(output.contains("\"AccessDenied\" -> ExampleServiceError'AccessDenied { message }"));
+        assertTrue(output.contains("_ -> ExampleServiceError'UnknownError (code ++ \": \" ++ message)"));
+    }
+    
+    @Test
+    void generateFromCodeAndMessage_s3Style() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("NoSuchBucket", "NoSuchBucket"),
+            new ServiceErrorGenerator.ErrorVariant("NoSuchKey", "NoSuchKey")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("S3", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateFromCodeAndMessageFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("S3ServiceError.fromCodeAndMessage : Text -> Text -> S3ServiceError"));
+        assertTrue(output.contains("\"NoSuchBucket\" -> S3ServiceError'NoSuchBucket { message }"));
+        assertTrue(output.contains("\"NoSuchKey\" -> S3ServiceError'NoSuchKey { message }"));
+    }
+    
+    // ========== fromXml Tests ==========
+    
+    @Test
+    void generateFromXml_s3Style() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("NoSuchBucket", "NoSuchBucket")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("S3", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateFromXmlFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("S3ServiceError.fromXml : Text -> S3ServiceError"));
+        assertTrue(output.contains("S3ServiceError.fromXml xmlText ="));
+        assertTrue(output.contains("code = extractXmlTag \"Code\" xmlText"));
+        assertTrue(output.contains("message = extractXmlTag \"Message\" xmlText"));
+        assertTrue(output.contains("S3ServiceError.fromCodeAndMessage code message"));
+    }
+    
+    @Test
+    void generateFromXml_documentation() {
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Test", List.of());
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateFromXmlFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("Parse XML error response"));
+        assertTrue(output.contains("<Error><Code>"));
+    }
+    
+    // ========== fromJson Tests ==========
+    
+    @Test
+    void generateFromJson_simpleService() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("ValidationError", "ValidationError")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Api", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateFromJsonFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("ApiServiceError.fromJson : Text -> ApiServiceError"));
+        assertTrue(output.contains("ApiServiceError.fromJson jsonText ="));
+        assertTrue(output.contains("code = extractJsonField \"__type\" jsonText"));
+        assertTrue(output.contains("message = extractJsonField \"message\" jsonText"));
+        assertTrue(output.contains("ApiServiceError.fromCodeAndMessage code message"));
+    }
+    
+    @Test
+    void generateFromJson_documentation() {
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Test", List.of());
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateFromJsonFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("Parse JSON error response"));
+        assertTrue(output.contains("__type"));
+    }
+    
+    // ========== Protocol-specific Generation Tests ==========
+    
+    @Test
+    void generate_withXmlProtocol() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("NoSuchBucket", "NoSuchBucket")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("S3", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generate(writer, "xml");
+        
+        String output = writer.toString();
+        // Should have type, toFailure, fromCodeAndMessage, and fromXml
+        assertTrue(output.contains("type S3ServiceError"));
+        assertTrue(output.contains("S3ServiceError.toFailure"));
+        assertTrue(output.contains("S3ServiceError.fromCodeAndMessage"));
+        assertTrue(output.contains("S3ServiceError.fromXml"));
+        // Should NOT have fromJson
+        assertFalse(output.contains("fromJson"));
+    }
+    
+    @Test
+    void generate_withJsonProtocol() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("ValidationError", "ValidationError")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Api", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generate(writer, "json");
+        
+        String output = writer.toString();
+        // Should have type, toFailure, fromCodeAndMessage, and fromJson
+        assertTrue(output.contains("type ApiServiceError"));
+        assertTrue(output.contains("ApiServiceError.toFailure"));
+        assertTrue(output.contains("ApiServiceError.fromCodeAndMessage"));
+        assertTrue(output.contains("ApiServiceError.fromJson"));
+        // Should NOT have fromXml
+        assertFalse(output.contains("fromXml"));
+    }
+    
+    @Test
+    void generate_defaultIncludesFromCodeAndMessage() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("Error1", "Error1")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Test", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generate(writer);  // No protocol specified
+        
+        String output = writer.toString();
+        assertTrue(output.contains("TestServiceError.fromCodeAndMessage"));
+        // Should NOT have protocol-specific functions
+        assertFalse(output.contains("fromXml"));
+        assertFalse(output.contains("fromJson"));
+    }
+    
     // ========== Edge Cases ==========
     
     @Test
@@ -303,6 +462,8 @@ class ServiceErrorGeneratorTest {
         // Should still have UnknownError variant
         assertTrue(output.contains("type EmptyServiceError"));
         assertTrue(output.contains("EmptyServiceError'UnknownError Text"));
+        // fromCodeAndMessage should handle unknown codes
+        assertTrue(output.contains("_ -> EmptyServiceError'UnknownError"));
     }
     
     @Test

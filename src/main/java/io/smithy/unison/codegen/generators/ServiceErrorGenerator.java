@@ -133,7 +133,7 @@ public final class ServiceErrorGenerator {
     }
     
     /**
-     * Generates the complete service error code: type definition and toFailure function.
+     * Generates the complete service error code: type definition and helper functions.
      *
      * @param writer The writer to output code to
      */
@@ -142,6 +142,27 @@ public final class ServiceErrorGenerator {
         
         generateTypeDefinition(writer);
         generateToFailureFunction(writer);
+        generateFromCodeAndMessageFunction(writer);
+    }
+    
+    /**
+     * Generates the complete service error code with protocol-specific parsing.
+     *
+     * @param writer The writer to output code to
+     * @param protocol The protocol type ("xml" or "json")
+     */
+    public void generate(UnisonWriter writer, String protocol) {
+        LOGGER.fine("Generating service error type: " + typeName + " with " + protocol + " parsing");
+        
+        generateTypeDefinition(writer);
+        generateToFailureFunction(writer);
+        generateFromCodeAndMessageFunction(writer);
+        
+        if ("xml".equalsIgnoreCase(protocol)) {
+            generateFromXmlFunction(writer);
+        } else if ("json".equalsIgnoreCase(protocol)) {
+            generateFromJsonFunction(writer);
+        }
     }
     
     /**
@@ -194,6 +215,120 @@ public final class ServiceErrorGenerator {
         String unknownVariant = getVariantName("UnknownError");
         writer.write("$L msg -> IO.Failure.Failure (typeLink Text) msg (Any msg)", unknownVariant);
         
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates the fromCodeAndMessage function for parsing error responses.
+     * 
+     * <p>This is the core error parsing function that maps error codes to
+     * appropriate service error variants.
+     *
+     * <h2>Example Output</h2>
+     * <pre>
+     * S3ServiceError.fromCodeAndMessage : Text -> Text -> S3ServiceError
+     * S3ServiceError.fromCodeAndMessage code message = match code with
+     *   "NoSuchBucket" -> S3ServiceError'NoSuchBucket { message }
+     *   "NoSuchKey" -> S3ServiceError'NoSuchKey { message }
+     *   _ -> S3ServiceError'UnknownError (code ++ ": " ++ message)
+     * </pre>
+     *
+     * @param writer The writer to output code to
+     */
+    public void generateFromCodeAndMessageFunction(UnisonWriter writer) {
+        String funcName = typeName + ".fromCodeAndMessage";
+        
+        // Write signature
+        writer.write("$L : Text -> Text -> $L", funcName, typeName);
+        writer.write("$L code message = match code with", funcName);
+        writer.indent();
+        
+        // Generate case for each error variant
+        for (ErrorVariant errorVariant : errorVariants) {
+            String fullVariantName = getVariantName(errorVariant.variantName());
+            // Use variant name as the error code (typically matches Smithy shape name)
+            writer.write("\"$L\" -> $L { message }", errorVariant.variantName(), fullVariantName);
+        }
+        
+        // Generate catch-all for unknown error codes
+        String unknownVariant = getVariantName("UnknownError");
+        writer.write("_ -> $L (code ++ \": \" ++ message)", unknownVariant);
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates the fromXml function for parsing XML error responses.
+     * 
+     * <p>This is used by REST-XML protocols like S3.
+     *
+     * <h2>Example Output</h2>
+     * <pre>
+     * S3ServiceError.fromXml : Text -> S3ServiceError
+     * S3ServiceError.fromXml xmlText =
+     *   -- Parse error code and message from XML
+     *   -- Expected format: &lt;Error&gt;&lt;Code&gt;...&lt;/Code&gt;&lt;Message&gt;...&lt;/Message&gt;&lt;/Error&gt;
+     *   code = extractXmlTag "Code" xmlText |> Optional.getOrElse "UnknownError"
+     *   message = extractXmlTag "Message" xmlText |> Optional.getOrElse ""
+     *   S3ServiceError.fromCodeAndMessage code message
+     * </pre>
+     *
+     * @param writer The writer to output code to
+     */
+    public void generateFromXmlFunction(UnisonWriter writer) {
+        String funcName = typeName + ".fromXml";
+        
+        // Write documentation
+        writer.writeDocComment("Parse XML error response to " + typeName + ".\n\n" +
+                "Expected format: <Error><Code>...</Code><Message>...</Message></Error>");
+        
+        // Write signature
+        writer.write("$L : Text -> $L", funcName, typeName);
+        writer.write("$L xmlText =", funcName);
+        writer.indent();
+        writer.write("-- Extract error code and message from XML");
+        writer.write("code = extractXmlTag \"Code\" xmlText |> Optional.getOrElse \"UnknownError\"");
+        writer.write("message = extractXmlTag \"Message\" xmlText |> Optional.getOrElse \"\"");
+        writer.write("$L.fromCodeAndMessage code message", typeName);
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates the fromJson function for parsing JSON error responses.
+     * 
+     * <p>This is used by REST-JSON protocols.
+     *
+     * <h2>Example Output</h2>
+     * <pre>
+     * ServiceError.fromJson : Text -> ServiceError
+     * ServiceError.fromJson jsonText =
+     *   -- Parse error code and message from JSON
+     *   -- Expected format: {"__type": "ErrorCode", "message": "..."}
+     *   code = extractJsonField "__type" jsonText |> Optional.getOrElse "UnknownError"
+     *   message = extractJsonField "message" jsonText |> Optional.getOrElse ""
+     *   ServiceError.fromCodeAndMessage code message
+     * </pre>
+     *
+     * @param writer The writer to output code to
+     */
+    public void generateFromJsonFunction(UnisonWriter writer) {
+        String funcName = typeName + ".fromJson";
+        
+        // Write documentation
+        writer.writeDocComment("Parse JSON error response to " + typeName + ".\n\n" +
+                "Expected format: {\"__type\": \"ErrorCode\", \"message\": \"...\"}");
+        
+        // Write signature
+        writer.write("$L : Text -> $L", funcName, typeName);
+        writer.write("$L jsonText =", funcName);
+        writer.indent();
+        writer.write("-- Extract error code and message from JSON");
+        writer.write("code = extractJsonField \"__type\" jsonText |> Optional.getOrElse \"UnknownError\"");
+        writer.write("message = extractJsonField \"message\" jsonText |> Optional.getOrElse \"\"");
+        writer.write("$L.fromCodeAndMessage code message", typeName);
         writer.dedent();
         writer.writeBlankLine();
     }
