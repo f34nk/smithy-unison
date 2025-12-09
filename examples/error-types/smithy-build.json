@@ -3,8 +3,8 @@
   "sources": ["model"],
   "maven": {
     "dependencies": [
-      "software.amazon.smithy:smithy-model:1.47.0",
-      "software.amazon.smithy:smithy-aws-traits:1.47.0",
+      "software.amazon.smithy:smithy-model:1.64.0",
+      "software.amazon.smithy:smithy-aws-traits:1.64.0",
       "io.smithy.unison:smithy-unison:0.1.0"
     ],
     "repositories": [
