@@ -19,6 +19,9 @@
 - S3UrlGenerator for S3-specific URL building (virtual-hosted and path-style)
 - XmlGenerator for XML encoding/decoding utilities
 
+#### Authentication
+- SigV4Generator for AWS Signature Version 4 request signing
+
 #### Core Infrastructure
 - UnisonWriter with record type, union type, function, and match expression methods
 - UnisonSymbolProvider with complete Smithy-to-Unison type mappings

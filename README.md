@@ -10,7 +10,7 @@ Reference: https://smithy.io/2.0/index.html
 
 ## Features
 
-### Core Code Generation ✅
+### Core Code Generation
 - Smithy Build plugin integration
 - Support for [Smithy Interface Definition Language (IDL)](https://smithy.io/2.0/spec/idl.html) and [JSON AST](https://smithy.io/2.0/spec/json-ast.html)
 - Structure generation → Unison record types
@@ -20,7 +20,7 @@ Reference: https://smithy.io/2.0/index.html
 - Service-level error sum types with parsing functions
 
 ### Protocol Support (In Progress)
-- **REST-XML protocol** ✅ (S3, CloudFront, Route 53)
+- **REST-XML protocol** (S3, CloudFront, Route 53)
   - Operation code generation
   - HTTP binding traits: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
   - Request serialization / Response deserialization
@@ -29,14 +29,17 @@ Reference: https://smithy.io/2.0/index.html
 - AWS JSON 1.0/1.1 protocols (planned)
 - AWS Query / EC2 Query protocols (planned)
 
-<!-- NOT YET IMPLEMENTED
-### AWS SDK Support
-- AWS SigV4 request signing
-- Credential provider chain (environment variables, config files, credential providers)
+### AWS Authentication
+- **AWS SigV4 request signing** - Complete implementation of Signature Version 4
+  - Credential types (`Aws.Credentials`, `Aws.SigningConfig`)
+  - Canonical request building
+  - Signing key derivation (HMAC-SHA256 chain)
+  - Authorization header generation
+
+### AWS SDK Support (Planned)
+- Credential provider chain (environment variables, config files)
 - Retry logic with exponential backoff and jitter
 - Pagination with automatic helper function generation
-- Region configuration support
--->
 
 Check out [AWS_SDK_SUPPORT.md](https://github.com/f34nk/smithy-unison/blob/main/AWS_SDK_SUPPORT.md) with a full list of AWS SDK features and their support status in smithy-unison.
 
@@ -175,13 +178,13 @@ Register in `META-INF/services/io.smithy.unison.codegen.UnisonIntegration`:
 com.example.CustomIntegration
 ```
 
-### Built-in Integrations (Stubbed)
+### Built-in Integrations
 
-| Integration | Purpose |
-|-------------|---------|
-| `AwsSigV4Integration` | Copies AWS SigV4 signing modules |
-| `AwsProtocolIntegration` | Copies protocol-specific runtime modules |
-| `AwsRetryIntegration` | Copies retry logic module |
+| Integration | Status | Purpose |
+|-------------|--------|---------|
+| `SigV4Generator` | ✅ | Generates AWS SigV4 request signing code |
+| `AwsProtocolIntegration` | Planned | Copies protocol-specific runtime modules |
+| `AwsRetryIntegration` | Planned | Copies retry logic module |
 
 ## Smithy Traits
 
