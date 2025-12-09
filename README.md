@@ -2,11 +2,6 @@
 
 # Smithy Unison Code Generator
 
-> **⚠️ FIRST DRAFT - NOT YET FUNCTIONAL**
->
-> This is an initial bootstrap of smithy-unison. All code generation is stubbed.
-> The project structure is in place but no Unison code is generated yet.
-
 [![CI](https://github.com/f34nk/smithy-unison/actions/workflows/ci.yml/badge.svg)](https://github.com/f34nk/smithy-unison/actions/workflows/ci.yml)
 
 Generates Unison client code from Smithy service models. Produces client modules, type definitions, and HTTP request/response handling for service operations.
@@ -15,33 +10,27 @@ Reference: https://smithy.io/2.0/index.html
 
 ## Features
 
-### Core Code Generation
-<!-- NOT YET IMPLEMENTED
-- Single-module code generation with types, records, and functions
-- Type aliases in function specs for documentation
-- Supports core Smithy shapes (structures, lists, maps, primitives, unions, enums)
-- Union types as sum types with encoding/decoding
-- Enum types as sum types with validation
-- Topological sorting for dependency-ordered type definitions
--->
-- Smithy Build plugin integration ✅
+### Core Code Generation ✅
+- Smithy Build plugin integration
 - Support for [Smithy Interface Definition Language (IDL)](https://smithy.io/2.0/spec/idl.html) and [JSON AST](https://smithy.io/2.0/spec/json-ast.html)
+- Structure generation → Unison record types
+- Enum generation → Unison sum types with `toText`/`fromText` functions
+- Union generation → Unison sum types with payloads
+- Error type generation with `toFailure` conversion functions
+- Service-level error sum types with parsing functions
+
+### Protocol Support (In Progress)
+- **REST-XML protocol** ✅ (S3, CloudFront, Route 53)
+  - Operation code generation
+  - HTTP binding traits: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
+  - Request serialization / Response deserialization
+  - Error parsing
+- REST-JSON protocol (planned)
+- AWS JSON 1.0/1.1 protocols (planned)
+- AWS Query / EC2 Query protocols (planned)
 
 <!-- NOT YET IMPLEMENTED
-### Protocol Support (Planned)
-- All 5 AWS protocols supported:
-  - awsJson1.0 and awsJson1.1 (DynamoDB, Lambda, Kinesis)
-  - awsQuery (SQS, SNS, RDS)
-  - ec2Query (EC2)
-  - restXml (S3, CloudFront, Route 53)
-  - restJson1 (API Gateway, Step Functions)
-- HTTP protocol bindings: @httpLabel, @httpHeader, @httpQuery, @httpPayload
-- URI template parsing and parameter substitution
-- Field validation for @required trait
--->
-
-<!-- NOT YET IMPLEMENTED
-### AWS SDK Support (Planned)
+### AWS SDK Support
 - AWS SigV4 request signing
 - Credential provider chain (environment variables, config files, credential providers)
 - Retry logic with exponential backoff and jitter
@@ -73,13 +62,19 @@ Run generator tests:
 make test
 ```
 
-<!-- NOT YET IMPLEMENTED
-Run all example builds and tests:
+Run all example builds:
 
 ```bash
 make examples
 ```
 
+Or build a specific example:
+
+```bash
+make examples/error-types
+```
+
+<!-- NOT YET IMPLEMENTED
 Or generate and run the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01):
 
 ```bash
@@ -122,9 +117,10 @@ Build model:
 smithy build
 ```
 
-<!-- NOT YET IMPLEMENTED
-Generated files in `src/generated/`:
-- `my_client.u` - A single module with types, records, and operation functions (generated from the smithy model)
+Generated files in `generated/`:
+- `{namespace}_client.u` - Client module with types, records, and operation stubs
+
+<!-- NOT YET IMPLEMENTED - Runtime Modules
 - `aws_config.u` - AWS configuration management
 - `aws_sigv4.u` - AWS Signature V4 request signing
 - `aws_credentials.u` - Credential provider chain
@@ -214,15 +210,33 @@ The generator maps Smithy types to Unison types:
 Example generated code:
 
 ```unison
+-- Record type from structure
 type GetObjectInput = {
   bucket : Text,
   key : Text,
   versionId : Optional Text
 }
 
-getObject : S3Config -> GetObjectInput -> '{IO, Exception} S3Response Bytes
-getObject config input _ =
-  -- implementation
+-- Sum type from enum
+type BucketLocationConstraint
+  = BucketLocationConstraint'UsEast1
+  | BucketLocationConstraint'UsWest2
+  | BucketLocationConstraint'EuWest1
+
+-- Error type with toFailure conversion
+type NoSuchKey = {
+  message : Text,
+  key : Optional Text
+}
+
+NoSuchKey.toFailure : NoSuchKey -> IO.Failure
+NoSuchKey.toFailure err =
+  IO.Failure.Failure (typeLink NoSuchKey) err.message (Any err)
+
+-- Operation with exception-based error handling
+getObject : Config -> GetObjectInput -> '{IO, Exception, Http} GetObjectOutput
+getObject config input =
+  -- Raises exception on error, returns output directly on success
 ```
 
 ## License
