@@ -1,18 +1,22 @@
 package io.smithy.unison.codegen;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import io.smithy.unison.codegen.aws.AwsProtocol;
 import io.smithy.unison.codegen.aws.AwsProtocolDetector;
 import io.smithy.unison.codegen.generators.PaginationGenerator;
+import io.smithy.unison.codegen.generators.StructureGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGeneratorFactory;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.build.FileManifest;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.*;
+import software.amazon.smithy.model.traits.ErrorTrait;
 
 /**
  * Core client module code generation logic for Unison.
@@ -110,6 +114,13 @@ public final class ClientModuleWriter {
             generateGenericConfigType(writer);
         }
         
+        // Generate model types (structures, enums, errors) referenced by operations
+        if (!useProtocolGenerator) {
+            // For non-AWS or stub operations, we need to generate the types
+            // AWS protocol generators handle type generation internally
+            generateModelTypes(writer);
+        }
+        
         // Generate operations
         for (ShapeId opId : service.getOperations()) {
             OperationShape operation = model.expectShape(opId, OperationShape.class);
@@ -181,6 +192,128 @@ public final class ClientModuleWriter {
         writer.dedent();
         writer.write("}");
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates Unison types for all structures referenced by service operations.
+     * 
+     * <p>Collects all shapes referenced by operations (input, output, errors, nested)
+     * and generates Unison record types for structures and sum types for enums.
+     */
+    private void generateModelTypes(UnisonWriter writer) {
+        Set<ShapeId> generatedTypes = new HashSet<>();
+        Set<StructureShape> structures = new HashSet<>();
+        Set<StructureShape> errors = new HashSet<>();
+        
+        // Collect all shapes referenced by operations
+        for (ShapeId opId : service.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            
+            // Collect input shape
+            operation.getInput().ifPresent(inputId -> {
+                collectReferencedShapes(inputId, structures, errors, generatedTypes);
+            });
+            
+            // Collect output shape
+            operation.getOutput().ifPresent(outputId -> {
+                collectReferencedShapes(outputId, structures, errors, generatedTypes);
+            });
+            
+            // Collect error shapes
+            for (ShapeId errorId : operation.getErrors()) {
+                collectReferencedShapes(errorId, structures, errors, generatedTypes);
+            }
+        }
+        
+        // Generate structures (non-errors first)
+        if (!structures.isEmpty()) {
+            writer.writeComment("=== Types ===");
+            writer.writeBlankLine();
+            
+            for (StructureShape structure : structures) {
+                StructureGenerator generator = new StructureGenerator(
+                    structure, model, context.symbolProvider());
+                generator.generate(writer);
+                writer.writeBlankLine();
+            }
+        }
+        
+        // Generate error types
+        if (!errors.isEmpty()) {
+            writer.writeComment("=== Errors ===");
+            writer.writeBlankLine();
+            
+            for (StructureShape error : errors) {
+                StructureGenerator generator = new StructureGenerator(
+                    error, model, context.symbolProvider());
+                generator.generate(writer);
+                
+                // Generate toFailure function for errors
+                generateErrorToFailure(error, writer);
+                writer.writeBlankLine();
+            }
+        }
+    }
+    
+    /**
+     * Recursively collects all shapes referenced by a shape.
+     */
+    private void collectReferencedShapes(ShapeId shapeId, Set<StructureShape> structures,
+                                         Set<StructureShape> errors, Set<ShapeId> visited) {
+        if (visited.contains(shapeId)) {
+            return;
+        }
+        visited.add(shapeId);
+        
+        Shape shape = model.expectShape(shapeId);
+        
+        if (shape instanceof StructureShape) {
+            StructureShape structure = (StructureShape) shape;
+            
+            // Check if this is an error type
+            if (structure.hasTrait(ErrorTrait.class)) {
+                errors.add(structure);
+            } else {
+                structures.add(structure);
+            }
+            
+            // Recursively collect member shapes
+            for (MemberShape member : structure.getAllMembers().values()) {
+                collectReferencedShapes(member.getTarget(), structures, errors, visited);
+            }
+        } else if (shape instanceof ListShape) {
+            ListShape list = (ListShape) shape;
+            collectReferencedShapes(list.getMember().getTarget(), structures, errors, visited);
+        } else if (shape instanceof MapShape) {
+            MapShape map = (MapShape) shape;
+            collectReferencedShapes(map.getKey().getTarget(), structures, errors, visited);
+            collectReferencedShapes(map.getValue().getTarget(), structures, errors, visited);
+        }
+        // Simple types (String, Integer, etc.) don't need generation
+    }
+    
+    /**
+     * Generates a toFailure conversion function for an error type.
+     */
+    private void generateErrorToFailure(StructureShape error, UnisonWriter writer) {
+        String typeName = UnisonSymbolProvider.toUnisonTypeName(error.getId().getName());
+        String funcName = typeName + ".toFailure";
+        
+        writer.writeSignature(funcName, typeName + " -> Failure");
+        writer.write("$L err =", funcName);
+        writer.indent();
+        
+        // Check if there's a message field
+        boolean hasMessage = error.getAllMembers().values().stream()
+            .anyMatch(m -> m.getMemberName().equalsIgnoreCase("message"));
+        
+        if (hasMessage) {
+            writer.write("Failure (typeLink $L) err.message (Any err)", typeName);
+        } else {
+            writer.write("Failure (typeLink $L) \"$L error\" (Any err)", typeName, typeName);
+        }
+        
+        writer.dedent();
     }
     
     /**
