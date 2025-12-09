@@ -1,0 +1,3 @@
+io.smithy.unison.codegen.integrations.AwsSigV4Integration
+io.smithy.unison.codegen.integrations.AwsProtocolIntegration
+io.smithy.unison.codegen.integrations.AwsRetryIntegration
