@@ -16,6 +16,7 @@
 - HTTP binding trait support: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
 - Error parsing functions for XML and JSON protocols
 - HTTP error handler generation
+- S3UrlGenerator for S3-specific URL building (virtual-hosted and path-style)
 
 #### Core Infrastructure
 - UnisonWriter with record type, union type, function, and match expression methods
