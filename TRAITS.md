@@ -87,8 +87,8 @@ Traits that refine or modify type semantics.
 | [`smithy.api#error`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-error-trait) | ❌ | Marks structure as an error shape |
 | [`smithy.api#input`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-input-trait) | ❌ | Marks structure as operation input |
 | [`smithy.api#output`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-output-trait) | ❌ | Marks structure as operation output |
-| [`smithy.api#required`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-required-trait) | ❌ | Marks member as required |
-| [`smithy.api#default`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-default-trait) | ❌ | Sets default value for a member |
+| [`smithy.api#required`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-required-trait) | ✅ | Marks member as required (non-optional in Unison) |
+| [`smithy.api#default`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-default-trait) | ⚠️ | Sets default value - field is non-optional but default not generated |
 | [`smithy.api#sparse`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-sparse-trait) | ❌ | Allows null values in lists/maps |
 
 ---
@@ -127,7 +127,7 @@ Traits that provide documentation metadata.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#documentation`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-documentation-trait) | ❌ | Documentation for shapes |
+| [`smithy.api#documentation`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-documentation-trait) | ✅ | Documentation for shapes (generates {{ }} doc comments) |
 | [`smithy.api#deprecated`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-deprecated-trait) | ❌ | Marks shape as deprecated |
 | [`smithy.api#examples`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-examples-trait) | ❌ | Provides example input/output for operations |
 
