@@ -4,7 +4,6 @@
   "maven": {
     "dependencies": [
       "software.amazon.smithy:smithy-model:1.64.0",
-      "software.amazon.smithy:smithy-aws-traits:1.64.0",
       "io.smithy.unison:smithy-unison:0.1.0"
     ],
     "repositories": [
@@ -18,8 +17,8 @@
   },
   "plugins": {
     "unison-codegen": {
-      "service": "com.example.errors#ErrorDemoService",
-      "namespace": "com.example.errors",
+      "service": "com.example#SimpleService",
+      "namespace": "simple",
       "outputDir": "generated"
     }
   }
