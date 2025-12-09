@@ -1,8 +1,13 @@
 package io.smithy.unison.codegen;
 
 import java.io.IOException;
+import java.util.Optional;
 import java.util.logging.Logger;
 
+import io.smithy.unison.codegen.aws.AwsProtocol;
+import io.smithy.unison.codegen.aws.AwsProtocolDetector;
+import io.smithy.unison.codegen.protocols.ProtocolGenerator;
+import io.smithy.unison.codegen.protocols.ProtocolGeneratorFactory;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.build.FileManifest;
 import software.amazon.smithy.model.Model;
@@ -11,10 +16,16 @@ import software.amazon.smithy.model.shapes.*;
 /**
  * Core client module code generation logic for Unison.
  * 
- * <p>This class contains the actual Unison client code generation logic
- * used by the DirectedCodegen architecture via UnisonGenerator.
+ * <p>This class generates Unison client modules for AWS services, including:
+ * <ul>
+ *   <li>Configuration types (Config, Credentials)</li>
+ *   <li>Operation functions with full HTTP request/response handling</li>
+ *   <li>Error handling using Unison's exception ability</li>
+ * </ul>
  * 
- * <p><b>NOT FULLY IMPLEMENTED</b>: This is a first draft with stub implementations.
+ * <p>For services with supported protocols (REST-XML, etc.), operations are
+ * generated with complete implementation including URL building, header
+ * construction, request signing, and response parsing.
  */
 public final class ClientModuleWriter {
     
@@ -25,17 +36,20 @@ public final class ClientModuleWriter {
     private final String namespace;
     private final FileManifest fileManifest;
     private final String outputDir;
+    private final UnisonContext context;
     
     /**
      * Creates a new client module writer.
      */
     public ClientModuleWriter(ServiceShape service, Model model, String namespace,
-                               FileManifest fileManifest, String outputDir) {
+                               FileManifest fileManifest, String outputDir,
+                               UnisonContext context) {
         this.service = service;
         this.model = model;
         this.namespace = namespace;
         this.fileManifest = fileManifest;
         this.outputDir = outputDir;
+        this.context = context;
     }
     
     /**
@@ -53,40 +67,50 @@ public final class ClientModuleWriter {
                 context.model(),
                 namespace,
                 context.fileManifest(),
-                context.settings().outputDir()
+                context.settings().outputDir(),
+                context
         );
     }
     
     /**
      * Generates the complete client module.
      * 
-     * <p><b>NOT IMPLEMENTED</b>: Stub for first draft.
+     * <p>Detects the service protocol and uses the appropriate protocol
+     * generator to create operation implementations.
      */
     public void generate() throws IOException {
         LOGGER.info("Generating Unison client for service: " + service.getId());
         
-        // TODO: Implement Unison code generation
-        // See ErlangWriter.ClientModuleWriter.generate() for reference
-        
         UnisonWriter writer = new UnisonWriter(namespace);
+        
+        // Detect protocol
+        AwsProtocol protocol = AwsProtocolDetector.detectProtocol(service);
+        Optional<ProtocolGenerator> protocolGenerator = ProtocolGeneratorFactory.getGenerator(protocol);
+        boolean useProtocolGenerator = protocolGenerator.isPresent() 
+                && ProtocolGeneratorFactory.isFullyImplemented(protocol);
         
         // Write header comment
         writer.writeComment("Generated Unison client for " + service.getId().getName());
-        writer.writeComment("THIS IS A STUB - Code generation not yet implemented");
+        if (useProtocolGenerator) {
+            writer.writeComment("Protocol: " + protocol.name());
+        } else {
+            writer.writeComment("Protocol " + protocol.name() + " - operations are stubs");
+        }
         writer.writeBlankLine();
         
-        // Write placeholder type
+        // Write Config type
         writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
         writer.write("type Config = {");
         writer.indent();
         writer.write("endpoint : Text,");
         writer.write("region : Text,");
-        writer.write("credentials : Credentials");
+        writer.write("credentials : Credentials,");
+        writer.write("usePathStyle : Boolean");
         writer.dedent();
         writer.write("}");
         writer.writeBlankLine();
         
-        // Write placeholder credentials type
+        // Write Credentials type
         writer.write("type Credentials = {");
         writer.indent();
         writer.write("accessKeyId : Text,");
@@ -96,26 +120,34 @@ public final class ClientModuleWriter {
         writer.write("}");
         writer.writeBlankLine();
         
-        // Note: We use exception-based error handling (idiomatic Unison pattern)
-        // Operations raise exceptions via Exception.raise on error
-        // No Response sum type needed - operations return output directly
-        
-        // Write stub for each operation
+        // Generate operations
         for (ShapeId opId : service.getOperations()) {
             OperationShape operation = model.expectShape(opId, OperationShape.class);
-            generateOperationStub(operation, writer);
+            
+            if (useProtocolGenerator && protocolGenerator.isPresent()) {
+                // Use protocol generator for full implementation
+                protocolGenerator.get().generateOperation(operation, writer, context);
+            } else {
+                // Fall back to stub generation
+                generateOperationStub(operation, writer);
+            }
         }
         
         // Write to file
         writeToFile(writer);
         
-        LOGGER.info("Client generation completed (stub only)");
+        if (useProtocolGenerator) {
+            LOGGER.info("Client generation completed with full operation implementations");
+        } else {
+            LOGGER.info("Client generation completed (stub operations)");
+        }
     }
     
     /**
      * Generates a stub for an operation using exception-based error handling.
      * 
-     * <p>Operations use idiomatic Unison pattern:
+     * <p>Used when the protocol is not fully implemented. Operations use
+     * idiomatic Unison pattern:
      * <ul>
      *   <li>Return output directly on success (not wrapped in Response)</li>
      *   <li>Raise exceptions via Exception.raise on error</li>
@@ -153,10 +185,10 @@ public final class ClientModuleWriter {
     /**
      * Copies all required runtime modules to the output directory.
      * 
-     * <p><b>NOT IMPLEMENTED</b>: Stub for first draft.
+     * <p><b>NOT IMPLEMENTED</b>: Planned for Phase 7.
      */
     public void copyRuntimeModules() throws IOException {
-        LOGGER.info("Runtime module copying not yet implemented");
+        LOGGER.info("Runtime module copying not yet implemented (Phase 7)");
         
         // TODO: Implement runtime module copying
         // Runtime modules for Unison would include:
