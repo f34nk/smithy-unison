@@ -2,11 +2,6 @@
 
 This document lists all Smithy 2.0 traits and their support status in smithy-unison.
 
-> **⚠️ FIRST DRAFT - NO TRAITS IMPLEMENTED**
-> 
-> This is a first draft bootstrap of smithy-unison. **No traits are currently implemented.**
-> All traits are marked as ❌ Not Supported until the code generation is implemented.
-
 **Legend:**
 - ✅ Supported - Trait is read and affects code generation
 - ⚠️ Partial - Trait is recognized but not fully implemented

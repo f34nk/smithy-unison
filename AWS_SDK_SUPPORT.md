@@ -2,11 +2,6 @@
 
 This document lists all AWS SDK features from the [Smithy AWS integrations](https://smithy.io/2.0/aws/index.html) specification and their support status in smithy-unison.
 
-> **⚠️ FIRST DRAFT - NO FEATURES IMPLEMENTED**
-> 
-> This is a first draft bootstrap of smithy-unison. **No AWS SDK features are currently implemented.**
-> All features are marked as ❌ Not Supported until the code generation is implemented.
-
 **Legend:**
 - ✅ Supported - Feature is implemented and affects code generation
 - ⚠️ Partial - Feature is partially implemented with limitations

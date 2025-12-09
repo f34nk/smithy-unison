@@ -247,7 +247,9 @@ public interface ProtocolGenerator {
 
 ### Output Format
 
-Unlike Erlang which produces standalone `.erl` modules, Unison generates `.u` scratch files that users will `add` to their codebase via UCM (Unison Codebase Manager).
+Unison generates `.u` scratch files that users will `add` to their codebase via UCM (Unison Codebase Manager).
+
+Reference: https://www.unison-lang.org/docs/tooling/project-workflows/
 
 ### Type Mappings
 
@@ -272,46 +274,4 @@ Unlike Erlang which produces standalone `.erl` modules, Unison generates `.u` sc
 
 ---
 
-## NOT YET IMPLEMENTED
-
-The following features are **stubbed** in the first draft:
-
-### Core Code Generation
-- [ ] Structure type generation
-- [ ] Union type generation  
-- [ ] Enum type generation
-- [ ] Error type generation
-- [ ] Operation function generation
-- [ ] Request serialization
-- [ ] Response deserialization
-
-### Protocol Support
-- [ ] REST-XML protocol (S3)
-- [ ] REST-JSON protocol
-- [ ] AWS JSON 1.0/1.1 protocol
-- [ ] AWS Query protocol
-- [ ] EC2 Query protocol
-
-### Runtime Modules
-- [ ] `aws_sigv4.u` (SigV4 signing)
-- [ ] `aws_http.u` (HTTP helpers)
-- [ ] `aws_xml.u` (XML encoding/decoding)
-- [ ] `aws_json.u` (JSON encoding/decoding)
-- [ ] `aws_config.u` (Configuration types)
-- [ ] `aws_retry.u` (Retry logic)
-
-### Integrations
-- [ ] AwsSigV4Integration (module copying)
-- [ ] AwsProtocolIntegration (module copying)
-- [ ] AwsRetryIntegration (module copying)
-
-### Features
-- [ ] Pagination helpers
-- [ ] Input validation
-- [ ] Documentation generation
-- [ ] HTTP header/query/label binding
-- [ ] HTTP payload handling
-
----
-
-*This is a first draft. See smithy-erlang for reference implementation.*
+*This is a first draft. See smithy-unison for reference implementation.*
