@@ -1,0 +1,398 @@
+-- AWS HTTP Utilities Runtime Module
+-- HTTP request and response helpers for AWS services
+--
+-- This module provides utilities for building HTTP requests,
+-- parsing responses, and handling common AWS HTTP patterns.
+
+-- =============================================================================
+-- Status Codes
+-- =============================================================================
+
+{{
+Check if an HTTP status code indicates success (2xx).
+
+Example: isSuccess 200 -> true
+Example: isSuccess 404 -> false
+}}
+Aws.Http.isSuccess : Nat -> Boolean
+Aws.Http.isSuccess statusCode =
+  statusCode >= 200 && statusCode < 300
+
+{{
+Check if an HTTP status code indicates a client error (4xx).
+
+Example: isClientError 400 -> true
+Example: isClientError 500 -> false
+}}
+Aws.Http.isClientError : Nat -> Boolean
+Aws.Http.isClientError statusCode =
+  statusCode >= 400 && statusCode < 500
+
+{{
+Check if an HTTP status code indicates a server error (5xx).
+
+Example: isServerError 500 -> true
+Example: isServerError 400 -> false
+}}
+Aws.Http.isServerError : Nat -> Boolean
+Aws.Http.isServerError statusCode =
+  statusCode >= 500 && statusCode < 600
+
+{{
+Check if an HTTP status code indicates an error (4xx or 5xx).
+
+Example: isError 404 -> true
+Example: isError 200 -> false
+}}
+Aws.Http.isError : Nat -> Boolean
+Aws.Http.isError statusCode =
+  statusCode >= 400
+
+{{
+Check if an HTTP status code indicates the request should be retried.
+
+Retryable status codes:
+- 429 Too Many Requests
+- 500 Internal Server Error
+- 502 Bad Gateway
+- 503 Service Unavailable
+- 504 Gateway Timeout
+}}
+Aws.Http.isRetryable : Nat -> Boolean
+Aws.Http.isRetryable statusCode =
+  match statusCode with
+    429 -> true  -- Too Many Requests
+    500 -> true  -- Internal Server Error
+    502 -> true  -- Bad Gateway
+    503 -> true  -- Service Unavailable
+    504 -> true  -- Gateway Timeout
+    _ -> false
+
+-- =============================================================================
+-- Header Helpers
+-- =============================================================================
+
+{{
+Get a header value from a list of headers (case-insensitive).
+
+Example: getHeader "Content-Type" headers -> Some "application/xml"
+}}
+Aws.Http.getHeader : Text -> [(Text, Text)] -> Optional Text
+Aws.Http.getHeader name headers =
+  let
+    lowerName = Text.toLowercase name
+    find : [(Text, Text)] -> Optional Text
+    find remaining =
+      match remaining with
+        [] -> None
+        (k, v) +: rest ->
+          if Text.toLowercase k == lowerName then Some v
+          else find rest
+  find headers
+
+{{
+Get a header value with a default if not found.
+
+Example: getHeaderOrDefault "X-Custom" "default" headers -> "default"
+}}
+Aws.Http.getHeaderOrDefault : Text -> Text -> [(Text, Text)] -> Text
+Aws.Http.getHeaderOrDefault name defaultValue headers =
+  match Aws.Http.getHeader name headers with
+    Some value -> value
+    None -> defaultValue
+
+{{
+Check if a header exists (case-insensitive).
+
+Example: hasHeader "Content-Type" headers -> true
+}}
+Aws.Http.hasHeader : Text -> [(Text, Text)] -> Boolean
+Aws.Http.hasHeader name headers =
+  match Aws.Http.getHeader name headers with
+    Some _ -> true
+    None -> false
+
+{{
+Add a header to a header list (does not check for duplicates).
+
+Example: addHeader "X-Custom" "value" headers
+}}
+Aws.Http.addHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
+Aws.Http.addHeader name value headers =
+  (name, value) +: headers
+
+{{
+Set a header, replacing any existing header with the same name.
+
+Example: setHeader "Content-Type" "application/json" headers
+}}
+Aws.Http.setHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
+Aws.Http.setHeader name value headers =
+  let
+    lowerName = Text.toLowercase name
+    filtered = List.filter (cases (k, _) -> Text.toLowercase k != lowerName) headers
+  (name, value) +: filtered
+
+{{
+Remove a header by name (case-insensitive).
+
+Example: removeHeader "X-Custom" headers
+}}
+Aws.Http.removeHeader : Text -> [(Text, Text)] -> [(Text, Text)]
+Aws.Http.removeHeader name headers =
+  let
+    lowerName = Text.toLowercase name
+  List.filter (cases (k, _) -> Text.toLowercase k != lowerName) headers
+
+{{
+Merge two header lists, with the second list taking precedence.
+
+Example: mergeHeaders baseHeaders customHeaders
+}}
+Aws.Http.mergeHeaders : [(Text, Text)] -> [(Text, Text)] -> [(Text, Text)]
+Aws.Http.mergeHeaders base override =
+  let
+    overrideNames = List.map (cases (k, _) -> Text.toLowercase k) override
+    filtered = List.filter (cases (k, _) -> not (List.contains (Text.toLowercase k) overrideNames)) base
+  filtered ++ override
+
+-- =============================================================================
+-- Query String Helpers
+-- =============================================================================
+
+{{
+Build a query string from key-value pairs.
+
+Example: buildQueryString [("key", "value"), ("foo", "bar")]
+  -> "key=value&foo=bar"
+
+Values are URL-encoded.
+}}
+Aws.Http.buildQueryString : [(Text, Text)] -> Text
+Aws.Http.buildQueryString params =
+  params
+    |> List.filter (cases (_, v) -> not (Text.isEmpty v))
+    |> List.map (cases (k, v) -> k ++ "=" ++ Aws.Http.urlEncode v)
+    |> Text.join "&"
+
+{{
+Append a query string to a URL.
+
+Example: appendQueryString "https://example.com/path" "key=value"
+  -> "https://example.com/path?key=value"
+
+If URL already has a query string, appends with &.
+}}
+Aws.Http.appendQueryString : Text -> Text -> Text
+Aws.Http.appendQueryString url queryString =
+  if Text.isEmpty queryString then url
+  else if Text.contains "?" url then url ++ "&" ++ queryString
+  else url ++ "?" ++ queryString
+
+{{
+URL-encode a string for use in query parameters.
+
+Encodes special characters as percent-encoded values.
+}}
+Aws.Http.urlEncode : Text -> Text
+Aws.Http.urlEncode text =
+  text
+    |> Text.replace "%" "%25"
+    |> Text.replace " " "%20"
+    |> Text.replace "!" "%21"
+    |> Text.replace "#" "%23"
+    |> Text.replace "$" "%24"
+    |> Text.replace "&" "%26"
+    |> Text.replace "'" "%27"
+    |> Text.replace "(" "%28"
+    |> Text.replace ")" "%29"
+    |> Text.replace "*" "%2A"
+    |> Text.replace "+" "%2B"
+    |> Text.replace "," "%2C"
+    |> Text.replace "/" "%2F"
+    |> Text.replace ":" "%3A"
+    |> Text.replace ";" "%3B"
+    |> Text.replace "=" "%3D"
+    |> Text.replace "?" "%3F"
+    |> Text.replace "@" "%40"
+    |> Text.replace "[" "%5B"
+    |> Text.replace "]" "%5D"
+
+{{
+URL-decode a percent-encoded string.
+}}
+Aws.Http.urlDecode : Text -> Text
+Aws.Http.urlDecode text =
+  text
+    |> Text.replace "%5D" "]"
+    |> Text.replace "%5B" "["
+    |> Text.replace "%40" "@"
+    |> Text.replace "%3F" "?"
+    |> Text.replace "%3D" "="
+    |> Text.replace "%3B" ";"
+    |> Text.replace "%3A" ":"
+    |> Text.replace "%2F" "/"
+    |> Text.replace "%2C" ","
+    |> Text.replace "%2B" "+"
+    |> Text.replace "%2A" "*"
+    |> Text.replace "%29" ")"
+    |> Text.replace "%28" "("
+    |> Text.replace "%27" "'"
+    |> Text.replace "%26" "&"
+    |> Text.replace "%24" "$"
+    |> Text.replace "%23" "#"
+    |> Text.replace "%21" "!"
+    |> Text.replace "%20" " "
+    |> Text.replace "%25" "%"
+
+-- =============================================================================
+-- URL Helpers
+-- =============================================================================
+
+{{
+Build a full URL from components.
+
+Example: buildUrl "https" "s3.amazonaws.com" "/bucket/key" "version=1"
+  -> "https://s3.amazonaws.com/bucket/key?version=1"
+}}
+Aws.Http.buildUrl : Text -> Text -> Text -> Text -> Text
+Aws.Http.buildUrl scheme host path queryString =
+  let
+    base = scheme ++ "://" ++ host ++ path
+  Aws.Http.appendQueryString base queryString
+
+{{
+Extract the host from a URL.
+
+Example: extractHost "https://s3.amazonaws.com/bucket/key"
+  -> "s3.amazonaws.com"
+}}
+Aws.Http.extractHost : Text -> Text
+Aws.Http.extractHost url =
+  let
+    -- Remove scheme
+    withoutScheme = 
+      if Text.startsWith "https://" url then Text.drop 8 url
+      else if Text.startsWith "http://" url then Text.drop 7 url
+      else url
+    -- Find end of host (first / or end of string)
+    slashIdx = Text.indexOf "/" withoutScheme
+  match slashIdx with
+    Some idx -> Text.take idx withoutScheme
+    None -> withoutScheme
+
+{{
+Extract the path from a URL.
+
+Example: extractPath "https://s3.amazonaws.com/bucket/key?version=1"
+  -> "/bucket/key"
+}}
+Aws.Http.extractPath : Text -> Text
+Aws.Http.extractPath url =
+  let
+    -- Remove scheme
+    withoutScheme = 
+      if Text.startsWith "https://" url then Text.drop 8 url
+      else if Text.startsWith "http://" url then Text.drop 7 url
+      else url
+    -- Find start of path
+    slashIdx = Text.indexOf "/" withoutScheme
+  match slashIdx with
+    Some idx ->
+      let
+        pathAndQuery = Text.drop idx withoutScheme
+        queryIdx = Text.indexOf "?" pathAndQuery
+      match queryIdx with
+        Some qIdx -> Text.take qIdx pathAndQuery
+        None -> pathAndQuery
+    None -> "/"
+
+-- =============================================================================
+-- Content Type Helpers
+-- =============================================================================
+
+{{
+Common content type for XML.
+}}
+Aws.Http.contentTypeXml : Text
+Aws.Http.contentTypeXml = "application/xml"
+
+{{
+Common content type for JSON.
+}}
+Aws.Http.contentTypeJson : Text
+Aws.Http.contentTypeJson = "application/json"
+
+{{
+Common content type for form data.
+}}
+Aws.Http.contentTypeForm : Text
+Aws.Http.contentTypeForm = "application/x-www-form-urlencoded"
+
+{{
+Common content type for binary data.
+}}
+Aws.Http.contentTypeOctetStream : Text
+Aws.Http.contentTypeOctetStream = "application/octet-stream"
+
+{{
+Check if a content type is XML.
+}}
+Aws.Http.isXmlContentType : Text -> Boolean
+Aws.Http.isXmlContentType contentType =
+  Text.contains "xml" (Text.toLowercase contentType)
+
+{{
+Check if a content type is JSON.
+}}
+Aws.Http.isJsonContentType : Text -> Boolean
+Aws.Http.isJsonContentType contentType =
+  Text.contains "json" (Text.toLowercase contentType)
+
+-- =============================================================================
+-- AWS-Specific Headers
+-- =============================================================================
+
+{{
+Standard AWS request ID header name.
+}}
+Aws.Http.requestIdHeader : Text
+Aws.Http.requestIdHeader = "x-amz-request-id"
+
+{{
+AWS extended request ID header name (S3).
+}}
+Aws.Http.extendedRequestIdHeader : Text
+Aws.Http.extendedRequestIdHeader = "x-amz-id-2"
+
+{{
+AWS date header name.
+}}
+Aws.Http.dateHeader : Text
+Aws.Http.dateHeader = "x-amz-date"
+
+{{
+AWS security token header name.
+}}
+Aws.Http.securityTokenHeader : Text
+Aws.Http.securityTokenHeader = "x-amz-security-token"
+
+{{
+AWS content SHA256 header name.
+}}
+Aws.Http.contentSha256Header : Text
+Aws.Http.contentSha256Header = "x-amz-content-sha256"
+
+{{
+Extract the AWS request ID from response headers.
+}}
+Aws.Http.getRequestId : [(Text, Text)] -> Optional Text
+Aws.Http.getRequestId headers =
+  Aws.Http.getHeader Aws.Http.requestIdHeader headers
+
+{{
+Extract the AWS extended request ID from response headers.
+}}
+Aws.Http.getExtendedRequestId : [(Text, Text)] -> Optional Text
+Aws.Http.getExtendedRequestId headers =
+  Aws.Http.getHeader Aws.Http.extendedRequestIdHeader headers

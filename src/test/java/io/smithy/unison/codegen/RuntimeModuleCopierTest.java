@@ -325,4 +325,151 @@ class RuntimeModuleCopierTest {
         assertEquals("XML encoding/decoding", xml.getDescription());
         assertEquals("runtime/aws_xml.u", xml.getResourcePath());
     }
+    
+    // ========== HTTP Module Tests ==========
+    
+    @Test
+    void testHttpModuleIsAvailable() {
+        assertTrue(copier.isModuleAvailable(RuntimeModule.AWS_HTTP),
+            "aws_http.u module should be available as a resource");
+    }
+    
+    @Test
+    void testGetHttpModuleContent() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertNotNull(content, "Module content should not be null");
+        assertFalse(content.isEmpty(), "Module content should not be empty");
+        
+        // Verify expected content
+        assertTrue(content.contains("Aws.Http.isSuccess"),
+            "Module should define Aws.Http.isSuccess function");
+        assertTrue(content.contains("Aws.Http.getHeader"),
+            "Module should define Aws.Http.getHeader function");
+        assertTrue(content.contains("Aws.Http.buildQueryString"),
+            "Module should define Aws.Http.buildQueryString function");
+    }
+    
+    @Test
+    void testHttpModuleHasStatusCodeHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("Aws.Http.isSuccess"),
+            "Module should have isSuccess function");
+        assertTrue(content.contains("Aws.Http.isClientError"),
+            "Module should have isClientError function");
+        assertTrue(content.contains("Aws.Http.isServerError"),
+            "Module should have isServerError function");
+        assertTrue(content.contains("Aws.Http.isError"),
+            "Module should have isError function");
+        assertTrue(content.contains("Aws.Http.isRetryable"),
+            "Module should have isRetryable function");
+    }
+    
+    @Test
+    void testHttpModuleHasHeaderHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("Aws.Http.getHeader"));
+        assertTrue(content.contains("Aws.Http.getHeaderOrDefault"));
+        assertTrue(content.contains("Aws.Http.hasHeader"));
+        assertTrue(content.contains("Aws.Http.addHeader"));
+        assertTrue(content.contains("Aws.Http.setHeader"));
+        assertTrue(content.contains("Aws.Http.removeHeader"));
+        assertTrue(content.contains("Aws.Http.mergeHeaders"));
+    }
+    
+    @Test
+    void testHttpModuleHasQueryStringHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("Aws.Http.buildQueryString"),
+            "Module should have buildQueryString function");
+        assertTrue(content.contains("Aws.Http.appendQueryString"),
+            "Module should have appendQueryString function");
+        assertTrue(content.contains("Aws.Http.urlEncode"),
+            "Module should have urlEncode function");
+        assertTrue(content.contains("Aws.Http.urlDecode"),
+            "Module should have urlDecode function");
+    }
+    
+    @Test
+    void testHttpModuleHasUrlHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("Aws.Http.buildUrl"),
+            "Module should have buildUrl function");
+        assertTrue(content.contains("Aws.Http.extractHost"),
+            "Module should have extractHost function");
+        assertTrue(content.contains("Aws.Http.extractPath"),
+            "Module should have extractPath function");
+    }
+    
+    @Test
+    void testHttpModuleHasContentTypeHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("Aws.Http.contentTypeXml"),
+            "Module should have contentTypeXml constant");
+        assertTrue(content.contains("Aws.Http.contentTypeJson"),
+            "Module should have contentTypeJson constant");
+        assertTrue(content.contains("Aws.Http.isXmlContentType"),
+            "Module should have isXmlContentType function");
+        assertTrue(content.contains("Aws.Http.isJsonContentType"),
+            "Module should have isJsonContentType function");
+    }
+    
+    @Test
+    void testHttpModuleHasAwsHeaders() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("x-amz-request-id"),
+            "Module should have AWS request ID header");
+        assertTrue(content.contains("x-amz-date"),
+            "Module should have AWS date header");
+        assertTrue(content.contains("x-amz-security-token"),
+            "Module should have AWS security token header");
+        assertTrue(content.contains("Aws.Http.getRequestId"),
+            "Module should have getRequestId function");
+    }
+    
+    @Test
+    void testHttpModuleHasDocumentation() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(content.contains("{{"),
+            "Module should have doc comments");
+        assertTrue(content.contains("Check if an HTTP status code indicates success"),
+            "Module should document isSuccess function");
+    }
+    
+    @Test
+    void testCopyHttpModule() {
+        boolean result = copier.copyModule(RuntimeModule.AWS_HTTP);
+        
+        assertTrue(result, "Copy should succeed");
+        assertTrue(manifest.hasFile("src/aws_http.u"),
+            "Module should be written to manifest");
+    }
+    
+    @Test
+    void testCopyAwsModulesIncludesHttp() {
+        List<String> copied = copier.copyAwsModules();
+        
+        assertTrue(copied.contains("aws_http.u"),
+            "Should copy aws_http.u");
+        assertTrue(copied.contains("aws_sigv4.u"),
+            "Should also copy aws_sigv4.u");
+        assertTrue(copied.contains("aws_xml.u"),
+            "Should also copy aws_xml.u");
+    }
+    
+    @Test
+    void testHttpModuleEnum() {
+        RuntimeModule http = RuntimeModule.AWS_HTTP;
+        
+        assertEquals("aws_http.u", http.getFilename());
+        assertEquals("HTTP request helpers", http.getDescription());
+        assertEquals("runtime/aws_http.u", http.getResourcePath());
+    }
 }
