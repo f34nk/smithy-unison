@@ -343,4 +343,119 @@ class ErrorGeneratorTest {
         assertEquals("Int", field.type());
         assertTrue(field.required());
     }
+    
+    // ========== toFailure Function Tests ==========
+    
+    @Test
+    void generateToFailure_withRequiredMessage() {
+        List<ErrorGenerator.ErrorField> fields = List.of(
+            new ErrorGenerator.ErrorField("message", "Text", true)
+        );
+        
+        ErrorGenerator generator = new ErrorGenerator(
+            "NoSuchBucket", "client", 404, null, fields
+        );
+        
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateToFailureFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("NoSuchBucket.toFailure : NoSuchBucket -> IO.Failure"));
+        assertTrue(output.contains("NoSuchBucket.toFailure err ="));
+        assertTrue(output.contains("IO.Failure.Failure (typeLink NoSuchBucket)"));
+        assertTrue(output.contains("NoSuchBucket.message err"));
+        assertTrue(output.contains("(Any err)"));
+    }
+    
+    @Test
+    void generateToFailure_withOptionalMessage() {
+        List<ErrorGenerator.ErrorField> fields = List.of(
+            new ErrorGenerator.ErrorField("message", "Text", false)
+        );
+        
+        ErrorGenerator generator = new ErrorGenerator(
+            "ValidationError", "client", 400, null, fields
+        );
+        
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateToFailureFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("ValidationError.toFailure : ValidationError -> IO.Failure"));
+        assertTrue(output.contains("Optional.getOrElse \"\" (ValidationError.message err)"));
+    }
+    
+    @Test
+    void generateToFailure_withoutMessage() {
+        ErrorGenerator generator = new ErrorGenerator(
+            "EmptyError", "client", 500, null, List.of()
+        );
+        
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateToFailureFunction(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("EmptyError.toFailure : EmptyError -> IO.Failure"));
+        assertTrue(output.contains("\"EmptyError\""));  // Uses type name as message
+    }
+    
+    @Test
+    void generate_includesTypeAndToFailure() {
+        List<ErrorGenerator.ErrorField> fields = List.of(
+            new ErrorGenerator.ErrorField("message", "Text", true),
+            new ErrorGenerator.ErrorField("resourceId", "Text", false)
+        );
+        
+        ErrorGenerator generator = new ErrorGenerator(
+            "ResourceNotFound", "client", 404, "The resource was not found.", fields
+        );
+        
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generate(writer);
+        
+        String output = writer.toString();
+        
+        // Type definition
+        assertTrue(output.contains("type ResourceNotFound = {"));
+        assertTrue(output.contains("message : Text"));
+        assertTrue(output.contains("resourceId : Optional Text"));
+        
+        // toFailure function
+        assertTrue(output.contains("ResourceNotFound.toFailure : ResourceNotFound -> IO.Failure"));
+        assertTrue(output.contains("ResourceNotFound.message err"));
+    }
+    
+    @Test
+    void hasMessageField_returnsCorrectly() {
+        List<ErrorGenerator.ErrorField> withMsg = List.of(
+            new ErrorGenerator.ErrorField("message", "Text", true)
+        );
+        List<ErrorGenerator.ErrorField> withoutMsg = List.of(
+            new ErrorGenerator.ErrorField("code", "Text", false)
+        );
+        
+        ErrorGenerator withMessage = new ErrorGenerator("Err1", "client", 400, null, withMsg);
+        ErrorGenerator withoutMessage = new ErrorGenerator("Err2", "client", 400, null, withoutMsg);
+        ErrorGenerator empty = new ErrorGenerator("Err3", "client", 400, null, List.of());
+        
+        assertTrue(withMessage.hasMessageField());
+        assertFalse(withoutMessage.hasMessageField());
+        assertFalse(empty.hasMessageField());
+    }
+    
+    @Test
+    void getMessageField_returnsCorrectly() {
+        List<ErrorGenerator.ErrorField> fields = List.of(
+            new ErrorGenerator.ErrorField("code", "Text", false),
+            new ErrorGenerator.ErrorField("message", "Text", true),
+            new ErrorGenerator.ErrorField("requestId", "Text", false)
+        );
+        
+        ErrorGenerator generator = new ErrorGenerator("TestError", "client", 400, null, fields);
+        
+        ErrorGenerator.ErrorField msgField = generator.getMessageField();
+        assertNotNull(msgField);
+        assertEquals("message", msgField.name());
+        assertTrue(msgField.required());
+    }
 }

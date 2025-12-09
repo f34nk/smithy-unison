@@ -169,7 +169,28 @@ public final class ErrorGenerator {
     }
     
     /**
-     * Generates the complete error type definition.
+     * Checks if this error has a message field.
+     *
+     * @return true if the error has a "message" field
+     */
+    public boolean hasMessageField() {
+        return fields.stream().anyMatch(f -> "message".equals(f.name()));
+    }
+    
+    /**
+     * Gets the message field if present.
+     *
+     * @return The message field, or null if not present
+     */
+    public ErrorField getMessageField() {
+        return fields.stream()
+                .filter(f -> "message".equals(f.name()))
+                .findFirst()
+                .orElse(null);
+    }
+    
+    /**
+     * Generates the complete error type definition and toFailure function.
      *
      * @param writer The writer to output code to
      */
@@ -177,6 +198,7 @@ public final class ErrorGenerator {
         LOGGER.fine("Generating error: " + typeName);
         
         generateTypeDefinition(writer);
+        generateToFailureFunction(writer);
     }
     
     /**
@@ -221,6 +243,52 @@ public final class ErrorGenerator {
             
             writer.writeRecordType(typeName, typeFields);
         }
+    }
+    
+    /**
+     * Generates the toFailure conversion function.
+     * 
+     * <p>This function converts the error type to IO.Failure for use with
+     * the Exception ability in Unison.
+     *
+     * <h2>Example Output</h2>
+     * <pre>
+     * NoSuchBucket.toFailure : NoSuchBucket -> IO.Failure
+     * NoSuchBucket.toFailure err =
+     *   IO.Failure.Failure (typeLink NoSuchBucket) (NoSuchBucket.message err) (Any err)
+     * </pre>
+     *
+     * @param writer The writer to output code to
+     */
+    public void generateToFailureFunction(UnisonWriter writer) {
+        String funcName = typeName + ".toFailure";
+        String camelTypeName = UnisonSymbolProvider.toUnisonFunctionName(typeName);
+        
+        // Write signature
+        writer.write("$L : $L -> IO.Failure", funcName, typeName);
+        
+        // Write function body
+        // Determine the message expression
+        String messageExpr;
+        if (hasMessageField()) {
+            ErrorField msgField = getMessageField();
+            if (msgField.required()) {
+                // Required message field - access directly
+                messageExpr = typeName + ".message err";
+            } else {
+                // Optional message field - use getOrElse
+                messageExpr = "Optional.getOrElse \"\" (" + typeName + ".message err)";
+            }
+        } else {
+            // No message field - use type name as message
+            messageExpr = "\"" + typeName + "\"";
+        }
+        
+        writer.write("$L err =", funcName);
+        writer.indent();
+        writer.write("IO.Failure.Failure (typeLink $L) ($L) (Any err)", typeName, messageExpr);
+        writer.dedent();
+        writer.writeBlankLine();
     }
     
     /**
