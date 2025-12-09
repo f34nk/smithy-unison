@@ -83,7 +83,7 @@ Traits that refine or modify type semantics.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#enumValue`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-enumvalue-trait) | ❌ | Defines the wire value for enum members |
+| [`smithy.api#enumValue`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-enumvalue-trait) | ✅ | Defines wire value for enum conversion functions |
 | [`smithy.api#error`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-error-trait) | ❌ | Marks structure as an error shape |
 | [`smithy.api#input`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-input-trait) | ❌ | Marks structure as operation input |
 | [`smithy.api#output`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-output-trait) | ❌ | Marks structure as operation output |
@@ -99,7 +99,7 @@ Traits that constrain or validate values.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#enum`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-enum-trait) | ❌ | Defines enum values |
+| [`smithy.api#enum`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-enum-trait) | ✅ | Generates sum type with toText/fromText functions |
 | [`smithy.api#length`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-length-trait) | ❌ | Constrains length of strings, lists, or blobs |
 | [`smithy.api#pattern`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-pattern-trait) | ❌ | Requires string values to match a regular expression |
 | [`smithy.api#range`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-range-trait) | ❌ | Constrains numeric values to a minimum and/or maximum |
