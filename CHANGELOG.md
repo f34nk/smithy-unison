@@ -18,6 +18,14 @@
 - HTTP error handler generation
 - S3UrlGenerator for S3-specific URL building (virtual-hosted and path-style)
 - XmlGenerator for XML encoding/decoding utilities
+- ProtocolGeneratorFactory for protocol-based code generation routing
+
+#### Operation Generation
+- Full operation implementations for REST-XML services (S3)
+- Automatic URL building with path parameter substitution
+- Query string generation from @httpQuery members
+- Request header generation from @httpHeader members
+- Response header extraction and body parsing
 
 #### Authentication
 - SigV4Generator for AWS Signature Version 4 request signing

@@ -19,9 +19,9 @@ Reference: https://smithy.io/2.0/index.html
 - Error type generation with `toFailure` conversion functions
 - Service-level error sum types with parsing functions
 
-### Protocol Support (In Progress)
+### Protocol Support
 - **REST-XML protocol** (S3, CloudFront, Route 53)
-  - Operation code generation
+  - Full operation implementation (all 106 S3 operations)
   - HTTP binding traits: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
   - Request serialization / Response deserialization
   - Error parsing
@@ -36,7 +36,7 @@ Reference: https://smithy.io/2.0/index.html
   - Signing key derivation (HMAC-SHA256 chain)
   - Authorization header generation
 
-### AWS SDK Support (Planned)
+### AWS SDK Support
 - Credential provider chain (environment variables, config files)
 - Retry logic with exponential backoff and jitter
 - Pagination with automatic helper function generation
