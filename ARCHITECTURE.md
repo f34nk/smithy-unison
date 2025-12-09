@@ -4,11 +4,6 @@ This document describes the architecture of the Smithy Unison code generator, wh
 
 Reference: [Creating a Code Generator](https://smithy.io/2.0/guides/building-codegen/index.html)
 
-> **⚠️ FIRST DRAFT - NOT FULLY IMPLEMENTED**
-> 
-> This is a first draft bootstrap of smithy-unison. Most code generation functionality is stubbed.
-> See the "Not Yet Implemented" section at the bottom for details.
-
 ## Overview
 
 The code generator transforms Smithy service models into Unison client modules (`.u` files). It uses a plugin-based architecture that allows customization at multiple points in the generation process.
@@ -87,11 +82,8 @@ public class UnisonGenerator implements DirectedCodegen<UnisonContext, UnisonSet
     @Override
     public void generateService(GenerateServiceDirective<UnisonContext, UnisonSettings> directive) {
         ClientModuleWriter writer = ClientModuleWriter.fromContext(directive.context());
-        writer.generate();
-        writer.copyRuntimeModules();
+        writer.generate();  // Handles type generation and runtime module copying
     }
-    
-    // ... other shape generators (all stubbed in first draft) ...
 }
 ```
 
@@ -115,7 +107,61 @@ public class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportContain
 }
 ```
 
-### 6. UnisonSymbolProvider
+### 6. ClientModuleWriter
+
+Orchestrates client module generation with conditional logic based on service type:
+
+```java
+public final class ClientModuleWriter {
+    
+    public void generate() throws IOException {
+        // Detect protocol and AWS service
+        AwsProtocol protocol = AwsProtocolDetector.detectProtocol(service);
+        boolean isAws = copier.isAwsService(service, protocol);
+        
+        // Generate Config type (AWS-style or generic)
+        if (isAws) {
+            generateAwsConfigTypes(writer);
+        } else {
+            generateGenericConfigType(writer);
+        }
+        
+        // Generate model types for non-AWS services
+        if (!useProtocolGenerator) {
+            generateModelTypes(writer);
+        }
+        
+        // Generate operations
+        // Copy runtime modules (only for AWS services)
+        copyRuntimeModules(protocol);
+    }
+}
+```
+
+### 7. RuntimeModuleCopier
+
+Handles conditional copying of runtime modules based on service and protocol:
+
+```java
+public final class RuntimeModuleCopier {
+    
+    // AWS service detection using traits
+    public boolean isAwsService(ServiceShape service, AwsProtocol protocol) {
+        return service.findTrait(AWS_SERVICE_TRAIT).isPresent()
+            || service.findTrait(AWS_SIGV4_TRAIT).isPresent()
+            || protocol != AwsProtocol.UNKNOWN;
+    }
+    
+    // Protocol-aware module copying
+    public List<String> copyAwsModulesForProtocol(AwsProtocol protocol, ServiceShape service) {
+        // Core modules: aws_sigv4.u, aws_config.u, aws_credentials.u, aws_http.u
+        // XML protocol: aws_xml.u
+        // S3 service: aws_s3.u
+    }
+}
+```
+
+### 8. UnisonSymbolProvider
 
 Implements `SymbolProvider` for Smithy-to-Unison type mapping:
 
@@ -163,13 +209,13 @@ public interface UnisonIntegration
 }
 ```
 
-### Built-in Integrations (All Stubbed)
+### Built-in Integrations
 
-| Integration | Priority | Purpose |
-|-------------|----------|---------|
-| `AwsSigV4Integration` | 64 | Copies AWS SigV4 signing modules |
-| `AwsProtocolIntegration` | 32 | Copies protocol-specific modules |
-| `AwsRetryIntegration` | 16 | Copies retry logic module |
+| Integration | Status | Purpose |
+|-------------|--------|---------|
+| `SigV4Generator` | ✅ | Generates AWS SigV4 request signing code |
+| `RuntimeModuleCopier` | ✅ | Copies protocol-specific runtime modules |
+| `AwsRetryIntegration` | Planned | Copies retry logic module |
 
 ### SPI Discovery
 
@@ -179,7 +225,7 @@ Integrations are discovered via Java's `ServiceLoader` mechanism:
 src/main/resources/META-INF/services/io.smithy.unison.codegen.UnisonIntegration
 ```
 
-## Protocol Generators (All Stubbed)
+## Protocol Generators
 
 ### ProtocolGenerator Interface
 
@@ -195,13 +241,13 @@ public interface ProtocolGenerator {
 
 ### Available Protocol Generators
 
-| Protocol | Generator Class | Services |
-|----------|----------------|----------|
-| AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | DynamoDB, Lambda, Kinesis |
-| AWS Query | `AwsQueryProtocolGenerator` | SQS, SNS, RDS |
-| EC2 Query | `Ec2QueryProtocolGenerator` | EC2, Auto Scaling |
-| REST-XML | `RestXmlProtocolGenerator` | S3, CloudFront, Route 53 |
-| REST-JSON | `RestJsonProtocolGenerator` | API Gateway, Step Functions |
+| Protocol | Generator Class | Status | Services |
+|----------|----------------|--------|----------|
+| REST-XML | `RestXmlProtocolGenerator` | ✅ | S3, CloudFront, Route 53 |
+| AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | Planned | DynamoDB, Lambda, Kinesis |
+| AWS Query | `AwsQueryProtocolGenerator` | Planned | SQS, SNS, RDS |
+| EC2 Query | `Ec2QueryProtocolGenerator` | Planned | EC2, Auto Scaling |
+| REST-JSON | `RestJsonProtocolGenerator` | Planned | API Gateway, Step Functions |
 
 ## Code Generation Flow
 
@@ -228,7 +274,7 @@ public interface ProtocolGenerator {
 │     │ generateSvc  │    │ generateStruct│   │ generateEnum │      │
 │     └──────────────┘    └──────────────┘    └──────────────┘      │
 │                                                                   │
-│  4. Protocol-Specific Generation (STUBBED)                        │
+│  4. Protocol-Specific Generation                                  │
 │     ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
 │     │ Detect       │───▶│ Select       │───▶│ Generate     │      │
 │     │ Protocol     │    │ Generator    │    │ Operations   │      │
@@ -242,6 +288,28 @@ public interface ProtocolGenerator {
 │                                                                   │
 └───────────────────────────────────────────────────────────────────┘
 ```
+
+## AWS Service Detection
+
+The generator conditionally generates AWS-specific code based on service traits:
+
+### Detection Priority
+
+1. **`aws.api#service` trait** - Definitive AWS service marker
+2. **`aws.auth#sigv4` trait** - AWS authentication requirement
+3. **Protocol detection** - AWS protocol traits (`aws.protocols#*`)
+
+### Conditional Generation
+
+| Feature | AWS Service | Non-AWS Service |
+|---------|-------------|-----------------|
+| Config type | `endpoint`, `region`, `credentials`, `usePathStyle` | `endpoint`, `headers` |
+| Credentials type | Generated | Not generated |
+| Runtime modules | Copied (protocol-specific) | Not copied |
+| Model types | Via protocol generator | Via `generateModelTypes()` |
+| Operations | Full implementation (if protocol supported) | Stub implementation |
+
+---
 
 ## Unison-Specific Considerations
 
@@ -271,7 +339,3 @@ Reference: https://www.unison-lang.org/docs/tooling/project-workflows/
 - **Types**: PascalCase (e.g., `GetObjectInput`)
 - **Functions**: camelCase (e.g., `getObject`)
 - **Fields**: camelCase (e.g., `bucketName`)
-
----
-
-*This is a first draft. See smithy-unison for reference implementation.*

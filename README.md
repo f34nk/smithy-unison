@@ -18,6 +18,7 @@ Reference: https://smithy.io/2.0/index.html
 - Union generation → Unison sum types with payloads
 - Error type generation with `toFailure` conversion functions
 - Service-level error sum types with parsing functions
+- Automatic type generation for all services (AWS and non-AWS)
 
 ### Protocol Support
 - **REST-XML protocol** (S3, CloudFront, Route 53)
@@ -122,10 +123,12 @@ smithy build
 
 Generated files in `generated/`:
 - `{namespace}_client.u` - Client module with types, records, and operations
+
+For AWS services, additional runtime modules are copied:
 - `aws_sigv4.u` - AWS Signature V4 request signing
-- `aws_xml.u` - XML encoding/decoding for REST-XML protocol
+- `aws_xml.u` - XML encoding/decoding (REST-XML protocol only)
 - `aws_http.u` - HTTP request/response utilities
-- `aws_s3.u` - S3-specific URL routing utilities
+- `aws_s3.u` - S3-specific URL routing (S3 only)
 - `aws_config.u` - AWS configuration types
 - `aws_credentials.u` - Credential provider chain
 
@@ -191,6 +194,8 @@ Smithy-unison **reads and uses** built-in traits via Java's Smithy libraries.
 Check out [TRAITS.md](https://github.com/f34nk/smithy-unison/blob/main/TRAITS.md) with all Smithy traits and their support status in smithy-unison.
 
 The generator maps Smithy types to Unison types:
+
+## Type Mapping
 
 | Smithy Type | Unison Type |
 |-------------|-------------|

@@ -4,6 +4,13 @@
 
 ### Added
 
+#### Conditional Code Generation
+- AWS service detection using `aws.api#service` and `aws.auth#sigv4` traits
+- Conditional runtime module copying (only for AWS services)
+- Protocol-aware module selection (`aws_xml.u` for XML protocols, `aws_s3.u` for S3)
+- Conditional Config types (AWS-style vs generic for non-AWS services)
+- Model type generation for non-AWS services (structures, errors with `toFailure`)
+
 #### Runtime Modules
 - `aws_credentials.u` runtime module with credential provider chain
 - `aws_config.u` runtime module with configuration types and helpers
