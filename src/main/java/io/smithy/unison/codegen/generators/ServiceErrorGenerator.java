@@ -160,8 +160,10 @@ public final class ServiceErrorGenerator {
         
         if ("xml".equalsIgnoreCase(protocol)) {
             generateFromXmlFunction(writer);
+            generateHandleHttpResponseFunction(writer, "xml");
         } else if ("json".equalsIgnoreCase(protocol)) {
             generateFromJsonFunction(writer);
+            generateHandleHttpResponseFunction(writer, "json");
         }
     }
     
@@ -331,6 +333,68 @@ public final class ServiceErrorGenerator {
         writer.write("$L.fromCodeAndMessage code message", typeName);
         writer.dedent();
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates the handleHttpResponse function for HTTP error handling.
+     * 
+     * <p>This function checks HTTP status codes and raises exceptions on error.
+     * It parses the error response body using the protocol-specific parser.
+     *
+     * <h2>Example Output for XML Protocol</h2>
+     * <pre>
+     * handleS3HttpResponse : HttpResponse ->{Exception} ()
+     * handleS3HttpResponse response =
+     *   statusCode = HttpResponse.status response |> Status.code
+     *   when (statusCode < 200 || statusCode >= 300) do
+     *     errorBody = HttpResponse.body response |> bodyText
+     *     serviceError = S3ServiceError.fromXml errorBody
+     *     Exception.raise (S3ServiceError.toFailure serviceError)
+     * </pre>
+     *
+     * @param writer The writer to output code to
+     * @param protocol The protocol type ("xml" or "json")
+     */
+    public void generateHandleHttpResponseFunction(UnisonWriter writer, String protocol) {
+        String funcName = "handle" + serviceName + "HttpResponse";
+        String parseFunc = "xml".equalsIgnoreCase(protocol) ? "fromXml" : "fromJson";
+        
+        // Write documentation
+        writer.writeDocComment("Handle HTTP response for " + serviceName + " service.\n\n" +
+                "Checks status code and raises exception on error (non-2xx).\n" +
+                "On success (2xx), does nothing and returns ().");
+        
+        // Write signature
+        writer.write("$L : HttpResponse ->{Exception} ()", funcName);
+        writer.write("$L response =", funcName);
+        writer.indent();
+        writer.write("statusCode = HttpResponse.status response |> Status.code");
+        writer.write("when (statusCode < 200 || statusCode >= 300) do");
+        writer.indent();
+        writer.write("errorBody = HttpResponse.body response |> bodyText");
+        writer.write("serviceError = $L.$L errorBody", typeName, parseFunc);
+        writer.write("Exception.raise ($L.toFailure serviceError)", typeName);
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates handleHttpResponse for XML protocol (convenience method).
+     *
+     * @param writer The writer to output code to
+     */
+    public void generateHandleHttpResponseXml(UnisonWriter writer) {
+        generateHandleHttpResponseFunction(writer, "xml");
+    }
+    
+    /**
+     * Generates handleHttpResponse for JSON protocol (convenience method).
+     *
+     * @param writer The writer to output code to
+     */
+    public void generateHandleHttpResponseJson(UnisonWriter writer) {
+        generateHandleHttpResponseFunction(writer, "json");
     }
     
     /**

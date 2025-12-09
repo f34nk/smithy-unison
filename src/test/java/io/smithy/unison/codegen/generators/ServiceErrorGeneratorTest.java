@@ -404,11 +404,12 @@ class ServiceErrorGeneratorTest {
         generator.generate(writer, "xml");
         
         String output = writer.toString();
-        // Should have type, toFailure, fromCodeAndMessage, and fromXml
+        // Should have type, toFailure, fromCodeAndMessage, fromXml, and handleHttpResponse
         assertTrue(output.contains("type S3ServiceError"));
         assertTrue(output.contains("S3ServiceError.toFailure"));
         assertTrue(output.contains("S3ServiceError.fromCodeAndMessage"));
         assertTrue(output.contains("S3ServiceError.fromXml"));
+        assertTrue(output.contains("handleS3HttpResponse"));
         // Should NOT have fromJson
         assertFalse(output.contains("fromJson"));
     }
@@ -424,13 +425,86 @@ class ServiceErrorGeneratorTest {
         generator.generate(writer, "json");
         
         String output = writer.toString();
-        // Should have type, toFailure, fromCodeAndMessage, and fromJson
+        // Should have type, toFailure, fromCodeAndMessage, fromJson, and handleHttpResponse
         assertTrue(output.contains("type ApiServiceError"));
         assertTrue(output.contains("ApiServiceError.toFailure"));
         assertTrue(output.contains("ApiServiceError.fromCodeAndMessage"));
         assertTrue(output.contains("ApiServiceError.fromJson"));
+        assertTrue(output.contains("handleApiHttpResponse"));
         // Should NOT have fromXml
         assertFalse(output.contains("fromXml"));
+    }
+    
+    // ========== handleHttpResponse Tests ==========
+    
+    @Test
+    void generateHandleHttpResponse_xml() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("NoSuchBucket", "NoSuchBucket")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("S3", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateHandleHttpResponseFunction(writer, "xml");
+        
+        String output = writer.toString();
+        assertTrue(output.contains("handleS3HttpResponse : HttpResponse ->{Exception} ()"));
+        assertTrue(output.contains("handleS3HttpResponse response ="));
+        assertTrue(output.contains("statusCode = HttpResponse.status response |> Status.code"));
+        assertTrue(output.contains("when (statusCode < 200 || statusCode >= 300) do"));
+        assertTrue(output.contains("errorBody = HttpResponse.body response |> bodyText"));
+        assertTrue(output.contains("serviceError = S3ServiceError.fromXml errorBody"));
+        assertTrue(output.contains("Exception.raise (S3ServiceError.toFailure serviceError)"));
+    }
+    
+    @Test
+    void generateHandleHttpResponse_json() {
+        List<ServiceErrorGenerator.ErrorVariant> variants = List.of(
+            new ServiceErrorGenerator.ErrorVariant("ValidationError", "ValidationError")
+        );
+        
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Api", variants);
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateHandleHttpResponseFunction(writer, "json");
+        
+        String output = writer.toString();
+        assertTrue(output.contains("handleApiHttpResponse : HttpResponse ->{Exception} ()"));
+        assertTrue(output.contains("serviceError = ApiServiceError.fromJson errorBody"));
+        assertTrue(output.contains("Exception.raise (ApiServiceError.toFailure serviceError)"));
+    }
+    
+    @Test
+    void generateHandleHttpResponse_documentation() {
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Test", List.of());
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateHandleHttpResponseFunction(writer, "xml");
+        
+        String output = writer.toString();
+        assertTrue(output.contains("Handle HTTP response for Test service"));
+        assertTrue(output.contains("Checks status code and raises exception on error"));
+        assertTrue(output.contains("On success (2xx), does nothing"));
+    }
+    
+    @Test
+    void generateHandleHttpResponseXml_convenience() {
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("S3", List.of());
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateHandleHttpResponseXml(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("handleS3HttpResponse"));
+        assertTrue(output.contains("fromXml"));
+    }
+    
+    @Test
+    void generateHandleHttpResponseJson_convenience() {
+        ServiceErrorGenerator generator = new ServiceErrorGenerator("Api", List.of());
+        UnisonWriter writer = new UnisonWriter("test");
+        generator.generateHandleHttpResponseJson(writer);
+        
+        String output = writer.toString();
+        assertTrue(output.contains("handleApiHttpResponse"));
+        assertTrue(output.contains("fromJson"));
     }
     
     @Test
