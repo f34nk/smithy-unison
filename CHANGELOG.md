@@ -4,6 +4,15 @@
 
 ### Added
 
+#### Runtime Modules
+- `aws_credentials.u` runtime module with credential provider chain
+- `aws_config.u` runtime module with configuration types and helpers
+- `aws_s3.u` runtime module with S3 URL building and bucket validation
+- `aws_http.u` runtime module with HTTP request/response utilities
+- `aws_xml.u` runtime module with XML encoding/decoding utilities
+- `aws_sigv4.u` runtime module with SigV4 signing implementation
+- RuntimeModuleCopier for bundling runtime modules with generated code
+
 #### Pagination Support
 - PaginationGenerator for `@paginated` operations
 - Auto-paginating helper functions (e.g., `listObjectsV2All`)
