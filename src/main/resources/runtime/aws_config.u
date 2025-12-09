@@ -1,0 +1,217 @@
+-- AWS Configuration Runtime Module
+-- Configuration types and helpers for AWS services
+--
+-- This module provides common configuration types used by all AWS service clients.
+
+-- =============================================================================
+-- AWS Credentials
+-- =============================================================================
+
+{{
+AWS credentials for authenticating requests.
+
+Contains the access key ID, secret access key, and optional session token
+for temporary credentials (e.g., from STS AssumeRole).
+}}
+type Aws.Config.Credentials = {
+  accessKeyId : Text,
+  secretAccessKey : Text,
+  sessionToken : Optional Text
+}
+
+{{
+Create credentials with just access key and secret key.
+
+Example: basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+}}
+Aws.Config.basicCredentials : Text -> Text -> Aws.Config.Credentials
+Aws.Config.basicCredentials accessKeyId secretAccessKey =
+  Aws.Config.Credentials accessKeyId secretAccessKey None
+
+{{
+Create credentials with a session token (for temporary credentials).
+
+Example: temporaryCredentials "AKIAIOSFODNN7EXAMPLE" "secret" "token123"
+}}
+Aws.Config.temporaryCredentials : Text -> Text -> Text -> Aws.Config.Credentials
+Aws.Config.temporaryCredentials accessKeyId secretAccessKey sessionToken =
+  Aws.Config.Credentials accessKeyId secretAccessKey (Some sessionToken)
+
+{{
+Check if credentials have a session token (are temporary credentials).
+}}
+Aws.Config.hasSessionToken : Aws.Config.Credentials -> Boolean
+Aws.Config.hasSessionToken creds =
+  match creds.sessionToken with
+    Some _ -> true
+    None -> false
+
+-- =============================================================================
+-- Service Configuration
+-- =============================================================================
+
+{{
+Configuration for an AWS service client.
+
+Contains endpoint, region, credentials, and service-specific options.
+}}
+type Aws.Config.ServiceConfig = {
+  endpoint : Text,
+  region : Text,
+  credentials : Aws.Config.Credentials,
+  timeout : Optional Nat,
+  maxRetries : Optional Nat
+}
+
+{{
+Create a service configuration with default options.
+
+Example: serviceConfig "s3.us-east-1.amazonaws.com" "us-east-1" credentials
+}}
+Aws.Config.serviceConfig : Text -> Text -> Aws.Config.Credentials -> Aws.Config.ServiceConfig
+Aws.Config.serviceConfig endpoint region credentials =
+  Aws.Config.ServiceConfig endpoint region credentials None None
+
+{{
+Create a service configuration with custom timeout and retries.
+}}
+Aws.Config.serviceConfigWithOptions : Text -> Text -> Aws.Config.Credentials -> Nat -> Nat -> Aws.Config.ServiceConfig
+Aws.Config.serviceConfigWithOptions endpoint region credentials timeout maxRetries =
+  Aws.Config.ServiceConfig endpoint region credentials (Some timeout) (Some maxRetries)
+
+-- =============================================================================
+-- S3-Specific Configuration
+-- =============================================================================
+
+{{
+Configuration for Amazon S3.
+
+Extends service configuration with S3-specific options like path-style addressing.
+}}
+type Aws.Config.S3Config = {
+  endpoint : Text,
+  region : Text,
+  credentials : Aws.Config.Credentials,
+  usePathStyle : Boolean,
+  useAccelerateEndpoint : Boolean,
+  useDualStack : Boolean
+}
+
+{{
+Create an S3 configuration with default options.
+
+Uses virtual-hosted style addressing by default.
+
+Example: s3Config "us-east-1" credentials
+}}
+Aws.Config.s3Config : Text -> Aws.Config.Credentials -> Aws.Config.S3Config
+Aws.Config.s3Config region credentials =
+  let
+    endpoint = "s3." ++ region ++ ".amazonaws.com"
+  Aws.Config.S3Config endpoint region credentials false false false
+
+{{
+Create an S3 configuration with path-style addressing.
+
+Use this for S3-compatible services like MinIO or LocalStack.
+}}
+Aws.Config.s3ConfigPathStyle : Text -> Aws.Config.Credentials -> Aws.Config.S3Config
+Aws.Config.s3ConfigPathStyle region credentials =
+  let
+    endpoint = "s3." ++ region ++ ".amazonaws.com"
+  Aws.Config.S3Config endpoint region credentials true false false
+
+{{
+Create an S3 configuration for a custom endpoint.
+
+Useful for S3-compatible services or testing with LocalStack.
+
+Example: s3ConfigCustom "localhost:4566" "us-east-1" credentials true
+}}
+Aws.Config.s3ConfigCustom : Text -> Text -> Aws.Config.Credentials -> Boolean -> Aws.Config.S3Config
+Aws.Config.s3ConfigCustom endpoint region credentials usePathStyle =
+  Aws.Config.S3Config endpoint region credentials usePathStyle false false
+
+{{
+Create an S3 configuration for LocalStack testing.
+
+Example: s3ConfigLocalStack 4566 credentials
+}}
+Aws.Config.s3ConfigLocalStack : Nat -> Aws.Config.Credentials -> Aws.Config.S3Config
+Aws.Config.s3ConfigLocalStack port credentials =
+  let
+    endpoint = "localhost:" ++ Nat.toText port
+  Aws.Config.S3Config endpoint "us-east-1" credentials true false false
+
+-- =============================================================================
+-- Region Helpers
+-- =============================================================================
+
+{{
+Common AWS regions.
+}}
+Aws.Config.usEast1 : Text
+Aws.Config.usEast1 = "us-east-1"
+
+Aws.Config.usEast2 : Text
+Aws.Config.usEast2 = "us-east-2"
+
+Aws.Config.usWest1 : Text
+Aws.Config.usWest1 = "us-west-1"
+
+Aws.Config.usWest2 : Text
+Aws.Config.usWest2 = "us-west-2"
+
+Aws.Config.euWest1 : Text
+Aws.Config.euWest1 = "eu-west-1"
+
+Aws.Config.euWest2 : Text
+Aws.Config.euWest2 = "eu-west-2"
+
+Aws.Config.euCentral1 : Text
+Aws.Config.euCentral1 = "eu-central-1"
+
+Aws.Config.apNortheast1 : Text
+Aws.Config.apNortheast1 = "ap-northeast-1"
+
+Aws.Config.apSoutheast1 : Text
+Aws.Config.apSoutheast1 = "ap-southeast-1"
+
+Aws.Config.apSoutheast2 : Text
+Aws.Config.apSoutheast2 = "ap-southeast-2"
+
+{{
+Check if a region string is a valid AWS region format.
+
+Valid format: two letters, hyphen, word, hyphen, digit(s)
+Example: "us-east-1", "eu-west-2", "ap-northeast-1"
+}}
+Aws.Config.isValidRegion : Text -> Boolean
+Aws.Config.isValidRegion region =
+  let
+    hasCorrectFormat = Text.contains "-" region
+    notEmpty = not (Text.isEmpty region)
+    notTooLong = Text.size region <= 20
+  hasCorrectFormat && notEmpty && notTooLong
+
+-- =============================================================================
+-- Default Configuration
+-- =============================================================================
+
+{{
+Default timeout in milliseconds for AWS requests.
+}}
+Aws.Config.defaultTimeout : Nat
+Aws.Config.defaultTimeout = 30000
+
+{{
+Default maximum retries for AWS requests.
+}}
+Aws.Config.defaultMaxRetries : Nat
+Aws.Config.defaultMaxRetries = 3
+
+{{
+Default region if none specified.
+}}
+Aws.Config.defaultRegion : Text
+Aws.Config.defaultRegion = "us-east-1"

@@ -598,4 +598,128 @@ class RuntimeModuleCopierTest {
         assertEquals("S3-specific utilities", s3.getDescription());
         assertEquals("runtime/aws_s3.u", s3.getResourcePath());
     }
+    
+    // ========== Config Module Tests ==========
+    
+    @Test
+    void testConfigModuleIsAvailable() {
+        assertTrue(copier.isModuleAvailable(RuntimeModule.AWS_CONFIG),
+            "aws_config.u module should be available as a resource");
+    }
+    
+    @Test
+    void testGetConfigModuleContent() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
+        
+        assertNotNull(content, "Module content should not be null");
+        assertFalse(content.isEmpty(), "Module content should not be empty");
+        
+        // Verify expected content
+        assertTrue(content.contains("Aws.Config.Credentials"),
+            "Module should define Aws.Config.Credentials type");
+        assertTrue(content.contains("Aws.Config.S3Config"),
+            "Module should define Aws.Config.S3Config type");
+        assertTrue(content.contains("Aws.Config.ServiceConfig"),
+            "Module should define Aws.Config.ServiceConfig type");
+    }
+    
+    @Test
+    void testConfigModuleHasCredentialsTypes() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
+        
+        assertTrue(content.contains("Aws.Config.Credentials"),
+            "Module should have Credentials type");
+        assertTrue(content.contains("Aws.Config.basicCredentials"),
+            "Module should have basicCredentials function");
+        assertTrue(content.contains("Aws.Config.temporaryCredentials"),
+            "Module should have temporaryCredentials function");
+        assertTrue(content.contains("Aws.Config.hasSessionToken"),
+            "Module should have hasSessionToken function");
+    }
+    
+    @Test
+    void testConfigModuleHasS3Config() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
+        
+        assertTrue(content.contains("Aws.Config.S3Config"),
+            "Module should have S3Config type");
+        assertTrue(content.contains("Aws.Config.s3Config"),
+            "Module should have s3Config function");
+        assertTrue(content.contains("Aws.Config.s3ConfigPathStyle"),
+            "Module should have s3ConfigPathStyle function");
+        assertTrue(content.contains("Aws.Config.s3ConfigCustom"),
+            "Module should have s3ConfigCustom function");
+        assertTrue(content.contains("Aws.Config.s3ConfigLocalStack"),
+            "Module should have s3ConfigLocalStack function");
+    }
+    
+    @Test
+    void testConfigModuleHasRegionHelpers() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
+        
+        assertTrue(content.contains("Aws.Config.usEast1"),
+            "Module should have usEast1 constant");
+        assertTrue(content.contains("Aws.Config.euWest1"),
+            "Module should have euWest1 constant");
+        assertTrue(content.contains("Aws.Config.isValidRegion"),
+            "Module should have isValidRegion function");
+        assertTrue(content.contains("Aws.Config.defaultRegion"),
+            "Module should have defaultRegion constant");
+    }
+    
+    @Test
+    void testConfigModuleHasDefaults() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
+        
+        assertTrue(content.contains("Aws.Config.defaultTimeout"),
+            "Module should have defaultTimeout constant");
+        assertTrue(content.contains("Aws.Config.defaultMaxRetries"),
+            "Module should have defaultMaxRetries constant");
+    }
+    
+    @Test
+    void testConfigModuleHasDocumentation() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
+        
+        assertTrue(content.contains("{{"),
+            "Module should have doc comments");
+        assertTrue(content.contains("AWS credentials for authenticating requests"),
+            "Module should document Credentials type");
+        assertTrue(content.contains("Configuration for Amazon S3"),
+            "Module should document S3Config type");
+    }
+    
+    @Test
+    void testCopyConfigModule() {
+        boolean result = copier.copyModule(RuntimeModule.AWS_CONFIG);
+        
+        assertTrue(result, "Copy should succeed");
+        assertTrue(manifest.hasFile("src/aws_config.u"),
+            "Module should be written to manifest");
+    }
+    
+    @Test
+    void testCopyAwsModulesIncludesConfig() {
+        List<String> copied = copier.copyAwsModules();
+        
+        assertTrue(copied.contains("aws_config.u"),
+            "Should copy aws_config.u");
+        assertTrue(copied.contains("aws_s3.u"),
+            "Should also copy aws_s3.u");
+        assertTrue(copied.contains("aws_http.u"),
+            "Should also copy aws_http.u");
+        assertTrue(copied.contains("aws_sigv4.u"),
+            "Should also copy aws_sigv4.u");
+        assertTrue(copied.contains("aws_xml.u"),
+            "Should also copy aws_xml.u");
+    }
+    
+    @Test
+    void testConfigModuleEnum() {
+        RuntimeModule config = RuntimeModule.AWS_CONFIG;
+        
+        assertEquals("aws_config.u", config.getFilename());
+        assertEquals("Configuration types", config.getDescription());
+        assertEquals("runtime/aws_config.u", config.getResourcePath());
+    }
 }
