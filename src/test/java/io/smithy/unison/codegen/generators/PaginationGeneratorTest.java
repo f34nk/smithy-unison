@@ -1,0 +1,288 @@
+package io.smithy.unison.codegen.generators;
+
+import io.smithy.unison.codegen.UnisonWriter;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.shapes.OperationShape;
+import software.amazon.smithy.model.shapes.ServiceShape;
+import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.traits.PaginatedTrait;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Tests for {@link PaginationGenerator}.
+ */
+class PaginationGeneratorTest {
+    
+    private PaginationGenerator generator;
+    private UnisonWriter writer;
+    
+    @BeforeEach
+    void setUp() {
+        generator = new PaginationGenerator();
+        writer = new UnisonWriter("test");
+    }
+    
+    @Test
+    void testGetPaginatedOperations_withPaginatedOps() {
+        Model model = Model.assembler()
+            .addUnparsedModel("test.smithy",
+                "$version: \"2.0\"\n" +
+                "namespace test\n" +
+                "service TestService {\n" +
+                "  version: \"1.0\"\n" +
+                "  operations: [ListItems, GetItem]\n" +
+                "}\n" +
+                "@paginated(inputToken: \"nextToken\", outputToken: \"nextToken\", items: \"items\")\n" +
+                "operation ListItems {\n" +
+                "  input: ListItemsInput\n" +
+                "  output: ListItemsOutput\n" +
+                "}\n" +
+                "operation GetItem {\n" +
+                "  input: GetItemInput\n" +
+                "  output: GetItemOutput\n" +
+                "}\n" +
+                "structure ListItemsInput { nextToken: String }\n" +
+                "structure ListItemsOutput { nextToken: String, items: ItemList }\n" +
+                "structure GetItemInput { id: String }\n" +
+                "structure GetItemOutput { name: String }\n" +
+                "list ItemList { member: Item }\n" +
+                "structure Item { name: String }\n")
+            .assemble()
+            .unwrap();
+        
+        ServiceShape service = model.expectShape(
+            ShapeId.from("test#TestService"), ServiceShape.class);
+        
+        List<OperationShape> paginated = generator.getPaginatedOperations(service, model);
+        
+        assertEquals(1, paginated.size(), "Should find one paginated operation");
+        assertEquals("test#ListItems", paginated.get(0).getId().toString());
+    }
+    
+    @Test
+    void testGetPaginatedOperations_noPaginatedOps() {
+        Model model = Model.assembler()
+            .addUnparsedModel("test.smithy",
+                "$version: \"2.0\"\n" +
+                "namespace test\n" +
+                "service TestService {\n" +
+                "  version: \"1.0\"\n" +
+                "  operations: [GetItem]\n" +
+                "}\n" +
+                "operation GetItem {\n" +
+                "  input: GetItemInput\n" +
+                "  output: GetItemOutput\n" +
+                "}\n" +
+                "structure GetItemInput { id: String }\n" +
+                "structure GetItemOutput { name: String }\n")
+            .assemble()
+            .unwrap();
+        
+        ServiceShape service = model.expectShape(
+            ShapeId.from("test#TestService"), ServiceShape.class);
+        
+        List<OperationShape> paginated = generator.getPaginatedOperations(service, model);
+        
+        assertTrue(paginated.isEmpty(), "Should find no paginated operations");
+    }
+    
+    @Test
+    void testGeneratePaginationHelper() {
+        Model model = Model.assembler()
+            .addUnparsedModel("test.smithy",
+                "$version: \"2.0\"\n" +
+                "namespace test\n" +
+                "service TestService {\n" +
+                "  version: \"1.0\"\n" +
+                "  operations: [ListItems]\n" +
+                "}\n" +
+                "@paginated(inputToken: \"nextToken\", outputToken: \"nextToken\", items: \"items\")\n" +
+                "operation ListItems {\n" +
+                "  input: ListItemsInput\n" +
+                "  output: ListItemsOutput\n" +
+                "}\n" +
+                "structure ListItemsInput { nextToken: String }\n" +
+                "structure ListItemsOutput { nextToken: String, items: ItemList }\n" +
+                "list ItemList { member: Item }\n" +
+                "structure Item { name: String }\n")
+            .assemble()
+            .unwrap();
+        
+        OperationShape operation = model.expectShape(
+            ShapeId.from("test#ListItems"), OperationShape.class);
+        
+        generator.generatePaginationHelper(operation, model, writer);
+        String output = writer.toString();
+        
+        // Verify function signature
+        assertTrue(output.contains("listItemsAll"), 
+            "Should generate listItemsAll helper");
+        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception, Http} [a]"),
+            "Should have correct signature");
+        
+        // Verify recursive structure
+        assertTrue(output.contains("go : Optional Text -> [a]"),
+            "Should have recursive go helper");
+        assertTrue(output.contains("go token acc"),
+            "Should have token and accumulator parameters");
+        
+        // Verify token handling
+        assertTrue(output.contains("inputWithToken = { input with nextToken = token }"),
+            "Should update input with token");
+        assertTrue(output.contains("response.nextToken"),
+            "Should check output token");
+        
+        // Verify items collection
+        assertTrue(output.contains("response.items"),
+            "Should access items field");
+        assertTrue(output.contains("newItems = Optional.getOrElse [] response.items"),
+            "Should handle optional items");
+        assertTrue(output.contains("allItems = acc ++ newItems"),
+            "Should accumulate items");
+        
+        // Verify pagination loop
+        assertTrue(output.contains("Some nextToken -> go (Some nextToken) allItems"),
+            "Should recurse on next token");
+        assertTrue(output.contains("None -> allItems"),
+            "Should return accumulated items when done");
+        
+        // Verify initial call
+        assertTrue(output.contains("go None []"),
+            "Should start with None token and empty list");
+    }
+    
+    @Test
+    void testGeneratePaginationHelper_withCustomTokens() {
+        Model model = Model.assembler()
+            .addUnparsedModel("test.smithy",
+                "$version: \"2.0\"\n" +
+                "namespace test\n" +
+                "service TestService {\n" +
+                "  version: \"1.0\"\n" +
+                "  operations: [ListParts]\n" +
+                "}\n" +
+                "@paginated(inputToken: \"partNumberMarker\", outputToken: \"nextPartNumberMarker\", items: \"parts\")\n" +
+                "operation ListParts {\n" +
+                "  input: ListPartsInput\n" +
+                "  output: ListPartsOutput\n" +
+                "}\n" +
+                "structure ListPartsInput { partNumberMarker: String }\n" +
+                "structure ListPartsOutput { nextPartNumberMarker: String, parts: PartList }\n" +
+                "list PartList { member: Part }\n" +
+                "structure Part { partNumber: Integer }\n")
+            .assemble()
+            .unwrap();
+        
+        OperationShape operation = model.expectShape(
+            ShapeId.from("test#ListParts"), OperationShape.class);
+        
+        generator.generatePaginationHelper(operation, model, writer);
+        String output = writer.toString();
+        
+        // Verify custom token names are used
+        assertTrue(output.contains("partNumberMarker = token"),
+            "Should use custom input token name");
+        assertTrue(output.contains("response.nextPartNumberMarker"),
+            "Should use custom output token name");
+        assertTrue(output.contains("response.parts"),
+            "Should use custom items field name");
+    }
+    
+    @Test
+    void testGenerate_multipleOperations() {
+        Model model = Model.assembler()
+            .addUnparsedModel("test.smithy",
+                "$version: \"2.0\"\n" +
+                "namespace test\n" +
+                "service TestService {\n" +
+                "  version: \"1.0\"\n" +
+                "  operations: [ListItems, ListBuckets, GetItem]\n" +
+                "}\n" +
+                "@paginated(inputToken: \"token\", outputToken: \"nextToken\", items: \"items\")\n" +
+                "operation ListItems {\n" +
+                "  input: ListItemsInput\n" +
+                "  output: ListItemsOutput\n" +
+                "}\n" +
+                "@paginated(inputToken: \"marker\", outputToken: \"nextMarker\", items: \"buckets\")\n" +
+                "operation ListBuckets {\n" +
+                "  input: ListBucketsInput\n" +
+                "  output: ListBucketsOutput\n" +
+                "}\n" +
+                "operation GetItem {\n" +
+                "  input: GetItemInput\n" +
+                "  output: GetItemOutput\n" +
+                "}\n" +
+                "structure ListItemsInput { token: String }\n" +
+                "structure ListItemsOutput { nextToken: String, items: ItemList }\n" +
+                "structure ListBucketsInput { marker: String }\n" +
+                "structure ListBucketsOutput { nextMarker: String, buckets: BucketList }\n" +
+                "structure GetItemInput { id: String }\n" +
+                "structure GetItemOutput { name: String }\n" +
+                "list ItemList { member: Item }\n" +
+                "list BucketList { member: Bucket }\n" +
+                "structure Item { name: String }\n" +
+                "structure Bucket { name: String }\n")
+            .assemble()
+            .unwrap();
+        
+        ServiceShape service = model.expectShape(
+            ShapeId.from("test#TestService"), ServiceShape.class);
+        
+        generator.generate(service, model, writer);
+        String output = writer.toString();
+        
+        // Should generate helpers for both paginated operations
+        assertTrue(output.contains("listItemsAll"),
+            "Should generate listItemsAll");
+        assertTrue(output.contains("listBucketsAll"),
+            "Should generate listBucketsAll");
+        
+        // Should have section header
+        assertTrue(output.contains("Pagination Helpers"),
+            "Should have pagination section header");
+    }
+    
+    @Test
+    void testDocumentation() {
+        Model model = Model.assembler()
+            .addUnparsedModel("test.smithy",
+                "$version: \"2.0\"\n" +
+                "namespace test\n" +
+                "service TestService {\n" +
+                "  version: \"1.0\"\n" +
+                "  operations: [ListItems]\n" +
+                "}\n" +
+                "@paginated(inputToken: \"nextToken\", outputToken: \"nextToken\", items: \"items\")\n" +
+                "operation ListItems {\n" +
+                "  input: ListItemsInput\n" +
+                "  output: ListItemsOutput\n" +
+                "}\n" +
+                "structure ListItemsInput { nextToken: String }\n" +
+                "structure ListItemsOutput { nextToken: String, items: ItemList }\n" +
+                "list ItemList { member: Item }\n" +
+                "structure Item { name: String }\n")
+            .assemble()
+            .unwrap();
+        
+        OperationShape operation = model.expectShape(
+            ShapeId.from("test#ListItems"), OperationShape.class);
+        
+        generator.generatePaginationHelper(operation, model, writer);
+        String output = writer.toString();
+        
+        // Verify documentation
+        assertTrue(output.contains("{{"),
+            "Should have doc comment");
+        assertTrue(output.contains("Auto-paginating version"),
+            "Should document as auto-paginating");
+        assertTrue(output.contains("items"),
+            "Should mention items field");
+        assertTrue(output.contains("nextToken"),
+            "Should mention token fields");
+    }
+}

@@ -18,7 +18,7 @@ General SDK features not specific to AWS traits.
 |---------|--------|-------|
 | HTTP Protocol Bindings | ✅ | `@httpLabel`, `@httpHeader`, `@httpQuery`, `@httpPayload` implemented in RestXmlProtocolGenerator |
 | Input Validation | ❌ | `@required` trait validation |
-| Pagination Helpers | ❌ | Auto-generated pagination functions |
+| Pagination Helpers | ✅ | Auto-generated pagination functions for `@paginated` operations |
 | Retry with Exponential Backoff | ❌ | Configurable retry with jitter |
 | Error Handling | ✅ | Error parsing implemented for REST-XML |
 | HTTP Prefix Headers | ❌ | `@httpPrefixHeaders` trait not implemented |
