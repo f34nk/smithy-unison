@@ -6,6 +6,7 @@ import java.util.logging.Logger;
 
 import io.smithy.unison.codegen.aws.AwsProtocol;
 import io.smithy.unison.codegen.aws.AwsProtocolDetector;
+import io.smithy.unison.codegen.generators.PaginationGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGeneratorFactory;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
@@ -132,6 +133,10 @@ public final class ClientModuleWriter {
                 generateOperationStub(operation, writer);
             }
         }
+        
+        // Generate pagination helpers
+        PaginationGenerator paginationGenerator = new PaginationGenerator();
+        paginationGenerator.generate(service, model, writer);
         
         // Write to file
         writeToFile(writer);

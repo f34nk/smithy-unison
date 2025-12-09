@@ -4,6 +4,10 @@
 
 ### Added
 
+#### Pagination Support
+- PaginationGenerator for `@paginated` operations
+- Auto-paginating helper functions (e.g., `listObjectsV2All`)
+
 #### Type Generation
 - StructureGenerator for Unison record types
 - EnumGenerator for Unison sum types with `toText`/`fromText` functions
