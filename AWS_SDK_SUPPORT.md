@@ -65,7 +65,7 @@ Authentication mechanisms for AWS services.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| [AWS Signature Version 4 (SigV4)](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-sigv4-trait) | ❌ | Not implemented (stubbed) |
+| [AWS Signature Version 4 (SigV4)](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-sigv4-trait) | ✅ | SigV4Generator provides complete signing implementation |
 | [Credential Provider Chain](https://smithy.io/2.0/aws/aws-auth.html) | ❌ | Not implemented |
 | [AWS Signature Version 4A (SigV4A)](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-sigv4a-trait) | ❌ | Multi-region asymmetric signing not implemented |
 | [Cognito User Pools Authentication](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-cognitouserpools-trait) | ❌ | Cognito authentication not implemented |
@@ -198,4 +198,4 @@ CloudFormation resource generation traits. Not applicable to client code generat
 
 *Generated from [Smithy 2.0 AWS integrations](https://smithy.io/2.0/aws/index.html)*
 
-**FIRST DRAFT - No features are currently implemented.**
+**Work in progress - See individual feature status above.**
