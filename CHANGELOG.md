@@ -5,6 +5,7 @@
 ### Added
 
 #### Runtime Modules
+- `aws_xml.u` runtime module with XML encoding/decoding utilities
 - `aws_sigv4.u` runtime module with SigV4 signing implementation
 - RuntimeModuleCopier for bundling runtime modules with generated code
 

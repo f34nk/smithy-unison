@@ -178,6 +178,7 @@ public final class RuntimeModuleCopier {
      * <p>Currently copies:
      * <ul>
      *   <li>{@code aws_sigv4.u} - Required for all AWS services</li>
+     *   <li>{@code aws_xml.u} - Required for REST-XML protocol services</li>
      * </ul>
      * 
      * @return List of successfully copied module names
@@ -188,6 +189,11 @@ public final class RuntimeModuleCopier {
         // SigV4 is required for all AWS services
         if (copyModule(RuntimeModule.AWS_SIGV4)) {
             copied.add(RuntimeModule.AWS_SIGV4.getFilename());
+        }
+        
+        // XML is required for REST-XML services (S3, CloudFront, Route 53, etc.)
+        if (copyModule(RuntimeModule.AWS_XML)) {
+            copied.add(RuntimeModule.AWS_XML.getFilename());
         }
         
         return copied;
