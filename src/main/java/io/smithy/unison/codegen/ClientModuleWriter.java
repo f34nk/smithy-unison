@@ -90,36 +90,25 @@ public final class ClientModuleWriter {
         boolean useProtocolGenerator = protocolGenerator.isPresent() 
                 && ProtocolGeneratorFactory.isFullyImplemented(protocol);
         
+        // Check if this is an AWS service
+        RuntimeModuleCopier copier = new RuntimeModuleCopier(fileManifest, outputDir);
+        boolean isAws = copier.isAwsService(service, protocol);
+        
         // Write header comment
         writer.writeComment("Generated Unison client for " + service.getId().getName());
         if (useProtocolGenerator) {
             writer.writeComment("Protocol: " + protocol.name());
-        } else {
+        } else if (isAws) {
             writer.writeComment("Protocol " + protocol.name() + " - operations are stubs");
         }
         writer.writeBlankLine();
         
-        // Write Config type
-        writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
-        writer.write("type Config = {");
-        writer.indent();
-        writer.write("endpoint : Text,");
-        writer.write("region : Text,");
-        writer.write("credentials : Credentials,");
-        writer.write("usePathStyle : Boolean");
-        writer.dedent();
-        writer.write("}");
-        writer.writeBlankLine();
-        
-        // Write Credentials type
-        writer.write("type Credentials = {");
-        writer.indent();
-        writer.write("accessKeyId : Text,");
-        writer.write("secretAccessKey : Text,");
-        writer.write("sessionToken : Optional Text");
-        writer.dedent();
-        writer.write("}");
-        writer.writeBlankLine();
+        // Write Config type (conditional based on service type)
+        if (isAws) {
+            generateAwsConfigTypes(writer);
+        } else {
+            generateGenericConfigType(writer);
+        }
         
         // Generate operations
         for (ShapeId opId : service.getOperations()) {
@@ -149,6 +138,49 @@ public final class ClientModuleWriter {
         } else {
             LOGGER.info("Client generation completed (stub operations)");
         }
+    }
+    
+    /**
+     * Generates AWS-specific Config and Credentials types.
+     * 
+     * <p>Used for AWS services that require authentication and S3-style configuration.
+     */
+    private void generateAwsConfigTypes(UnisonWriter writer) {
+        writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
+        writer.write("type Config = {");
+        writer.indent();
+        writer.write("endpoint : Text,");
+        writer.write("region : Text,");
+        writer.write("credentials : Credentials,");
+        writer.write("usePathStyle : Boolean");
+        writer.dedent();
+        writer.write("}");
+        writer.writeBlankLine();
+        
+        writer.write("type Credentials = {");
+        writer.indent();
+        writer.write("accessKeyId : Text,");
+        writer.write("secretAccessKey : Text,");
+        writer.write("sessionToken : Optional Text");
+        writer.dedent();
+        writer.write("}");
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates a generic Config type for non-AWS services.
+     * 
+     * <p>Used for services that don't require AWS authentication.
+     */
+    private void generateGenericConfigType(UnisonWriter writer) {
+        writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
+        writer.write("type Config = {");
+        writer.indent();
+        writer.write("endpoint : Text,");
+        writer.write("headers : [(Text, Text)]");
+        writer.dedent();
+        writer.write("}");
+        writer.writeBlankLine();
     }
     
     /**
