@@ -23,7 +23,7 @@ Traits for HTTP protocol bindings.
 | [`smithy.api#httpQuery`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpquery-trait) | ❌ | Binds member to query string parameter |
 | [`smithy.api#cors`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-cors-trait) | ❌ | CORS configuration for service |
 | [`smithy.api#httpChecksumRequired`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpchecksumrequired-trait) | ❌ | Requires checksum header |
-| [`smithy.api#httpError`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httperror-trait) | ❌ | Defines HTTP status code for error |
+| [`smithy.api#httpError`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httperror-trait) | ✅ | Included in error type documentation |
 | [`smithy.api#httpPrefixHeaders`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpprefixheaders-trait) | ❌ | Binds map to prefixed headers |
 | [`smithy.api#httpQueryParams`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpqueryparams-trait) | ❌ | Binds map to query parameters |
 | [`smithy.api#httpResponseCode`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpresponsecode-trait) | ❌ | Binds member to HTTP response status |
@@ -83,12 +83,12 @@ Traits that refine or modify type semantics.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#enumValue`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-enumvalue-trait) | ❌ | Defines the wire value for enum members |
-| [`smithy.api#error`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-error-trait) | ❌ | Marks structure as an error shape |
+| [`smithy.api#enumValue`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-enumvalue-trait) | ✅ | Defines wire value for enum conversion functions |
+| [`smithy.api#error`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-error-trait) | ✅ | Generates error record type with metadata |
 | [`smithy.api#input`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-input-trait) | ❌ | Marks structure as operation input |
 | [`smithy.api#output`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-output-trait) | ❌ | Marks structure as operation output |
-| [`smithy.api#required`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-required-trait) | ❌ | Marks member as required |
-| [`smithy.api#default`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-default-trait) | ❌ | Sets default value for a member |
+| [`smithy.api#required`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-required-trait) | ✅ | Marks member as required (non-optional in Unison) |
+| [`smithy.api#default`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-default-trait) | ⚠️ | Sets default value - field is non-optional but default not generated |
 | [`smithy.api#sparse`](https://smithy.io/2.0/spec/type-refinement-traits.html#smithy-api-sparse-trait) | ❌ | Allows null values in lists/maps |
 
 ---
@@ -99,7 +99,7 @@ Traits that constrain or validate values.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#enum`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-enum-trait) | ❌ | Defines enum values |
+| [`smithy.api#enum`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-enum-trait) | ✅ | Generates sum type with toText/fromText functions |
 | [`smithy.api#length`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-length-trait) | ❌ | Constrains length of strings, lists, or blobs |
 | [`smithy.api#pattern`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-pattern-trait) | ❌ | Requires string values to match a regular expression |
 | [`smithy.api#range`](https://smithy.io/2.0/spec/constraint-traits.html#smithy-api-range-trait) | ❌ | Constrains numeric values to a minimum and/or maximum |
@@ -127,7 +127,7 @@ Traits that provide documentation metadata.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#documentation`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-documentation-trait) | ❌ | Documentation for shapes |
+| [`smithy.api#documentation`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-documentation-trait) | ✅ | Documentation for shapes (generates {{ }} doc comments) |
 | [`smithy.api#deprecated`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-deprecated-trait) | ❌ | Marks shape as deprecated |
 | [`smithy.api#examples`](https://smithy.io/2.0/spec/documentation-traits.html#smithy-api-examples-trait) | ❌ | Provides example input/output for operations |
 

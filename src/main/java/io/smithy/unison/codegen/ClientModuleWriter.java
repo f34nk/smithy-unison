@@ -96,13 +96,9 @@ public final class ClientModuleWriter {
         writer.write("}");
         writer.writeBlankLine();
         
-        // Write placeholder response type
-        writer.write("type Response a");
-        writer.indent();
-        writer.write("= Success a");
-        writer.write("| Error { code : Text, message : Text }");
-        writer.dedent();
-        writer.writeBlankLine();
+        // Note: We use exception-based error handling (idiomatic Unison pattern)
+        // Operations raise exceptions via Exception.raise on error
+        // No Response sum type needed - operations return output directly
         
         // Write stub for each operation
         for (ShapeId opId : service.getOperations()) {
@@ -117,17 +113,39 @@ public final class ClientModuleWriter {
     }
     
     /**
-     * Generates a stub for an operation.
+     * Generates a stub for an operation using exception-based error handling.
+     * 
+     * <p>Operations use idiomatic Unison pattern:
+     * <ul>
+     *   <li>Return output directly on success (not wrapped in Response)</li>
+     *   <li>Raise exceptions via Exception.raise on error</li>
+     *   <li>Use '{IO, Exception, Http} abilities</li>
+     * </ul>
      */
     private void generateOperationStub(OperationShape operation, UnisonWriter writer) {
         String opName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName());
         
-        writer.writeDocComment(operation.getId().getName() + " operation (NOT IMPLEMENTED)");
-        writer.writeSignature(opName, "Config -> a -> '{IO, Exception} Response b");
-        writer.write("$L config input _ =", opName);
+        // Get input/output type names
+        String inputType = operation.getInput()
+                .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
+                .orElse("()");
+        String outputType = operation.getOutput()
+                .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
+                .orElse("()");
+        
+        writer.writeDocComment(operation.getId().getName() + " operation (NOT IMPLEMENTED)\n\n" +
+                "Raises exception on error, returns output directly on success.");
+        
+        // Exception-based signature: returns output directly, raises on error
+        String signature = String.format("Config -> %s -> '{IO, Exception, Http} %s", inputType, outputType);
+        writer.writeSignature(opName, signature);
+        
+        writer.write("$L config input =", opName);
         writer.indent();
         writer.write("-- TODO: Implement $L operation", operation.getId().getName());
-        writer.write("Error { code = \"NotImplemented\", message = \"Operation not yet implemented\" }");
+        writer.write("-- On success: return " + outputType + " directly");
+        writer.write("-- On error: Exception.raise (ServiceError.toFailure error)");
+        writer.write("bug \"Operation not yet implemented: $L\"", opName);
         writer.dedent();
         writer.writeBlankLine();
     }
