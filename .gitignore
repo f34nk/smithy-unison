@@ -1,0 +1,114 @@
+# =============================================================================
+# Build Artifacts - These are generated during build and should not be committed
+# =============================================================================
+
+# Java/Gradle Build Artifacts
+.gradle/
+build/
+bin/
+out/
+*.class
+
+# Built JARs (exclude built artifacts, but keep gradle wrapper)
+build/libs/*.jar
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# =============================================================================
+# IDE and Editor Files - User-specific settings
+# =============================================================================
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Vim/Emacs
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# Erlang Build Artifacts
+# =============================================================================
+
+# Compiled Erlang modules
+*.beam
+
+# Erlang build directories
+.eunit
+deps/
+ebin/
+_build/
+.rebar3/
+
+# Rebar lock files in generated code (these are ephemeral)
+examples/*/generated/rebar.lock
+
+# Erlang crash dumps
+erl_crash.dump
+**/erl_crash.dump
+
+# =============================================================================
+# Generated Code - Output from smithy-build and code generation
+# =============================================================================
+
+# All generated directories
+**/generated/
+examples/*/generated/
+
+# Smithy build output
+examples/weather-service/build/smithy/
+examples/*/build/smithy/
+
+# =============================================================================
+# OS-Specific Files
+# =============================================================================
+
+# macOS
+.DS_Store
+._*
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# =============================================================================
+# Temporary and Log Files
+# =============================================================================
+
+*.tmp
+*.bak
+*.log
+*.swp
+
+# =============================================================================
+# Test Results and Reports
+# =============================================================================
+
+# Java test results
+TEST-*.xml
+*.bin
+*.idx
+build/reports/
+build/test-results/
+
+# =============================================================================
+# Maven/Publishing (if using Maven repository publishing)
+# =============================================================================
+
+.m2/
+target/
+
+# Ignore test branch
+generate-aws-sdk/
