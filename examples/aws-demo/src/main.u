@@ -1,0 +1,211 @@
+-- S3 Demo Application
+-- Tests the generated S3 client against Moto mock server
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create S3 client configuration for Moto
+-- Use 'moto' hostname as it's the Docker Compose service name
+defaultConfig : Config
+defaultConfig = Config {
+  endpoint = "http://moto:5050",
+  region = "us-east-1",
+  credentials = Credentials {
+    accessKeyId = "dummy",
+    secretAccessKey = "dummy",
+    sessionToken = None
+  },
+  usePathStyle = true
+}
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+main : '{IO, Exception} ()
+main = do
+  printLine "=== Running S3 Client Demo ==="
+  printLine ""
+  
+  let config = defaultConfig
+  
+  -- Demo 1: List Buckets
+  printLine "1. Listing buckets..."
+  listBucketsDemo config
+  
+  -- Demo 2: Put Object
+  printLine "2. Putting object..."
+  putObjectDemo config
+  
+  -- Demo 3: List Objects
+  printLine "3. Listing objects..."
+  listObjectsDemo config
+  
+  -- Demo 4: Get Object
+  printLine "4. Getting object..."
+  getObjectDemo config
+  
+  printLine ""
+  printLine "=== S3 Client Demo Complete ==="
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+List all buckets in the account.
+The terraform provisioner creates 'us1-nonprod-configs' bucket.
+}}
+listBucketsDemo : Config -> '{IO, Exception} ()
+listBucketsDemo config = do
+  -- Create empty request (all fields are optional for ListBuckets)
+  request = {
+    bucketRegion = "",
+    continuationToken = "",
+    maxBuckets = "",
+    prefix = ""
+  }
+  
+  -- Note: This will fail until we verify Unison's HTTP API compatibility
+  -- For now, this serves as a template for the actual implementation
+  printLine "   [STUB] Would call listBuckets with empty request"
+  printLine "   Expected: us1-nonprod-configs bucket"
+  
+  -- Uncomment when API is verified:
+  -- result = listBuckets config request
+  -- printLine ("   Found buckets: " ++ Debug.toText result)
+
+{{
+Upload a test object to the configs bucket.
+}}
+putObjectDemo : Config -> '{IO, Exception} ()
+putObjectDemo config = do
+  -- Create put object request
+  body = Text.toUtf8 "Hello from Unison S3 Client!"
+  
+  request = {
+    bucket = "us1-nonprod-configs",
+    key = Some "configs/unison-test.txt",
+    body = body,
+    -- All the optional header fields (set to empty string to omit)
+    aCL = "",
+    bucketKeyEnabled = "",
+    cacheControl = "",
+    checksumAlgorithm = "",
+    checksumCRC32 = "",
+    checksumCRC32C = "",
+    checksumCRC64NVME = "",
+    checksumSHA1 = "",
+    checksumSHA256 = "",
+    contentDisposition = "",
+    contentEncoding = "",
+    contentLanguage = "",
+    contentLength = "",
+    contentMD5 = "",
+    contentType = "text/plain",
+    expectedBucketOwner = "",
+    expires = "",
+    grantFullControl = "",
+    grantRead = "",
+    grantReadACP = "",
+    grantWriteACP = "",
+    ifMatch = "",
+    ifNoneMatch = "",
+    objectLockLegalHoldStatus = "",
+    objectLockMode = "",
+    objectLockRetainUntilDate = "",
+    requestPayer = "",
+    serverSideEncryption = "",
+    sSECustomerAlgorithm = "",
+    sSECustomerKey = "",
+    sSECustomerKeyMD5 = "",
+    sSEKMSEncryptionContext = "",
+    sSEKMSKeyId = "",
+    storageClass = "",
+    tagging = "",
+    websiteRedirectLocation = "",
+    writeOffsetBytes = ""
+  }
+  
+  printLine "   [STUB] Would call putObject with:"
+  printLine "   - Bucket: us1-nonprod-configs"
+  printLine "   - Key: configs/unison-test.txt"
+  printLine "   - Body: Hello from Unison S3 Client!"
+  
+  -- Uncomment when API is verified:
+  -- result = putObject config request
+  -- printLine ("   Put result: " ++ Debug.toText result)
+
+{{
+List objects in the configs prefix.
+}}
+listObjectsDemo : Config -> '{IO, Exception} ()
+listObjectsDemo config = do
+  request = {
+    bucket = "us1-nonprod-configs",
+    key = None,
+    continuationToken = "",
+    delimiter = "",
+    encodingType = "",
+    fetchOwner = "",
+    maxKeys = "100",
+    prefix = "configs/",
+    startAfter = "",
+    expectedBucketOwner = "",
+    optionalObjectAttributes = "",
+    requestPayer = ""
+  }
+  
+  printLine "   [STUB] Would call listObjectsV2 with:"
+  printLine "   - Bucket: us1-nonprod-configs"
+  printLine "   - Prefix: configs/"
+  printLine "   - MaxKeys: 100"
+  printLine "   Expected objects:"
+  printLine "   - configs/config1.toml (from terraform)"
+  printLine "   - configs/config2.toml (from terraform)"
+  printLine "   - configs/unison-test.txt (from putObject)"
+  
+  -- Uncomment when API is verified:
+  -- result = listObjectsV2 config request
+  -- printLine ("   List result: " ++ Debug.toText result)
+
+{{
+Get the test object we uploaded.
+}}
+getObjectDemo : Config -> '{IO, Exception} ()
+getObjectDemo config = do
+  request = {
+    bucket = "us1-nonprod-configs",
+    key = Some "configs/unison-test.txt",
+    -- Query parameters (optional)
+    partNumber = "",
+    responseCacheControl = "",
+    responseContentDisposition = "",
+    responseContentEncoding = "",
+    responseContentLanguage = "",
+    responseContentType = "",
+    responseExpires = "",
+    versionId = "",
+    -- Header parameters (optional)
+    checksumMode = "",
+    expectedBucketOwner = "",
+    ifMatch = "",
+    ifModifiedSince = "",
+    ifNoneMatch = "",
+    ifUnmodifiedSince = "",
+    range = "",
+    requestPayer = "",
+    sSECustomerAlgorithm = "",
+    sSECustomerKey = "",
+    sSECustomerKeyMD5 = ""
+  }
+  
+  printLine "   [STUB] Would call getObject with:"
+  printLine "   - Bucket: us1-nonprod-configs"
+  printLine "   - Key: configs/unison-test.txt"
+  printLine "   Expected body: Hello from Unison S3 Client!"
+  
+  -- Uncomment when API is verified:
+  -- result = getObject config request
+  -- printLine ("   Get result: " ++ Debug.toText result)

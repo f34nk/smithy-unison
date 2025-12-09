@@ -1,0 +1,17 @@
+[project]
+name = "moto_container"
+version = "0.1.0"
+description = "Moto container"
+requires-python = ">=3.12"
+dependencies = [
+    "moto[server] >=5",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv.sources]
+
+[[tool.uv.index]]
+name = "pipy"
+url = "https://pypi.org/simple/"

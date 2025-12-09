@@ -69,7 +69,7 @@ examples/clean:
 		cd - ; \
 	done
 
-# .PHONY: demo
-# demo:
-# 	cd examples/aws-demo && \
-# 	make docker/test
+.PHONY: demo
+demo: clean build
+	cd examples/aws-demo && \
+	make docker/test
