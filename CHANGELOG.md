@@ -17,6 +17,7 @@
 - Error parsing functions for XML and JSON protocols
 - HTTP error handler generation
 - S3UrlGenerator for S3-specific URL building (virtual-hosted and path-style)
+- XmlGenerator for XML encoding/decoding utilities
 
 #### Core Infrastructure
 - UnisonWriter with record type, union type, function, and match expression methods
