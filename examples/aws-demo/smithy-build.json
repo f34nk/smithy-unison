@@ -19,7 +19,7 @@
   "plugins": {
     "unison-codegen": {
       "service": "com.amazonaws.s3#AmazonS3",
-      "namespace": "com.amazonaws.s3",
+      "namespace": "aws.s3",
       "outputDir": "generated"
     }
   }
