@@ -16,11 +16,11 @@ General SDK features not specific to AWS traits.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| HTTP Protocol Bindings | ❌ | `@httpLabel`, `@httpHeader`, `@httpQuery`, `@httpPayload` |
+| HTTP Protocol Bindings | ✅ | `@httpLabel`, `@httpHeader`, `@httpQuery`, `@httpPayload` implemented in RestXmlProtocolGenerator |
 | Input Validation | ❌ | `@required` trait validation |
 | Pagination Helpers | ❌ | Auto-generated pagination functions |
 | Retry with Exponential Backoff | ❌ | Configurable retry with jitter |
-| Error Handling | ❌ | Error parsing not implemented |
+| Error Handling | ✅ | Error parsing implemented for REST-XML |
 | HTTP Prefix Headers | ❌ | `@httpPrefixHeaders` trait not implemented |
 | Idempotency Token | ❌ | `@idempotencyToken` trait not implemented |
 | Host Label | ❌ | `@hostLabel` trait not implemented |
@@ -42,7 +42,7 @@ Protocol implementations for AWS services.
 | [AWS JSON 1.1 protocol](https://smithy.io/2.0/aws/protocols/aws-json-1_1-protocol.html) | ❌ | Not implemented (stubbed) |
 | [AWS Query protocol](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html) | ❌ | Not implemented (stubbed) |
 | [AWS restJson1 protocol](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html) | ❌ | Not implemented (stubbed) |
-| [AWS restXml protocol](https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html) | ❌ | Not implemented (stubbed) |
+| [AWS restXml protocol](https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html) | ✅ | Implemented with operation generation, request/response serialization |
 
 ---
 
@@ -114,8 +114,8 @@ Service-specific behaviors and customizations.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| [S3 Path-Style Bucket Addressing](https://smithy.io/2.0/aws/customizations/s3-customizations.html#s3-bucket-virtual-hosting) | ❌ | Not implemented |
-| [S3 Virtual-Hosted Bucket Addressing](https://smithy.io/2.0/aws/customizations/s3-customizations.html#s3-bucket-virtual-hosting) | ❌ | Not implemented |
+| [S3 Path-Style Bucket Addressing](https://smithy.io/2.0/aws/customizations/s3-customizations.html#s3-bucket-virtual-hosting) | ✅ | Implemented in S3UrlGenerator |
+| [S3 Virtual-Hosted Bucket Addressing](https://smithy.io/2.0/aws/customizations/s3-customizations.html#s3-bucket-virtual-hosting) | ✅ | Implemented in S3UrlGenerator (default) |
 | [S3 Access Points](https://smithy.io/2.0/aws/customizations/s3-customizations.html) | ❌ | Access point ARN resolution not implemented |
 | [S3 Dual-Stack Endpoints](https://smithy.io/2.0/aws/customizations/s3-customizations.html#s3-dual-stack-endpoints) | ❌ | `.dualstack.` endpoint modifier not implemented |
 | [S3 Multi-Region Access Points](https://smithy.io/2.0/aws/customizations/s3-customizations.html) | ❌ | MRAP not implemented |

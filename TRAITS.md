@@ -16,17 +16,17 @@ Traits for HTTP protocol bindings.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#http`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-http-trait) | ❌ | Defines HTTP method and URI pattern |
-| [`smithy.api#httpHeader`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpheader-trait) | ❌ | Binds member to HTTP header |
-| [`smithy.api#httpLabel`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httplabel-trait) | ❌ | Binds member to URI path segment |
-| [`smithy.api#httpPayload`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httppayload-trait) | ❌ | Binds member to HTTP body |
-| [`smithy.api#httpQuery`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpquery-trait) | ❌ | Binds member to query string parameter |
+| [`smithy.api#http`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-http-trait) | ✅ | Implemented in RestXmlProtocolGenerator for method/URI |
+| [`smithy.api#httpHeader`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpheader-trait) | ✅ | Implemented in RestXmlProtocolGenerator |
+| [`smithy.api#httpLabel`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httplabel-trait) | ✅ | Implemented in RestXmlProtocolGenerator for path parameters |
+| [`smithy.api#httpPayload`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httppayload-trait) | ✅ | Implemented in RestXmlProtocolGenerator |
+| [`smithy.api#httpQuery`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpquery-trait) | ✅ | Implemented in RestXmlProtocolGenerator for query params |
 | [`smithy.api#cors`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-cors-trait) | ❌ | CORS configuration for service |
 | [`smithy.api#httpChecksumRequired`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpchecksumrequired-trait) | ❌ | Requires checksum header |
 | [`smithy.api#httpError`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httperror-trait) | ✅ | Included in error type documentation |
 | [`smithy.api#httpPrefixHeaders`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpprefixheaders-trait) | ❌ | Binds map to prefixed headers |
 | [`smithy.api#httpQueryParams`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpqueryparams-trait) | ❌ | Binds map to query parameters |
-| [`smithy.api#httpResponseCode`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpresponsecode-trait) | ❌ | Binds member to HTTP response status |
+| [`smithy.api#httpResponseCode`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpresponsecode-trait) | ✅ | Binds member to HTTP response status - Implemented in RestXmlProtocolGenerator |
 
 ---
 
@@ -58,7 +58,7 @@ AWS-specific protocol traits.
 | [`aws.protocols#awsQuery`](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html#aws-protocols-awsquery-trait) | ❌ | AWS Query protocol (SQS, SNS, RDS) |
 | [`aws.protocols#ec2Query`](https://smithy.io/2.0/aws/protocols/aws-ec2-query-protocol.html#aws-protocols-ec2query-trait) | ❌ | EC2 Query protocol |
 | [`aws.protocols#restJson1`](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#aws-protocols-restjson1-trait) | ❌ | REST-JSON protocol (API Gateway, Step Functions) |
-| [`aws.protocols#restXml`](https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html#aws-protocols-restxml-trait) | ❌ | REST-XML protocol (S3, CloudFront, Route 53) |
+| [`aws.protocols#restXml`](https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html#aws-protocols-restxml-trait) | ✅ | REST-XML protocol (S3, CloudFront, Route 53) - Implemented |
 | [`aws.protocols#awsQueryCompatible`](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html#aws-protocols-awsquerycompatible-trait) | ❌ | Query protocol compatibility mode |
 | [`aws.protocols#httpChecksum`](https://smithy.io/2.0/aws/aws-core.html#aws-protocols-httpchecksum-trait) | ❌ | HTTP checksum configuration |
 

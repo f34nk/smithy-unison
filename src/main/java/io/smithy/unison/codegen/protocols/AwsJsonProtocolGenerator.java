@@ -62,4 +62,10 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         // TODO: Implement AWS JSON response deserialization
     }
+    
+    @Override
+    public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
+        // TODO: Implement AWS JSON error parsing
+        writer.writeComment("AWS JSON error parsing (NOT IMPLEMENTED)");
+    }
 }

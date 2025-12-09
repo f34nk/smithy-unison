@@ -49,4 +49,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         // TODO: Implement AWS Query response deserialization
     }
+    
+    @Override
+    public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
+        // TODO: Implement AWS Query error parsing
+        writer.writeComment("AWS Query error parsing (NOT IMPLEMENTED)");
+    }
 }
