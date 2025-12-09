@@ -1,0 +1,62 @@
+name: CI
+
+env:
+  SMITHY_VERSION: 1.64.0
+  
+on:
+  push:
+    # branches: [ main, first-draft ]
+  pull_request:
+    # branches: [ main, first-draft ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        java-version: [
+          # '17', 
+          '21'
+          ]
+      fail-fast: false
+    
+    name: Build (Java ${{ matrix.java-version }})
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Java ${{ matrix.java-version }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ matrix.java-version }}
+        cache: 'gradle'
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y tree
+    
+    - name: Install Smithy CLI
+      run: |
+        curl -L https://github.com/smithy-lang/smithy/releases/download/${{ env.SMITHY_VERSION }}/smithy-cli-linux-x86_64.zip -o smithy.zip
+        unzip smithy.zip
+        cd smithy-cli-linux-x86_64 && ./install --install-dir /usr/local/bin/
+        smithy --version
+    
+    - name: Make Gradle wrapper executable
+      run: chmod +x gradlew
+    
+    - name: Run make
+      run: make
+    
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          build-errors.log
