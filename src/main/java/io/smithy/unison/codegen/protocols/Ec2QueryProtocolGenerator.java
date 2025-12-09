@@ -49,4 +49,10 @@ public class Ec2QueryProtocolGenerator implements ProtocolGenerator {
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         // TODO: Implement EC2 Query response deserialization
     }
+    
+    @Override
+    public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
+        // TODO: Implement EC2 Query error parsing
+        writer.writeComment("EC2 Query error parsing (NOT IMPLEMENTED)");
+    }
 }

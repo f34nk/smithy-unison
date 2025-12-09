@@ -59,4 +59,10 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         // TODO: Implement REST-JSON response deserialization
     }
+    
+    @Override
+    public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
+        // TODO: Implement REST-JSON error parsing
+        writer.writeComment("REST-JSON error parsing (NOT IMPLEMENTED)");
+    }
 }
