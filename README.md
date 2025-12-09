@@ -65,7 +65,6 @@ Check out [AWS_SDK_SUPPORT.md](https://github.com/f34nk/smithy-unison/blob/main/
 make build
 ```
 
-<!-- NOT YET IMPLEMENTED
 ## Testing
 
 Run generator tests:
@@ -74,6 +73,7 @@ Run generator tests:
 make test
 ```
 
+<!-- NOT YET IMPLEMENTED
 Run all example builds and tests:
 
 ```bash
@@ -110,7 +110,7 @@ Create [smithy-build.json](https://smithy.io/2.0/guides/smithy-build-json.html):
     "unison-codegen": {
       "service": "com.example#MyClient",
       "namespace": "my.client",
-      "outputDir": "src/generated"
+      "outputDir": "generated"
     }
   }
 }

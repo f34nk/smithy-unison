@@ -61,7 +61,7 @@ clean:
 	# Clear the build
 	#
 	rm -rf build bin test-errors.log build-errors.log
-	rm -rf ~/.m2/repository/io/smithy/erlang/smithy-erlang
+	rm -rf ~/.m2/repository/io/smithy/unison/smithy-unison
 
 # # Usage: make examples
 # .PHONY: examples
