@@ -5,6 +5,7 @@
 ### Added
 
 #### Runtime Modules
+- `aws_credentials.u` runtime module with credential provider chain
 - `aws_config.u` runtime module with configuration types and helpers
 - `aws_s3.u` runtime module with S3 URL building and bucket validation
 - `aws_http.u` runtime module with HTTP request/response utilities

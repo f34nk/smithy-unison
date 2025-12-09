@@ -182,6 +182,7 @@ public final class RuntimeModuleCopier {
      *   <li>{@code aws_http.u} - HTTP utilities for all services</li>
      *   <li>{@code aws_s3.u} - S3-specific utilities</li>
      *   <li>{@code aws_config.u} - Configuration types</li>
+     *   <li>{@code aws_credentials.u} - Credential provider chain</li>
      * </ul>
      * 
      * @return List of successfully copied module names
@@ -212,6 +213,11 @@ public final class RuntimeModuleCopier {
         // Configuration types and helpers
         if (copyModule(RuntimeModule.AWS_CONFIG)) {
             copied.add(RuntimeModule.AWS_CONFIG.getFilename());
+        }
+        
+        // Credential provider chain
+        if (copyModule(RuntimeModule.AWS_CREDENTIALS)) {
+            copied.add(RuntimeModule.AWS_CREDENTIALS.getFilename());
         }
         
         return copied;

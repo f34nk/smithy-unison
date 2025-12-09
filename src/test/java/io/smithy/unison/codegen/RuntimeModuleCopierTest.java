@@ -722,4 +722,140 @@ class RuntimeModuleCopierTest {
         assertEquals("Configuration types", config.getDescription());
         assertEquals("runtime/aws_config.u", config.getResourcePath());
     }
+    
+    // ========== Credentials Module Tests ==========
+    
+    @Test
+    void testCredentialsModuleIsAvailable() {
+        assertTrue(copier.isModuleAvailable(RuntimeModule.AWS_CREDENTIALS),
+            "aws_credentials.u module should be available as a resource");
+    }
+    
+    @Test
+    void testGetCredentialsModuleContent() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertNotNull(content, "Module content should not be null");
+        assertFalse(content.isEmpty(), "Module content should not be empty");
+        
+        // Verify expected content
+        assertTrue(content.contains("Aws.Credentials.fromEnvironment"),
+            "Module should define fromEnvironment function");
+        assertTrue(content.contains("Aws.Credentials.fromCredentialsFile"),
+            "Module should define fromCredentialsFile function");
+        assertTrue(content.contains("Aws.Credentials.fromProviderChain"),
+            "Module should define fromProviderChain function");
+    }
+    
+    @Test
+    void testCredentialsModuleHasEnvironmentLoading() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(content.contains("AWS_ACCESS_KEY_ID"),
+            "Module should reference AWS_ACCESS_KEY_ID");
+        assertTrue(content.contains("AWS_SECRET_ACCESS_KEY"),
+            "Module should reference AWS_SECRET_ACCESS_KEY");
+        assertTrue(content.contains("AWS_SESSION_TOKEN"),
+            "Module should reference AWS_SESSION_TOKEN");
+        assertTrue(content.contains("Aws.Credentials.fromEnvironment"),
+            "Module should have fromEnvironment function");
+    }
+    
+    @Test
+    void testCredentialsModuleHasFileLoading() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(content.contains("Aws.Credentials.fromCredentialsFile"),
+            "Module should have fromCredentialsFile function");
+        assertTrue(content.contains("Aws.Credentials.fromDefaultCredentialsFile"),
+            "Module should have fromDefaultCredentialsFile function");
+        assertTrue(content.contains("/.aws/credentials"),
+            "Module should reference credentials file path");
+        assertTrue(content.contains("Aws.Credentials.parseProfile"),
+            "Module should have parseProfile function");
+    }
+    
+    @Test
+    void testCredentialsModuleHasProviderChain() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(content.contains("Aws.Credentials.fromProviderChain"),
+            "Module should have fromProviderChain function");
+        assertTrue(content.contains("Aws.Credentials.ProviderResult"),
+            "Module should have ProviderResult type");
+        assertTrue(content.contains("Aws.Credentials.loadOrFail"),
+            "Module should have loadOrFail function");
+    }
+    
+    @Test
+    void testCredentialsModuleHasRegionResolution() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(content.contains("AWS_REGION"),
+            "Module should reference AWS_REGION");
+        assertTrue(content.contains("AWS_DEFAULT_REGION"),
+            "Module should reference AWS_DEFAULT_REGION");
+        assertTrue(content.contains("Aws.Credentials.resolveRegion"),
+            "Module should have resolveRegion function");
+        assertTrue(content.contains("Aws.Credentials.regionFromEnvironment"),
+            "Module should have regionFromEnvironment function");
+    }
+    
+    @Test
+    void testCredentialsModuleHasConvenienceFunctions() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(content.contains("Aws.Credentials.loadS3Config"),
+            "Module should have loadS3Config function");
+        assertTrue(content.contains("Aws.Credentials.loadS3ConfigForProfile"),
+            "Module should have loadS3ConfigForProfile function");
+    }
+    
+    @Test
+    void testCredentialsModuleHasDocumentation() {
+        String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(content.contains("{{"),
+            "Module should have doc comments");
+        assertTrue(content.contains("Load credentials from environment variables"),
+            "Module should document fromEnvironment function");
+        assertTrue(content.contains("credential provider chain"),
+            "Module should mention provider chain");
+    }
+    
+    @Test
+    void testCopyCredentialsModule() {
+        boolean result = copier.copyModule(RuntimeModule.AWS_CREDENTIALS);
+        
+        assertTrue(result, "Copy should succeed");
+        assertTrue(manifest.hasFile("src/aws_credentials.u"),
+            "Module should be written to manifest");
+    }
+    
+    @Test
+    void testCopyAwsModulesIncludesCredentials() {
+        List<String> copied = copier.copyAwsModules();
+        
+        assertTrue(copied.contains("aws_credentials.u"),
+            "Should copy aws_credentials.u");
+        assertTrue(copied.contains("aws_config.u"),
+            "Should also copy aws_config.u");
+        assertTrue(copied.contains("aws_s3.u"),
+            "Should also copy aws_s3.u");
+        assertTrue(copied.contains("aws_http.u"),
+            "Should also copy aws_http.u");
+        assertTrue(copied.contains("aws_sigv4.u"),
+            "Should also copy aws_sigv4.u");
+        assertTrue(copied.contains("aws_xml.u"),
+            "Should also copy aws_xml.u");
+    }
+    
+    @Test
+    void testCredentialsModuleEnum() {
+        RuntimeModule creds = RuntimeModule.AWS_CREDENTIALS;
+        
+        assertEquals("aws_credentials.u", creds.getFilename());
+        assertEquals("Credential loading", creds.getDescription());
+        assertEquals("runtime/aws_credentials.u", creds.getResourcePath());
+    }
 }

@@ -121,17 +121,13 @@ smithy build
 ```
 
 Generated files in `generated/`:
-- `{namespace}_client.u` - Client module with types, records, and operation stubs
-
-<!-- NOT YET IMPLEMENTED - Runtime Modules
-- `aws_config.u` - AWS configuration management
+- `{namespace}_client.u` - Client module with types, records, and operations
 - `aws_sigv4.u` - AWS Signature V4 request signing
-- `aws_credentials.u` - Credential provider chain
-- `aws_retry.u` - Retry logic with exponential backoff
-- `aws_xml.u` - XML parsing for REST-XML protocol
-- `aws_http.u` - HTTP request helpers
+- `aws_xml.u` - XML encoding/decoding for REST-XML protocol
+- `aws_http.u` - HTTP request/response utilities
 - `aws_s3.u` - S3-specific URL routing utilities
--->
+- `aws_config.u` - AWS configuration types
+- `aws_credentials.u` - Credential provider chain
 
 ## Architecture
 
