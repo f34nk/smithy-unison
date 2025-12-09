@@ -1,6 +1,9 @@
 package io.smithy.unison.codegen;
 
+import io.smithy.unison.codegen.aws.AwsProtocol;
 import software.amazon.smithy.build.FileManifest;
+import software.amazon.smithy.model.shapes.ServiceShape;
+import software.amazon.smithy.model.shapes.ShapeId;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -221,6 +224,131 @@ public final class RuntimeModuleCopier {
         }
         
         return copied;
+    }
+    
+    /**
+     * Copies AWS runtime modules based on the detected protocol and service.
+     * 
+     * <p>This method selectively copies only the modules needed for the specific
+     * protocol and service type:
+     * <ul>
+     *   <li>Core modules (sigv4, config, credentials, http) - all AWS services</li>
+     *   <li>{@code aws_xml.u} - only for XML-based protocols (REST-XML, AWS Query, EC2 Query)</li>
+     *   <li>{@code aws_s3.u} - only for S3 service</li>
+     * </ul>
+     * 
+     * @param protocol The detected AWS protocol
+     * @param service The service shape being generated
+     * @return List of successfully copied module names
+     */
+    public List<String> copyAwsModulesForProtocol(AwsProtocol protocol, ServiceShape service) {
+        List<String> copied = new ArrayList<>();
+        
+        // Core AWS modules - always needed for AWS services
+        if (copyModule(RuntimeModule.AWS_SIGV4)) {
+            copied.add(RuntimeModule.AWS_SIGV4.getFilename());
+        }
+        if (copyModule(RuntimeModule.AWS_CONFIG)) {
+            copied.add(RuntimeModule.AWS_CONFIG.getFilename());
+        }
+        if (copyModule(RuntimeModule.AWS_CREDENTIALS)) {
+            copied.add(RuntimeModule.AWS_CREDENTIALS.getFilename());
+        }
+        if (copyModule(RuntimeModule.AWS_HTTP)) {
+            copied.add(RuntimeModule.AWS_HTTP.getFilename());
+        }
+        
+        // Protocol-specific modules
+        if (protocol.isXml()) {
+            if (copyModule(RuntimeModule.AWS_XML)) {
+                copied.add(RuntimeModule.AWS_XML.getFilename());
+            }
+        }
+        
+        // Service-specific modules
+        if (isS3Service(service)) {
+            if (copyModule(RuntimeModule.AWS_S3)) {
+                copied.add(RuntimeModule.AWS_S3.getFilename());
+            }
+        }
+        
+        return copied;
+    }
+    
+    /**
+     * AWS service trait ShapeId.
+     */
+    private static final ShapeId AWS_SERVICE_TRAIT = ShapeId.from("aws.api#service");
+    
+    /**
+     * AWS SigV4 auth trait ShapeId.
+     */
+    private static final ShapeId AWS_SIGV4_TRAIT = ShapeId.from("aws.auth#sigv4");
+    
+    /**
+     * Checks if the service is an AWS service.
+     * 
+     * <p>Detection priority:
+     * <ol>
+     *   <li>Primary: {@code aws.api#service} trait (definitive AWS marker)</li>
+     *   <li>Fallback: {@code aws.auth#sigv4} trait (most AWS services use SigV4)</li>
+     *   <li>Fallback: AWS protocol detection (catches edge cases)</li>
+     * </ol>
+     * 
+     * @param service The service shape to check
+     * @param protocol The detected AWS protocol
+     * @return true if this is an AWS service
+     */
+    public boolean isAwsService(ServiceShape service, AwsProtocol protocol) {
+        // Primary: official AWS service trait
+        if (service.findTrait(AWS_SERVICE_TRAIT).isPresent()) {
+            return true;
+        }
+        
+        // Fallback: SigV4 auth trait
+        if (service.findTrait(AWS_SIGV4_TRAIT).isPresent()) {
+            return true;
+        }
+        
+        // Fallback: protocol detection
+        return protocol != AwsProtocol.UNKNOWN;
+    }
+    
+    /**
+     * Checks if the service is Amazon S3.
+     * 
+     * <p>Detection checks:
+     * <ol>
+     *   <li>Primary: sdkId in {@code aws.api#service} trait equals "S3"</li>
+     *   <li>Fallback: Service name is "AmazonS3" or "S3"</li>
+     *   <li>Fallback: Namespace contains "s3"</li>
+     * </ol>
+     * 
+     * @param service The service shape to check
+     * @return true if this is the S3 service
+     */
+    private boolean isS3Service(ServiceShape service) {
+        // Primary: check sdkId in aws.api#service trait
+        var serviceTrait = service.findTrait(AWS_SERVICE_TRAIT);
+        if (serviceTrait.isPresent()) {
+            var node = serviceTrait.get().toNode();
+            if (node.isObjectNode()) {
+                var sdkId = node.expectObjectNode().getStringMember("sdkId");
+                if (sdkId.isPresent() && "S3".equals(sdkId.get().getValue())) {
+                    return true;
+                }
+            }
+        }
+        
+        // Fallback: check service name
+        String name = service.getId().getName();
+        if ("AmazonS3".equals(name) || "S3".equals(name)) {
+            return true;
+        }
+        
+        // Fallback: check namespace
+        String namespace = service.getId().getNamespace().toLowerCase();
+        return namespace.contains("s3") && namespace.contains("amazonaws");
     }
     
     /**

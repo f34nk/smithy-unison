@@ -141,8 +141,8 @@ public final class ClientModuleWriter {
         // Write to file
         writeToFile(writer);
         
-        // Copy runtime modules
-        copyRuntimeModules();
+        // Copy runtime modules (only for AWS services)
+        copyRuntimeModules(protocol);
         
         if (useProtocolGenerator) {
             LOGGER.info("Client generation completed with full operation implementations");
@@ -191,19 +191,33 @@ public final class ClientModuleWriter {
     }
     
     /**
-     * Copies all required runtime modules to the output directory.
+     * Copies required runtime modules to the output directory based on service type.
+     * 
+     * <p>Only copies AWS runtime modules if an AWS service is detected.
+     * Detection uses the {@code aws.api#service} trait as the primary marker,
+     * with fallbacks to {@code aws.auth#sigv4} trait and protocol detection.
      * 
      * <p>Copies pre-written Unison runtime modules that provide common
      * functionality needed by generated code, such as:
      * <ul>
      *   <li>{@code aws_sigv4.u} - AWS SigV4 request signing</li>
+     *   <li>{@code aws_xml.u} - XML encoding/decoding (for XML protocols)</li>
+     *   <li>{@code aws_s3.u} - S3-specific utilities (for S3 only)</li>
      * </ul>
      * 
+     * @param protocol The detected AWS protocol
      * @return List of copied module filenames
      */
-    public java.util.List<String> copyRuntimeModules() throws IOException {
+    public java.util.List<String> copyRuntimeModules(AwsProtocol protocol) throws IOException {
         RuntimeModuleCopier copier = new RuntimeModuleCopier(fileManifest, outputDir);
-        java.util.List<String> copied = copier.copyAwsModules();
+        
+        // Only copy AWS modules if this is an AWS service
+        if (!copier.isAwsService(service, protocol)) {
+            LOGGER.info("Non-AWS service detected, skipping AWS runtime modules");
+            return java.util.Collections.emptyList();
+        }
+        
+        java.util.List<String> copied = copier.copyAwsModulesForProtocol(protocol, service);
         
         if (!copied.isEmpty()) {
             LOGGER.info("Copied runtime modules: " + String.join(", ", copied));

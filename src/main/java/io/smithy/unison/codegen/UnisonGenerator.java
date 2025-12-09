@@ -85,8 +85,7 @@ public final class UnisonGenerator
         // See ErlangGenerator.generateService() for reference
         try {
             ClientModuleWriter writer = ClientModuleWriter.fromContext(context);
-            writer.generate();
-            writer.copyRuntimeModules();
+            writer.generate();  // This also copies runtime modules based on protocol
             
             LOGGER.info("Service generation completed: " + service.getId());
         } catch (Exception e) {
