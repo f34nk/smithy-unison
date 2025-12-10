@@ -4,6 +4,7 @@ import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.shapes.EnumShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
@@ -154,8 +155,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         String signature = String.format("Config -> %s -> '{IO, Exception} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
-        // Write function definition
-        writer.write("$L config input =", opName);
+        // Write function definition with do block for delayed computation
+        // The '{IO, Exception} return type requires a do block
+        writer.write("$L config input = do", opName);
         writer.indent();
         
         // Build let bindings
@@ -166,16 +168,16 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("method = \"$L\"", method);
         
         // Build URL with path parameters
-        generateUrlBuilding(uri, httpLabelMembers, useS3Url, writer);
+        generateUrlBuilding(uri, httpLabelMembers, useS3Url, inputType, writer);
         
         // Build query string
-        generateQueryString(httpQueryMembers, writer);
+        generateQueryString(httpQueryMembers, inputType, model, writer);
         
         // Build full URL
         writer.write("fullUrl = url ++ queryString");
         
         // Build headers
-        generateRequestHeaders(httpHeaderInputMembers, writer);
+        generateRequestHeaders(httpHeaderInputMembers, inputType, model, writer);
         
         // Build request body
         generateRequestBodyBinding(operation, model, bodyMembers, payloadMember, writer);
@@ -202,16 +204,20 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
      * Generates URL building code with path parameter substitution.
      */
     private void generateUrlBuilding(String uri, List<MemberShape> httpLabelMembers, 
-                                      boolean useS3Url, UnisonWriter writer) {
+                                      boolean useS3Url, String inputType, UnisonWriter writer) {
         if (useS3Url) {
-            // S3-specific URL building
+            // S3-specific URL building with bucket routing
+            // Note: Unison uses accessor functions for record fields: Config.endpoint config
+            // For S3 operations with path parameters, bucket and key are required (@httpLabel)
             writer.write("-- S3-specific URL building with bucket routing");
-            writer.write("bucket = input.bucket");
-            writer.write("key = Optional.getOrElse \"\" input.key");
-            writer.write("url = Aws.S3.buildUrl config bucket key");
+            writer.write("bucket = $L.bucket input", inputType);
+            writer.write("key = $L.key input", inputType);
+            writer.write("endpoint = Config.endpoint config");
+            writer.write("usePathStyle = Config.usePathStyle config");
+            writer.write("url = Aws.S3.buildUrl endpoint bucket key usePathStyle");
         } else if (httpLabelMembers.isEmpty()) {
             // No path parameters
-            writer.write("url = config.endpoint ++ \"$L\"", uri);
+            writer.write("url = (Config.endpoint config) ++ \"$L\"", uri);
         } else {
             // Build URL with path parameter substitution
             writer.write("baseUri = \"$L\"", uri);
@@ -224,27 +230,34 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 String placeholder = "{" + member.getMemberName() + "}";
                 String nextUri = "uri" + (i + 1);
                 
-                writer.write("$LValue = input.$L", memberName, memberName);
-                writer.write("$L = Text.replace \"$L\" (Aws.urlEncode $LValue) $L", 
+                writer.write("$LValue = $L.$L input", memberName, inputType, memberName);
+                writer.write("$L = Text.replaceAll \"$L\" (Aws.urlEncode $LValue) $L", 
                         nextUri, placeholder, memberName, currentUri);
                 currentUri = nextUri;
             }
             
-            writer.write("url = config.endpoint ++ $L", currentUri);
+            writer.write("url = (Config.endpoint config) ++ $L", currentUri);
         }
     }
     
     /**
      * Generates query string building code.
+     * 
+     * <p>Builds query string by converting each parameter to Optional Text,
+     * then using List.filterMap to extract values and build the string.
+     * Handles both required and optional fields, using type-specific toText functions.
      */
-    private void generateQueryString(List<MemberShape> httpQueryMembers, UnisonWriter writer) {
+    private void generateQueryString(List<MemberShape> httpQueryMembers, String inputType, 
+                                      Model model, UnisonWriter writer) {
         if (httpQueryMembers.isEmpty()) {
             writer.write("queryString = \"\"");
             return;
         }
         
         writer.write("-- Build query string from @httpQuery members");
-        writer.write("queryParams = [");
+        writer.write("-- Each parameter is converted to Optional Text for homogeneous list");
+        writer.write("queryParts : [Optional Text]");
+        writer.write("queryParts = [");
         writer.indent();
         
         for (int i = 0; i < httpQueryMembers.size(); i++) {
@@ -257,18 +270,76 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             }
             
             String comma = (i < httpQueryMembers.size() - 1) ? "," : "";
-            writer.write("(\"$L\", input.$L)$L", queryName, memberName, comma);
+            
+            // Get the target shape to determine the correct toText function
+            Shape targetShape = model.expectShape(member.getTarget());
+            String toTextFunc = getToTextFunction(targetShape);
+            
+            // Check if the member is required (not optional)
+            boolean isRequired = member.isRequired();
+            
+            if (isRequired) {
+                // Required field: convert value directly and wrap in Some
+                writer.write("Some (\"$L=\" ++ Aws.Http.urlEncode ($L ($L.$L input)))$L", 
+                        queryName, toTextFunc, inputType, memberName, comma);
+            } else {
+                // Optional field: map over the Optional
+                writer.write("Optional.map (v -> \"$L=\" ++ Aws.Http.urlEncode ($L v)) ($L.$L input)$L", 
+                        queryName, toTextFunc, inputType, memberName, comma);
+            }
         }
         
         writer.dedent();
         writer.write("]");
-        writer.write("queryString = Aws.buildQueryString queryParams");
+        // Build query string by filtering and joining non-None values
+        writer.write("filteredParts = List.filterMap (x -> x) queryParts");
+        writer.write("queryString = if List.isEmpty filteredParts then \"\" else \"?\" ++ Text.join \"&\" filteredParts");
+    }
+    
+    /**
+     * Gets the appropriate toText function for a given shape type.
+     * 
+     * <p>Note: Timestamps are generated as Text in Unison (for HTTP serialization),
+     * so they don't need conversion.
+     */
+    private String getToTextFunction(Shape shape) {
+        // Check for Smithy 2.0 enums first
+        if (shape instanceof EnumShape) {
+            // Enums need to be converted using their toText function
+            String enumTypeName = UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return enumTypeName + ".toText";
+        }
+        // Check for Smithy 1.0 style enums (strings with @enum trait)
+        if (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
+            String enumTypeName = UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return enumTypeName + ".toText";
+        }
+        if (shape.isStringShape()) {
+            return "";  // No conversion needed for Text
+        } else if (shape.isIntegerShape()) {
+            return "Int.toText";
+        } else if (shape.isLongShape()) {
+            return "Int.toText";
+        } else if (shape.isBooleanShape()) {
+            return "Boolean.toText";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "Float.toText";
+        } else if (shape.isTimestampShape()) {
+            // Timestamps are generated as Text in Unison for HTTP serialization
+            return "";
+        } else {
+            // Default fallback - most query parameters are strings
+            return "";
+        }
     }
     
     /**
      * Generates request header building code.
+     * 
+     * <p>Converts all header values to Optional Text for homogeneous list types.
      */
-    private void generateRequestHeaders(List<MemberShape> httpHeaderMembers, UnisonWriter writer) {
+    private void generateRequestHeaders(List<MemberShape> httpHeaderMembers, String inputType, 
+                                        Model model, UnisonWriter writer) {
         writer.write("-- Build headers from @httpHeader members");
         
         if (httpHeaderMembers.isEmpty()) {
@@ -277,7 +348,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         }
         
         writer.write("baseHeaders = [(\"Content-Type\", \"application/xml\")]");
-        writer.write("customHeaders = [");
+        writer.write("-- Each header is converted to (Text, Optional Text) for homogeneous list");
+        writer.write("customHeaderParts : [(Text, Optional Text)]");
+        writer.write("customHeaderParts = [");
         writer.indent();
         
         for (int i = 0; i < httpHeaderMembers.size(); i++) {
@@ -289,13 +362,46 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 headerName = member.getMemberName();
             }
             
+            // Get the target shape to determine the correct toText function
+            Shape targetShape = model.expectShape(member.getTarget());
+            String toTextFunc = getToTextFunction(targetShape);
+            
             String comma = (i < httpHeaderMembers.size() - 1) ? "," : "";
-            writer.write("(\"$L\", input.$L)$L", headerName, memberName, comma);
+            
+            // Check if the member is required
+            boolean isRequired = member.isRequired();
+            
+            if (isRequired) {
+                // Required field - wrap in Some and convert to Text
+                if (toTextFunc.isEmpty()) {
+                    writer.write("(\"$L\", Some ($L.$L input))$L", headerName, inputType, memberName, comma);
+                } else {
+                    writer.write("(\"$L\", Some ($L ($L.$L input)))$L", headerName, toTextFunc, inputType, memberName, comma);
+                }
+            } else {
+                // Optional field - map to Text
+                if (toTextFunc.isEmpty()) {
+                    // Already Optional Text, just use it
+                    writer.write("(\"$L\", $L.$L input)$L", headerName, inputType, memberName, comma);
+                } else {
+                    // Convert using map
+                    writer.write("(\"$L\", Optional.map $L ($L.$L input))$L", headerName, toTextFunc, inputType, memberName, comma);
+                }
+            }
         }
         
         writer.dedent();
         writer.write("]");
-        writer.write("headers = baseHeaders ++ (List.filter (cases (_, v) -> not (Text.isEmpty v)) customHeaders)");
+        // Build headers by extracting Some values
+        // Use simple helper to convert (Text, Optional Text) to Optional (Text, Text)
+        writer.write("toHeader : (Text, Optional Text) -> Optional (Text, Text)");
+        writer.write("toHeader pair = match pair with");
+        writer.indent();
+        writer.write("(name, Some v) -> if Text.isEmpty v then None else Some (name, v)");
+        writer.write("(_, None) -> None");
+        writer.dedent();
+        writer.write("filteredHeaders = List.filterMap toHeader customHeaderParts");
+        writer.write("headers = baseHeaders ++ filteredHeaders");
     }
     
     /**
@@ -370,8 +476,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             // Extract response code if needed
             if (responseCodeMember.isPresent()) {
+                // Add 'Val' suffix to avoid name clash with accessor functions
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(
-                        responseCodeMember.get().getMemberName());
+                        responseCodeMember.get().getMemberName()) + "Val";
                 writer.write("$L = Http.Response.status response |> Http.Status.code", memberName);
             }
             
@@ -420,9 +527,10 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         
         writer.write("-- Extract response headers");
         for (MemberShape member : headerMembers) {
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            // Add 'Val' suffix to avoid name clash with accessor functions
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName()) + "Val";
             String headerName = ProtocolUtils.getHeaderName(member);
-            writer.write("$L = Http.Response.header \"$L\" response |> Optional.getOrElse \"\"", 
+            writer.write("$L = Optional.getOrElse \"\" (Http.Response.header \"$L\" response)", 
                     memberName, headerName);
         }
     }
@@ -432,7 +540,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
      */
     private void generatePayloadExtraction(MemberShape payloadMember, Model model, UnisonWriter writer) {
         Shape targetShape = model.expectShape(payloadMember.getTarget());
-        String memberName = UnisonSymbolProvider.toUnisonFunctionName(payloadMember.getMemberName());
+        // Add 'Val' suffix to avoid name clash with accessor functions
+        String memberName = UnisonSymbolProvider.toUnisonFunctionName(payloadMember.getMemberName()) + "Val";
         
         if (targetShape.isBlobShape()) {
             writer.write("$L = Http.Response.body response", memberName);
@@ -462,35 +571,38 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
         
         // Build a map of member name to value expression
+        // Use 'Val' suffix on local variables to avoid name clash with accessor functions
         Map<String, String> memberValues = new LinkedHashMap<>();
         
         // Add header members
         for (MemberShape member : headerMembers) {
             String memberName = member.getMemberName();
-            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName) + "Val";
             memberValues.put(memberName, varName);
         }
         
         // Add response code member
         if (responseCodeMember.isPresent()) {
             String memberName = responseCodeMember.get().getMemberName();
-            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName) + "Val";
             memberValues.put(memberName, varName);
         }
         
         // Add payload member
         if (payloadMember.isPresent()) {
             String memberName = payloadMember.get().getMemberName();
-            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName) + "Val";
             memberValues.put(memberName, varName);
         }
         
         // Add body members (from decoded body data)
+        // Use accessor function syntax: TypeName.field record
         if (!bodyMembers.isEmpty() && !payloadMember.isPresent()) {
             for (MemberShape member : bodyMembers) {
                 String memberName = member.getMemberName();
                 String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
-                memberValues.put(memberName, "bodyData." + varName);
+                // Use accessor function syntax to avoid name conflicts
+                memberValues.put(memberName, "(" + outputTypeName + "." + varName + " bodyData)");
             }
         }
         
