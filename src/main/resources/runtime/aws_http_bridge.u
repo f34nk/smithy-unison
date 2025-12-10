@@ -1,0 +1,145 @@
+-- AWS HTTP Bridge Module
+-- Bridges AWS client types to @unison/http library types
+--
+-- REQUIRES: @unison/http library
+--   lib.install @unison/http/releases/8.0.0
+--
+-- This module provides functions to:
+-- 1. Convert Http.Request to HttpRequest (library type)
+-- 2. Convert HttpResponse (library type) to Http.Response
+-- 3. Execute real HTTP requests using Aws.Http.execute
+--
+-- Load this module AFTER loading aws_http.u and installing @unison/http
+
+-- =============================================================================
+-- Method Conversion
+-- =============================================================================
+
+{{
+Convert HTTP method text to @unison/http Method type.
+
+Supported methods: GET, POST, PUT, DELETE, HEAD, PATCH, OPTIONS, CONNECT, TRACE.
+Unknown methods default to GET.
+}}
+Aws.Http.toMethod : Text -> Method
+Aws.Http.toMethod methodText =
+  match Text.toUppercase methodText with
+    "GET" -> Method.GET
+    "POST" -> Method.POST
+    "PUT" -> Method.PUT
+    "DELETE" -> Method.DELETE
+    "HEAD" -> Method.HEAD
+    "PATCH" -> Method.PATCH
+    "OPTIONS" -> Method.OPTIONS
+    "CONNECT" -> Method.CONNECT
+    "TRACE" -> Method.TRACE
+    _ -> Method.GET
+
+{{
+Convert @unison/http Method type to text.
+}}
+Aws.Http.fromMethod : Method -> Text
+Aws.Http.fromMethod method =
+  match method with
+    Method.GET -> "GET"
+    Method.POST -> "POST"
+    Method.PUT -> "PUT"
+    Method.DELETE -> "DELETE"
+    Method.HEAD -> "HEAD"
+    Method.PATCH -> "PATCH"
+    Method.OPTIONS -> "OPTIONS"
+    Method.CONNECT -> "CONNECT"
+    Method.TRACE -> "TRACE"
+
+-- =============================================================================
+-- Headers Conversion
+-- =============================================================================
+
+{{
+Convert our header list to @unison/http Headers type.
+}}
+Aws.Http.toHeaders : [(Text, Text)] -> Headers
+Aws.Http.toHeaders headerList =
+  Headers.fromList headerList
+
+{{
+Convert @unison/http Headers to our header list format.
+
+Note: Simplified implementation - returns empty list.
+Full implementation would iterate the Headers map.
+}}
+Aws.Http.fromHeaders : Headers -> [(Text, Text)]
+Aws.Http.fromHeaders headers =
+  []
+
+-- =============================================================================
+-- Body Conversion
+-- =============================================================================
+
+{{
+Convert our body (Bytes) to @unison/http Body type.
+}}
+Aws.Http.toBody : Bytes -> Body
+Aws.Http.toBody bytes =
+  Body.Body bytes
+
+{{
+Convert @unison/http Body to our body format (Bytes).
+}}
+Aws.Http.fromBody : Body -> Bytes
+Aws.Http.fromBody body =
+  Body.toBytes body
+
+-- =============================================================================
+-- Request/Response Conversion
+-- =============================================================================
+
+{{
+Convert our Http.Request to @unison/http HttpRequest.
+
+Requires Exception ability since URI.parse can fail on invalid URLs.
+}}
+Aws.Http.toHttpRequest : Http.Request -> '{Exception} HttpRequest
+Aws.Http.toHttpRequest req = do
+  uri = URI.parse (Http.Request.url req)
+  method = Aws.Http.toMethod (Http.Request.method req)
+  headers = Aws.Http.toHeaders (Http.Request.headers req)
+  body = Aws.Http.toBody (Http.Request.body req)
+  HttpRequest.HttpRequest method Version.HTTP_1_1 uri headers body
+
+{{
+Convert @unison/http HttpResponse to our Http.Response.
+}}
+Aws.Http.fromHttpResponse : HttpResponse -> Http.Response
+Aws.Http.fromHttpResponse httpResp =
+  statusCode = HttpResponse.Status.code (HttpResponse.status httpResp)
+  headers = Aws.Http.fromHeaders (HttpResponse.headers httpResp)
+  body = Aws.Http.fromBody (HttpResponse.body httpResp)
+  Http.Response.Response statusCode headers body
+
+-- =============================================================================
+-- HTTP Execution
+-- =============================================================================
+
+{{
+Execute an HTTP request using @unison/http library.
+
+This function bridges our AWS client types to the @unison/http library,
+executes the request, and converts the response back to our types.
+
+Requires:
+- @unison/http library installed
+- IO ability for network access
+- Exception ability for error handling
+- Threads ability for async operations
+
+Example:
+  request = Http.Request.get "https://s3.amazonaws.com/bucket" headers
+  response = !Aws.Http.execute request
+}}
+Aws.Http.execute : Http.Request -> '{IO, Exception, Threads} Http.Response
+Aws.Http.execute req = do
+  httpRequest = !(Aws.Http.toHttpRequest req)
+  httpResponse = Http.run do
+    Http.request httpRequest
+  Aws.Http.fromHttpResponse httpResponse
