@@ -259,6 +259,9 @@ public final class ClientModuleWriter {
                 generator.generate(writer);
                 writer.writeBlankLine();
             }
+            
+            // Generate XML parsers for structures (used by response parsing)
+            generateXmlParsers(structures, writer);
         }
         
         // Generate error types
@@ -348,6 +351,181 @@ public final class ClientModuleWriter {
         }
         
         writer.dedent();
+    }
+    
+    /**
+     * Generates XML parser functions for structure types.
+     * 
+     * <p>For each structure, generates a parseXxxFromXml function that
+     * extracts fields from XML text and constructs the record.
+     * 
+     * <p>Generated pattern:
+     * <pre>
+     * parseBucketFromXml : Text -> Bucket
+     * parseBucketFromXml xml =
+     *   Bucket.Bucket
+     *     (Aws.Xml.extractElementOpt "BucketArn" xml)
+     *     (Aws.Xml.extractElementOpt "BucketRegion" xml)
+     *     ...
+     * </pre>
+     */
+    private void generateXmlParsers(Set<StructureShape> structures, UnisonWriter writer) {
+        if (structures.isEmpty()) {
+            return;
+        }
+        
+        writer.writeComment("=== XML Parsers ===");
+        writer.writeBlankLine();
+        
+        for (StructureShape structure : structures) {
+            generateXmlParserForStructure(structure, writer);
+            writer.writeBlankLine();
+        }
+    }
+    
+    /**
+     * Generates an XML parser function for a single structure.
+     */
+    private void generateXmlParserForStructure(StructureShape structure, UnisonWriter writer) {
+        String typeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
+        String funcName = "parse" + typeName + "FromXml";
+        
+        // Write doc comment
+        writer.writeDocComment("Parse " + typeName + " from XML text.");
+        
+        // Write signature
+        writer.writeSignature(funcName, "Text -> " + typeName);
+        
+        // Write function body
+        writer.write("$L xml =", funcName);
+        writer.indent();
+        
+        // Write constructor call with field extractions
+        writer.write("$L.$L", typeName, typeName);
+        writer.indent();
+        
+        for (MemberShape member : structure.getAllMembers().values()) {
+            String fieldName = member.getMemberName();
+            // Get XML element name (capitalize first letter by convention)
+            String xmlElementName = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+            
+            Shape targetShape = model.expectShape(member.getTarget());
+            String extraction = generateFieldExtraction(member, targetShape, xmlElementName);
+            writer.write(extraction);
+        }
+        
+        writer.dedent();
+        writer.dedent();
+    }
+    
+    /**
+     * Generates field extraction code for a member.
+     */
+    private String generateFieldExtraction(MemberShape member, Shape targetShape, String xmlElementName) {
+        boolean isRequired = member.hasTrait(software.amazon.smithy.model.traits.RequiredTrait.class);
+        boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
+        boolean isOptional = !isRequired && !hasDefault;
+        
+        if (targetShape instanceof StructureShape) {
+            // Nested structure - use parser function
+            String nestedTypeName = UnisonSymbolProvider.toUnisonTypeName(targetShape.getId().getName());
+            String parserName = "parse" + nestedTypeName + "FromXml";
+            if (isOptional) {
+                return "(Aws.Xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml)";
+            } else {
+                // Required nested structure - parse and extract, bug if missing
+                return "(Optional.getOrElse (bug \"Required nested field '" + xmlElementName + "' not found\") (Aws.Xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml))";
+            }
+        } else if (targetShape instanceof ListShape) {
+            ListShape listShape = (ListShape) targetShape;
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            
+            if (memberTarget instanceof StructureShape) {
+                // List of structures
+                String itemTypeName = UnisonSymbolProvider.toUnisonTypeName(memberTarget.getId().getName());
+                String parserName = "parse" + itemTypeName + "FromXml";
+                // Get item element name from list member
+                String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
+                        + listShape.getMember().getMemberName().substring(1);
+                if (isOptional) {
+                    return "(Aws.Xml.parseOptionalWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
+                } else {
+                    return "(Aws.Xml.parseWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
+                }
+            } else if (memberTarget instanceof EnumShape || 
+                    memberTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
+                // List of enums - extract text and convert
+                String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
+                        + listShape.getMember().getMemberName().substring(1);
+                String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(memberTarget.getId().getName()) + "FromText";
+                if (isOptional) {
+                    return "(Some (List.filterMap " + enumFromText + " (Aws.Xml.extractAll \"" + itemElementName + "\" xml)))";
+                } else {
+                    return "(List.filterMap " + enumFromText + " (Aws.Xml.extractAll \"" + itemElementName + "\" xml))";
+                }
+            } else if (memberTarget.isStringShape()) {
+                // List of strings (plain, not enums)
+                String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
+                        + listShape.getMember().getMemberName().substring(1);
+                if (isOptional) {
+                    // Use Optional.some with list - if empty we still return Some []
+                    return "(Some (Aws.Xml.extractAll \"" + itemElementName + "\" xml))";
+                } else {
+                    return "(Aws.Xml.extractAll \"" + itemElementName + "\" xml)";
+                }
+            } else {
+                // Fallback for other list types
+                if (isOptional) {
+                    return "None -- list parsing: " + memberTarget.getType();
+                } else {
+                    return "[] -- list parsing: " + memberTarget.getType();
+                }
+            }
+        } else if (targetShape instanceof EnumShape || 
+                targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
+            // Enum - extract text and convert (check before isStringShape since EnumShape extends StringShape)
+            String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(targetShape.getId().getName()) + "FromText";
+            if (isOptional) {
+                return "(Optional.flatMap " + enumFromText + " (Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml))";
+            } else {
+                // Required enum - extract text and convert, crash if missing or invalid
+                return "(Optional.getOrElse (bug \"Required enum field '" + xmlElementName + "' not found or invalid\") (" + enumFromText + " (Aws.Xml.extractElement \"" + xmlElementName + "\" xml)))";
+            }
+        } else if (targetShape.isStringShape()) {
+            // Plain string (not enum)
+            if (isOptional) {
+                return "(Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml)";
+            } else {
+                return "(Aws.Xml.extractElement \"" + xmlElementName + "\" xml)";
+            }
+        } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
+            if (isOptional) {
+                return "(Aws.Xml.extractInt \"" + xmlElementName + "\" xml)";
+            } else {
+                return "(Optional.getOrElse +0 (Aws.Xml.extractInt \"" + xmlElementName + "\" xml))";
+            }
+        } else if (targetShape.isBooleanShape()) {
+            if (isOptional) {
+                return "(Aws.Xml.extractBool \"" + xmlElementName + "\" xml)";
+            } else {
+                return "(Optional.getOrElse false (Aws.Xml.extractBool \"" + xmlElementName + "\" xml))";
+            }
+        } else if (targetShape.isBlobShape()) {
+            // Blob fields in XML are typically base64 encoded text
+            // Convert to bytes using toUtf8 for now (proper base64 decode would need fromBase64)
+            if (isOptional) {
+                return "(Optional.map toUtf8 (Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml))";
+            } else {
+                return "(toUtf8 (Aws.Xml.extractElement \"" + xmlElementName + "\" xml))";
+            }
+        } else {
+            // Fallback
+            if (isOptional) {
+                return "None -- " + targetShape.getType();
+            } else {
+                return "(bug \"unsupported required field type: " + targetShape.getType() + "\")";
+            }
+        }
     }
     
     /**

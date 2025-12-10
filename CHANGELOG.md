@@ -4,6 +4,12 @@
 
 ### Added
 
+#### XML Response Parser Generation
+- Code generator now produces `parseXxxFromXml` functions for all structure types
+- Handles nested structures, lists of structures, enums, and primitive types
+- Runtime helpers in `aws_xml.u`: `parseListFromXml`, `parseNestedFromXml`, `parseWrappedListFromXml`
+- Replaced ~57 TODO comments with actual parsing code
+
 #### XML to Record Mapping
 - Structure list parsing: `parseList`, `parseChildList`, `parseWrappedList`
 - Nested structure parsing: `parseNested`, `parseOptionalWrappedList`

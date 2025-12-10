@@ -681,6 +681,69 @@ Aws.Xml.toXml : a -> Text
 Aws.Xml.toXml value = ""
 
 -- =============================================================================
+-- XML to Record Mapping (Text-based)
+-- =============================================================================
+--
+-- These functions help map XML elements to Unison record types using
+-- text-based extraction. Used by generated code for parsing response bodies.
+--
+
+{{
+Parse a list of structure elements from XML text.
+
+Extracts all blocks matching the tag name and applies the parser to each.
+
+Example:
+  buckets = Aws.Xml.parseListFromXml "Bucket" parseBucketFromXml xmlText
+}}
+Aws.Xml.parseListFromXml : Text -> (Text -> a) -> Text -> [a]
+Aws.Xml.parseListFromXml tagName parser xmlText =
+  blocks = Aws.Xml.extractAllBlocks tagName xmlText
+  List.map parser blocks
+
+{{
+Parse a wrapped list from XML text.
+
+Common S3 pattern: container element holds a list of item elements.
+
+Example:
+  buckets = Aws.Xml.parseWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
+}}
+Aws.Xml.parseWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> [a]
+Aws.Xml.parseWrappedListFromXml containerTag itemTag parser xmlText =
+  containerXml = Aws.Xml.extractBlock containerTag xmlText
+  if Text.isEmpty containerXml then []
+  else Aws.Xml.parseListFromXml itemTag parser containerXml
+
+{{
+Parse a nested structure from XML text.
+
+Returns Optional - None if the element doesn't exist.
+
+Example:
+  owner = Aws.Xml.parseNestedFromXml "Owner" parseOwnerFromXml xmlText
+}}
+Aws.Xml.parseNestedFromXml : Text -> (Text -> a) -> Text -> Optional a
+Aws.Xml.parseNestedFromXml tagName parser xmlText =
+  block = Aws.Xml.extractBlock tagName xmlText
+  if Text.isEmpty block then None
+  else Some (parser block)
+
+{{
+Parse an optional wrapped list from XML text.
+
+Returns None if container not found, Some empty list if container is empty.
+
+Example:
+  buckets = Aws.Xml.parseOptionalWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
+}}
+Aws.Xml.parseOptionalWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> Optional [a]
+Aws.Xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText =
+  containerXml = Aws.Xml.extractBlock containerTag xmlText
+  if Text.isEmpty containerXml then None
+  else Some (Aws.Xml.parseListFromXml itemTag parser containerXml)
+
+-- =============================================================================
 -- XML Decoding (Placeholder)
 -- =============================================================================
 
