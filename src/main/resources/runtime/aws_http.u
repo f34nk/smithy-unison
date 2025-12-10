@@ -10,43 +10,35 @@
 
 {{
 Check if an HTTP status code indicates success (2xx).
-
-  isSuccess 200 ==> true
-  isSuccess 404 ==> false
+Returns true for status codes 200-299.
 }}
 Aws.Http.isSuccess : Nat -> Boolean
 Aws.Http.isSuccess statusCode =
-  statusCode >= 200 && statusCode < 300
+  Nat.gteq statusCode 200 && Nat.lt statusCode 300
 
 {{
 Check if an HTTP status code indicates a client error (4xx).
-
-  isClientError 400 ==> true
-  isClientError 500 ==> false
+Returns true for status codes 400-499.
 }}
 Aws.Http.isClientError : Nat -> Boolean
 Aws.Http.isClientError statusCode =
-  statusCode >= 400 && statusCode < 500
+  Nat.gteq statusCode 400 && Nat.lt statusCode 500
 
 {{
 Check if an HTTP status code indicates a server error (5xx).
-
-  isServerError 500 ==> true
-  isServerError 400 ==> false
+Returns true for status codes 500-599.
 }}
 Aws.Http.isServerError : Nat -> Boolean
 Aws.Http.isServerError statusCode =
-  statusCode >= 500 && statusCode < 600
+  Nat.gteq statusCode 500 && Nat.lt statusCode 600
 
 {{
 Check if an HTTP status code indicates an error (4xx or 5xx).
-
-  isError 404 ==> true
-  isError 200 ==> false
+Returns true for status codes 400 and above.
 }}
 Aws.Http.isError : Nat -> Boolean
 Aws.Http.isError statusCode =
-  statusCode >= 400
+  Nat.gteq statusCode 400
 
 {{
 Check if an HTTP status code indicates the request should be retried.
@@ -74,8 +66,7 @@ Aws.Http.isRetryable statusCode =
 
 {{
 Get a header value from a list of headers (case-insensitive).
-
-  getHeader "Content-Type" headers ==> Some "application/xml"
+Returns None if header not found.
 }}
 Aws.Http.getHeader : Text -> [(Text, Text)] -> Optional Text
 Aws.Http.getHeader name headers =
@@ -86,14 +77,12 @@ Aws.Http.getHeader name headers =
       match remaining with
         [] -> None
         (k, v) +: rest ->
-          if Text.toLowercase k == lowerName then Some v
+          if Text.eq (Text.toLowercase k) lowerName then Some v
           else find rest
-  find headers
+    find headers
 
 {{
 Get a header value with a default if not found.
-
-  getHeaderOrDefault "X-Custom" "default" headers ==> "default"
 }}
 Aws.Http.getHeaderOrDefault : Text -> Text -> [(Text, Text)] -> Text
 Aws.Http.getHeaderOrDefault name defaultValue headers =
@@ -103,8 +92,6 @@ Aws.Http.getHeaderOrDefault name defaultValue headers =
 
 {{
 Check if a header exists (case-insensitive).
-
-  hasHeader "Content-Type" headers ==> true
 }}
 Aws.Http.hasHeader : Text -> [(Text, Text)] -> Boolean
 Aws.Http.hasHeader name headers =
@@ -130,8 +117,8 @@ Aws.Http.setHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
 Aws.Http.setHeader name value headers =
   let
     lowerName = Text.toLowercase name
-    filtered = List.filter (cases (k, _) -> Text.toLowercase k != lowerName) headers
-  (name, value) +: filtered
+    filtered = List.filter (cases (k, _) -> not (Text.eq (Text.toLowercase k) lowerName)) headers
+    (name, value) +: filtered
 
 {{
 Remove a header by name (case-insensitive).
@@ -140,9 +127,7 @@ Example: removeHeader "X-Custom" headers
 }}
 Aws.Http.removeHeader : Text -> [(Text, Text)] -> [(Text, Text)]
 Aws.Http.removeHeader name headers =
-  let
-    lowerName = Text.toLowercase name
-  List.filter (cases (k, _) -> Text.toLowercase k != lowerName) headers
+  List.filter (cases (k, _) -> not (Text.eq (Text.toLowercase k) (Text.toLowercase name))) headers
 
 {{
 Merge two header lists, with the second list taking precedence.
@@ -154,7 +139,7 @@ Aws.Http.mergeHeaders base override =
   let
     overrideNames = List.map (cases (k, _) -> Text.toLowercase k) override
     filtered = List.filter (cases (k, _) -> not (List.contains (Text.toLowercase k) overrideNames)) base
-  filtered ++ override
+    filtered ++ override
 
 -- =============================================================================
 -- Query String Helpers
@@ -162,10 +147,7 @@ Aws.Http.mergeHeaders base override =
 
 {{
 Build a query string from key-value pairs.
-Values are URL-encoded.
-
-  buildQueryString [("key", "value"), ("foo", "bar")]
-    ==> "key=value&foo=bar"
+Values are URL-encoded. Empty values are filtered out.
 }}
 Aws.Http.buildQueryString : [(Text, Text)] -> Text
 Aws.Http.buildQueryString params =
@@ -177,9 +159,6 @@ Aws.Http.buildQueryString params =
 {{
 Append a query string to a URL.
 If URL already has a query string, appends with &.
-
-  appendQueryString "https://example.com/path" "key=value"
-    ==> "https://example.com/path?key=value"
 }}
 Aws.Http.appendQueryString : Text -> Text -> Text
 Aws.Http.appendQueryString url queryString =
@@ -195,26 +174,26 @@ Encodes special characters as percent-encoded values.
 Aws.Http.urlEncode : Text -> Text
 Aws.Http.urlEncode text =
   text
-    |> Text.replace "%" "%25"
-    |> Text.replace " " "%20"
-    |> Text.replace "!" "%21"
-    |> Text.replace "#" "%23"
-    |> Text.replace "$" "%24"
-    |> Text.replace "&" "%26"
-    |> Text.replace "'" "%27"
-    |> Text.replace "(" "%28"
-    |> Text.replace ")" "%29"
-    |> Text.replace "*" "%2A"
-    |> Text.replace "+" "%2B"
-    |> Text.replace "," "%2C"
-    |> Text.replace "/" "%2F"
-    |> Text.replace ":" "%3A"
-    |> Text.replace ";" "%3B"
-    |> Text.replace "=" "%3D"
-    |> Text.replace "?" "%3F"
-    |> Text.replace "@" "%40"
-    |> Text.replace "[" "%5B"
-    |> Text.replace "]" "%5D"
+    |> Text.replaceAll "%" "%25"
+    |> Text.replaceAll " " "%20"
+    |> Text.replaceAll "!" "%21"
+    |> Text.replaceAll "#" "%23"
+    |> Text.replaceAll "$" "%24"
+    |> Text.replaceAll "&" "%26"
+    |> Text.replaceAll "'" "%27"
+    |> Text.replaceAll "(" "%28"
+    |> Text.replaceAll ")" "%29"
+    |> Text.replaceAll "*" "%2A"
+    |> Text.replaceAll "+" "%2B"
+    |> Text.replaceAll "," "%2C"
+    |> Text.replaceAll "/" "%2F"
+    |> Text.replaceAll ":" "%3A"
+    |> Text.replaceAll ";" "%3B"
+    |> Text.replaceAll "=" "%3D"
+    |> Text.replaceAll "?" "%3F"
+    |> Text.replaceAll "@" "%40"
+    |> Text.replaceAll "[" "%5B"
+    |> Text.replaceAll "]" "%5D"
 
 {{
 URL-decode a percent-encoded string.
@@ -222,48 +201,40 @@ URL-decode a percent-encoded string.
 Aws.Http.urlDecode : Text -> Text
 Aws.Http.urlDecode text =
   text
-    |> Text.replace "%5D" "]"
-    |> Text.replace "%5B" "["
-    |> Text.replace "%40" "@"
-    |> Text.replace "%3F" "?"
-    |> Text.replace "%3D" "="
-    |> Text.replace "%3B" ";"
-    |> Text.replace "%3A" ":"
-    |> Text.replace "%2F" "/"
-    |> Text.replace "%2C" ","
-    |> Text.replace "%2B" "+"
-    |> Text.replace "%2A" "*"
-    |> Text.replace "%29" ")"
-    |> Text.replace "%28" "("
-    |> Text.replace "%27" "'"
-    |> Text.replace "%26" "&"
-    |> Text.replace "%24" "$"
-    |> Text.replace "%23" "#"
-    |> Text.replace "%21" "!"
-    |> Text.replace "%20" " "
-    |> Text.replace "%25" "%"
+    |> Text.replaceAll "%5D" "]"
+    |> Text.replaceAll "%5B" "["
+    |> Text.replaceAll "%40" "@"
+    |> Text.replaceAll "%3F" "?"
+    |> Text.replaceAll "%3D" "="
+    |> Text.replaceAll "%3B" ";"
+    |> Text.replaceAll "%3A" ":"
+    |> Text.replaceAll "%2F" "/"
+    |> Text.replaceAll "%2C" ","
+    |> Text.replaceAll "%2B" "+"
+    |> Text.replaceAll "%2A" "*"
+    |> Text.replaceAll "%29" ")"
+    |> Text.replaceAll "%28" "("
+    |> Text.replaceAll "%27" "'"
+    |> Text.replaceAll "%26" "&"
+    |> Text.replaceAll "%24" "$"
+    |> Text.replaceAll "%23" "#"
+    |> Text.replaceAll "%21" "!"
+    |> Text.replaceAll "%20" " "
+    |> Text.replaceAll "%25" "%"
 
 -- =============================================================================
 -- URL Helpers
 -- =============================================================================
 
 {{
-Build a full URL from components.
-
-  buildUrl "https" "s3.amazonaws.com" "/bucket/key" "version=1"
-    ==> "https://s3.amazonaws.com/bucket/key?version=1"
+Build a full URL from scheme, host, path, and query string.
 }}
 Aws.Http.buildUrl : Text -> Text -> Text -> Text -> Text
 Aws.Http.buildUrl scheme host path queryString =
-  let
-    base = scheme ++ "://" ++ host ++ path
-  Aws.Http.appendQueryString base queryString
+  Aws.Http.appendQueryString (scheme ++ "://" ++ host ++ path) queryString
 
 {{
 Extract the host from a URL.
-
-  extractHost "https://s3.amazonaws.com/bucket/key"
-    ==> "s3.amazonaws.com"
 }}
 Aws.Http.extractHost : Text -> Text
 Aws.Http.extractHost url =
@@ -275,15 +246,12 @@ Aws.Http.extractHost url =
       else url
     -- Find end of host (first / or end of string)
     slashIdx = Text.indexOf "/" withoutScheme
-  match slashIdx with
-    Some idx -> Text.take idx withoutScheme
-    None -> withoutScheme
+    match slashIdx with
+      Some idx -> Text.take idx withoutScheme
+      None -> withoutScheme
 
 {{
-Extract the path from a URL.
-
-  extractPath "https://s3.amazonaws.com/bucket/key?version=1"
-    ==> "/bucket/key"
+Extract the path from a URL (without query string).
 }}
 Aws.Http.extractPath : Text -> Text
 Aws.Http.extractPath url =
@@ -295,15 +263,15 @@ Aws.Http.extractPath url =
       else url
     -- Find start of path
     slashIdx = Text.indexOf "/" withoutScheme
-  match slashIdx with
-    Some idx ->
-      let
-        pathAndQuery = Text.drop idx withoutScheme
-        queryIdx = Text.indexOf "?" pathAndQuery
-      match queryIdx with
-        Some qIdx -> Text.take qIdx pathAndQuery
-        None -> pathAndQuery
-    None -> "/"
+    match slashIdx with
+      Some idx ->
+        let
+          pathAndQuery = Text.drop idx withoutScheme
+          queryIdx = Text.indexOf "?" pathAndQuery
+          match queryIdx with
+            Some qIdx -> Text.take qIdx pathAndQuery
+            None -> pathAndQuery
+      None -> "/"
 
 -- =============================================================================
 -- Content Type Helpers
