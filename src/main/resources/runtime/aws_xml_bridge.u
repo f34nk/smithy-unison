@@ -1,0 +1,316 @@
+-- AWS XML Bridge Module
+-- Bridges AWS XML utilities to @unison/xml library
+--
+-- REQUIRES: @unison/xml library
+--   lib.install @unison/xml/releases/1.2.0
+--
+-- This module provides functions to:
+-- 1. Parse XML using Soup (cursor-based navigation)
+-- 2. Bridge between our text-based extraction and library types
+-- 3. Provide higher-level XML navigation helpers
+--
+-- Load this module AFTER loading aws_xml.u and installing @unison/xml
+
+-- =============================================================================
+-- XML Parsing
+-- =============================================================================
+
+{{
+Parse XML text to a Soup cursor for navigation.
+
+This wraps the @unison/xml library's Soup.parseXML function.
+}}
+Aws.Xml.parse : Text -> Soup
+Aws.Xml.parse = Soup.parseXML
+
+{{
+Parse XML bytes to a Soup cursor.
+
+Decodes UTF-8 bytes to text, then parses as XML.
+Requires Exception ability for UTF-8 decoding errors.
+}}
+Aws.Xml.decodeToSoup : Bytes ->{Exception} Soup
+Aws.Xml.decodeToSoup bytes =
+  text = fromUtf8 bytes
+  Soup.parseXML text
+
+{{
+Parse and process XML with error handling.
+
+Wraps Soup.withXML to provide safe XML processing that returns
+Either Text [a] - Left for errors, Right for results.
+
+The callback function can use Each and Throw abilities.
+}}
+Aws.Xml.withXml : Text -> (Soup ->{Each, Throw XMLError} a) -> Either Text [a]
+Aws.Xml.withXml = Soup.withXML
+
+-- =============================================================================
+-- Navigation Helpers
+-- =============================================================================
+
+{{
+Get the root element of parsed XML.
+}}
+Aws.Xml.root : Soup -> Soup
+Aws.Xml.root = Soup.root
+
+{{
+Find the first element with the given tag name.
+
+Requires Throw XMLError ability - throws if element not found.
+}}
+Aws.Xml.find : Text -> Soup ->{Throw XMLError} Soup
+Aws.Xml.find = Soup.findFirst
+
+{{
+Find an element, returning Optional instead of throwing.
+}}
+Aws.Xml.findOpt : Text -> Soup -> Optional Soup
+Aws.Xml.findOpt tagName soup =
+  Throw.toOptional do Soup.findFirst tagName soup
+
+{{
+Iterate over child elements (tags only, skips text nodes).
+
+Uses Each ability - returns results via effect system.
+}}
+Aws.Xml.children : Soup ->{Each, Throw XMLError} Soup
+Aws.Xml.children = Soup.childTags
+
+{{
+Filter elements by tag name.
+
+Uses Each ability to iterate over matching elements.
+}}
+Aws.Xml.named : Text -> Soup ->{Each, Throw XMLError} Soup
+Aws.Xml.named = Soup.named
+
+{{
+Iterate over all descendant elements.
+}}
+Aws.Xml.descendants : Soup ->{Each, Throw XMLError} Soup
+Aws.Xml.descendants = Soup.descendants
+
+-- =============================================================================
+-- Data Extraction (Soup-based)
+-- =============================================================================
+
+{{
+Get the tag name of the current element.
+}}
+Aws.Xml.tagName : Soup ->{Throw XMLError} Text
+Aws.Xml.tagName = Soup.tagName
+
+{{
+Get the text content of the current element.
+}}
+Aws.Xml.text : Soup ->{Throw XMLError} Text
+Aws.Xml.text = Soup.text
+
+{{
+Get all text contents of the current element.
+}}
+Aws.Xml.texts : Soup ->{Throw XMLError} [Text]
+Aws.Xml.texts = Soup.texts
+
+{{
+Get an attribute value from the current element.
+}}
+Aws.Xml.attr : Text -> Soup ->{Throw XMLError} Text
+Aws.Xml.attr = Soup.getAttribute
+
+{{
+Get an attribute value as Optional.
+}}
+Aws.Xml.attrOpt : Text -> Soup -> Optional Text
+Aws.Xml.attrOpt name soup =
+  Throw.toOptional do Soup.getAttribute name soup
+
+{{
+Check if the current element has an attribute.
+}}
+Aws.Xml.hasAttr : Text -> Soup ->{Throw XMLError} Boolean
+Aws.Xml.hasAttr = Soup.hasAttribute
+
+-- =============================================================================
+-- Convenience Extraction Functions
+-- =============================================================================
+
+{{
+Find an element by name and get its text content.
+
+Returns Optional - None if element not found.
+}}
+Aws.Xml.findText : Text -> Soup -> Optional Text
+Aws.Xml.findText tagName soup =
+  Throw.toOptional do
+    elem = Soup.findFirst tagName soup
+    Soup.text elem
+
+{{
+Find an element by name and get its text content as Int.
+
+Returns Optional - None if element not found or not a valid integer.
+}}
+Aws.Xml.findInt : Text -> Soup -> Optional Int
+Aws.Xml.findInt tagName soup =
+  match Aws.Xml.findText tagName soup with
+    None -> None
+    Some text -> Int.fromText text
+
+{{
+Find an element by name and get its text content as Nat.
+
+Returns Optional - None if element not found or not a valid natural number.
+}}
+Aws.Xml.findNat : Text -> Soup -> Optional Nat
+Aws.Xml.findNat tagName soup =
+  match Aws.Xml.findText tagName soup with
+    None -> None
+    Some text -> Nat.fromText text
+
+{{
+Find an element by name and get its text content as Boolean.
+
+AWS XML uses lowercase "true" and "false".
+Returns Optional - None if element not found or not a valid boolean.
+}}
+Aws.Xml.findBool : Text -> Soup -> Optional Boolean
+Aws.Xml.findBool tagName soup =
+  match Aws.Xml.findText tagName soup with
+    None -> None
+    Some "true" -> Some true
+    Some "false" -> Some false
+    _ -> None
+
+{{
+Find an element and get its attribute value.
+
+Returns Optional - None if element or attribute not found.
+}}
+Aws.Xml.findAttr : Text -> Text -> Soup -> Optional Text
+Aws.Xml.findAttr tagName attrName soup =
+  Throw.toOptional do
+    elem = Soup.findFirst tagName soup
+    Soup.getAttribute attrName elem
+
+-- =============================================================================
+-- List Extraction
+-- =============================================================================
+
+{{
+Extract all elements with a given name and get their text content.
+
+Returns a list of text values from matching elements.
+}}
+Aws.Xml.findAllText : Text -> Soup -> [Text]
+Aws.Xml.findAllText tagName soup =
+  match Soup.withXML (Soup.toXML (Soup.root soup)) do
+    s ->
+      child = Soup.named tagName (Soup.root s)
+      Soup.text child
+  with
+    Left _ -> []
+    Right texts -> texts
+
+{{
+Collect child elements as a list using a mapping function.
+
+Processes each child element using the provided function.
+}}
+Aws.Xml.mapChildren : (Soup ->{Throw XMLError} a) -> Soup -> [a]
+Aws.Xml.mapChildren f soup =
+  match Soup.withXML (Soup.toXML (Soup.root soup)) do
+    s ->
+      child = Soup.childTags (Soup.root s)
+      f child
+  with
+    Left _ -> []
+    Right results -> results
+
+-- =============================================================================
+-- Error Handling
+-- =============================================================================
+
+{{
+Convert XMLError to Exception Failure.
+
+Bridges @unison/xml error type to our Exception pattern.
+}}
+Aws.Xml.xmlErrorToFailure : XMLError -> Failure
+Aws.Xml.xmlErrorToFailure err =
+  Failure (typeLink XMLError) (XMLError.toText err) (Any err)
+
+{{
+Run an XML operation that may throw, converting to Exception.
+
+This allows bridging Throw XMLError to Exception ability.
+}}
+Aws.Xml.runXml : '{Throw XMLError} a ->{Exception} a
+Aws.Xml.runXml thunk =
+  match Throw.toEither thunk with
+    Left err -> Exception.raise (Aws.Xml.xmlErrorToFailure err)
+    Right result -> result
+
+{{
+Run an XML operation returning Optional instead of throwing.
+}}
+Aws.Xml.tryXml : '{Throw XMLError} a -> Optional a
+Aws.Xml.tryXml = Throw.toOptional
+
+-- =============================================================================
+-- XMLNode Helpers
+-- =============================================================================
+
+{{
+Get the current position as an XMLNode.
+}}
+Aws.Xml.node : Soup ->{Throw XMLError} XMLNode
+Aws.Xml.node = Soup.node
+
+{{
+Get all contents as XMLNode list.
+}}
+Aws.Xml.contents : Soup ->{Throw XMLError} [XMLNode]
+Aws.Xml.contents = Soup.contents
+
+{{
+Convert XMLNode back to XML text.
+}}
+Aws.Xml.nodeToText : XMLNode -> Text
+Aws.Xml.nodeToText = XMLNode.toXML
+
+{{
+Get children of an XMLNode.
+}}
+Aws.Xml.nodeChildren : XMLNode -> [XMLNode]
+Aws.Xml.nodeChildren = XMLNode.children
+
+{{
+Get attributes of an XMLNode as a Map.
+}}
+Aws.Xml.nodeAttrs : XMLNode -> Map Text Text
+Aws.Xml.nodeAttrs = XMLNode.attributes
+
+-- =============================================================================
+-- Building XML (using @unison/xml)
+-- =============================================================================
+
+{{
+Create an XML element node.
+}}
+Aws.Xml.xmlElement : Text -> Map Text Text -> [XMLNode] -> XMLNode
+Aws.Xml.xmlElement = XMLNode.XMLElement
+
+{{
+Create an XML text node.
+}}
+Aws.Xml.xmlText : Text -> XMLNode
+Aws.Xml.xmlText = XMLNode.XMLText
+
+{{
+Create an XML element with just a name (no attributes or children).
+}}
+Aws.Xml.xmlTag : Text -> XMLNode
+Aws.Xml.xmlTag = XMLNode.elementNamed
