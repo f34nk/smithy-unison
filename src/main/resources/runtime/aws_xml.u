@@ -651,3 +651,31 @@ Aws.Xml.prettyPrint xml =
                         newLevel = if isSelfClosing then level else level + 1
                         go newLevel rest (acc ++ before ++ "\n" ++ indent level ++ tag)
     go 0 (Aws.Xml.stripDeclaration xml) "" |> Text.trim
+
+-- =============================================================================
+-- XML Encoding (Placeholder)
+-- =============================================================================
+
+{{
+Encode a value to XML bytes.
+
+This is a placeholder function that needs to be implemented
+for each specific type that needs XML serialization.
+Currently returns empty bytes.
+
+TODO: Implement type-specific XML serialization for AWS request bodies.
+}}
+Aws.Xml.encode : a -> Bytes
+Aws.Xml.encode value = Bytes.empty
+
+{{
+Encode a value to XML text.
+
+This is a placeholder function that needs to be implemented
+for each specific type that needs XML serialization.
+Currently returns empty text.
+
+TODO: Implement type-specific XML serialization for AWS request bodies.
+}}
+Aws.Xml.toXml : a -> Text
+Aws.Xml.toXml value = ""

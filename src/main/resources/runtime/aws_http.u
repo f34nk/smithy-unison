@@ -362,3 +362,99 @@ Extract the AWS extended request ID from response headers.
 Aws.Http.getExtendedRequestId : [(Text, Text)] -> Optional Text
 Aws.Http.getExtendedRequestId headers =
   Aws.Http.getHeader Aws.Http.extendedRequestIdHeader headers
+
+-- =============================================================================
+-- HTTP Response Type
+-- =============================================================================
+
+{{
+HTTP response containing status code, headers, and body.
+}}
+type Http.Response = {
+  statusCode : Nat,
+  headers : [(Text, Text)],
+  body : Bytes
+}
+
+-- =============================================================================
+-- HTTP Request Functions (Placeholders)
+-- =============================================================================
+
+{{
+HTTP Request type for building requests.
+}}
+type Http.Request = {
+  method : Text,
+  url : Text,
+  headers : [(Text, Text)],
+  body : Bytes
+}
+
+{{
+Create a GET request.
+}}
+Http.Request.get : Text -> [(Text, Text)] -> Http.Request
+Http.Request.get url headers =
+  Http.Request.Request "GET" url headers Bytes.empty
+
+{{
+Create a POST request.
+}}
+Http.Request.post : Text -> [(Text, Text)] -> Bytes -> Http.Request
+Http.Request.post url headers body =
+  Http.Request.Request "POST" url headers body
+
+{{
+Create a PUT request.
+}}
+Http.Request.put : Text -> [(Text, Text)] -> Bytes -> Http.Request
+Http.Request.put url headers body =
+  Http.Request.Request "PUT" url headers body
+
+{{
+Create a DELETE request.
+}}
+Http.Request.delete : Text -> [(Text, Text)] -> Http.Request
+Http.Request.delete url headers =
+  Http.Request.Request "DELETE" url headers Bytes.empty
+
+{{
+Create a HEAD request.
+}}
+Http.Request.head : Text -> [(Text, Text)] -> Http.Request
+Http.Request.head url headers =
+  Http.Request.Request "HEAD" url headers Bytes.empty
+
+{{
+Execute an HTTP request.
+
+This is a placeholder implementation that returns an empty response.
+TODO: Implement actual HTTP request using Unison's HTTP library.
+}}
+Http.request : Http.Request -> '{IO, Exception} Http.Response
+Http.request req _ =
+  -- Placeholder: Return empty response
+  -- TODO: Use Unison's @unison/http library to make actual requests
+  Http.Response.Response 200 [] Bytes.empty
+
+{{
+Get a response header value by name.
+}}
+Http.Response.getHeader : Text -> Http.Response -> Optional Text
+Http.Response.getHeader name resp =
+  Aws.Http.getHeader name (Http.Response.headers resp)
+
+{{
+Handle HTTP response errors.
+
+Checks the status code and raises an exception if it indicates an error.
+Returns Unit if the response is successful.
+}}
+handleHttpResponse : Http.Response -> ()
+handleHttpResponse resp =
+  let
+    status = Http.Response.statusCode resp
+    if Aws.Http.isError status then
+      bug ("HTTP error: " ++ Nat.toText status)
+    else
+      ()

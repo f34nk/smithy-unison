@@ -5,6 +5,7 @@ import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.EnumShape;
+import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
@@ -157,11 +158,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         
         // Write function definition with do block for delayed computation
         // The '{IO, Exception} return type requires a do block
+        // In Unison, do blocks allow bindings directly without 'let'
         writer.write("$L config input = do", opName);
-        writer.indent();
-        
-        // Build let bindings
-        writer.write("let");
         writer.indent();
         
         // HTTP method
@@ -180,20 +178,24 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         generateRequestHeaders(httpHeaderInputMembers, inputType, model, writer);
         
         // Build request body
-        generateRequestBodyBinding(operation, model, bodyMembers, payloadMember, writer);
+        generateRequestBodyBinding(operation, model, bodyMembers, payloadMember, inputType, writer);
         
-        // Sign request (placeholder)
-        writer.write("signedHeaders = Aws.signRequest config method fullUrl headers body");
+        // Sign request 
+        // TODO: Implement proper SigV4 signing - for now just use headers as-is
+        writer.write("signedHeaders = headers");
         
-        // Make HTTP request
-        writer.write("response = Http.request (Http.Request.$L fullUrl signedHeaders body)", method.toLowerCase());
+        // Make HTTP request - force the delayed computation with !
+        // Some methods don't take a body parameter
+        String methodLower = method.toLowerCase();
+        if (methodLower.equals("get") || methodLower.equals("delete") || methodLower.equals("head")) {
+            writer.write("response = !(Http.request (Http.Request.$L fullUrl signedHeaders))", methodLower);
+        } else {
+            writer.write("response = !(Http.request (Http.Request.$L fullUrl signedHeaders body))", methodLower);
+        }
         
-        writer.dedent();  // end let bindings
-        
-        // Handle response
-        writer.writeBlankLine();
+        // Handle response - still in scope since we're in the do block
         writer.write("-- Check for errors and parse response");
-        writer.write("handleHttpResponse response");
+        writer.write("_ = handleHttpResponse response");
         generateResponseParsing(operation, model, writer);
         
         writer.dedent();  // end function
@@ -208,10 +210,32 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         if (useS3Url) {
             // S3-specific URL building with bucket routing
             // Note: Unison uses accessor functions for record fields: Config.endpoint config
-            // For S3 operations with path parameters, bucket and key are required (@httpLabel)
+            // Check which label members exist (bucket is required, key is optional for some operations)
+            boolean hasBucket = httpLabelMembers.stream()
+                    .anyMatch(m -> m.getMemberName().equalsIgnoreCase("bucket"));
+            boolean hasKey = httpLabelMembers.stream()
+                    .anyMatch(m -> m.getMemberName().equalsIgnoreCase("key"));
+            
             writer.write("-- S3-specific URL building with bucket routing");
-            writer.write("bucket = $L.bucket input", inputType);
-            writer.write("key = $L.key input", inputType);
+            if (hasBucket) {
+                writer.write("bucket = $L.bucket input", inputType);
+            } else {
+                writer.write("bucket = \"\"");
+            }
+            if (hasKey) {
+                // Check if key is optional in the input
+                MemberShape keyMember = httpLabelMembers.stream()
+                        .filter(m -> m.getMemberName().equalsIgnoreCase("key"))
+                        .findFirst().orElse(null);
+                if (keyMember != null && !keyMember.isRequired()) {
+                    // Optional key - use getOrElse
+                    writer.write("key = Optional.getOrElse \"\" ($L.key input)", inputType);
+                } else {
+                    writer.write("key = $L.key input", inputType);
+                }
+            } else {
+                writer.write("key = \"\"");
+            }
             writer.write("endpoint = Config.endpoint config");
             writer.write("usePathStyle = Config.usePathStyle config");
             writer.write("url = Aws.S3.buildUrl endpoint bucket key usePathStyle");
@@ -305,14 +329,15 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     private String getToTextFunction(Shape shape) {
         // Check for Smithy 2.0 enums first
         if (shape instanceof EnumShape) {
-            // Enums need to be converted using their toText function
-            String enumTypeName = UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
-            return enumTypeName + ".toText";
+            // Enums use a function named like: requestPayerToText (camelCase + ToText)
+            String enumFuncName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName());
+            return enumFuncName + "ToText";
         }
         // Check for Smithy 1.0 style enums (strings with @enum trait)
         if (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
-            String enumTypeName = UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
-            return enumTypeName + ".toText";
+            // Enums use a function named like: requestPayerToText (camelCase + ToText)
+            String enumFuncName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName());
+            return enumFuncName + "ToText";
         }
         if (shape.isStringShape()) {
             return "";  // No conversion needed for Text
@@ -364,28 +389,59 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             // Get the target shape to determine the correct toText function
             Shape targetShape = model.expectShape(member.getTarget());
-            String toTextFunc = getToTextFunction(targetShape);
             
             String comma = (i < httpHeaderMembers.size() - 1) ? "," : "";
             
             // Check if the member is required
             boolean isRequired = member.isRequired();
             
-            if (isRequired) {
-                // Required field - wrap in Some and convert to Text
-                if (toTextFunc.isEmpty()) {
-                    writer.write("(\"$L\", Some ($L.$L input))$L", headerName, inputType, memberName, comma);
+            // Check if this is a list type - needs special handling
+            if (targetShape.isListShape()) {
+                ListShape listShape = targetShape.asListShape().get();
+                Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+                String elementToText = getToTextFunction(elementShape);
+                
+                // Lists are serialized as comma-separated values
+                // Text.join "," (List.map ElementType.toText list)
+                if (isRequired) {
+                    if (elementToText.isEmpty()) {
+                        // Elements are already Text
+                        writer.write("(\"$L\", Some (Text.join \",\" ($L.$L input)))$L", 
+                                headerName, inputType, memberName, comma);
+                    } else {
+                        writer.write("(\"$L\", Some (Text.join \",\" (List.map $L ($L.$L input))))$L", 
+                                headerName, elementToText, inputType, memberName, comma);
+                    }
                 } else {
-                    writer.write("(\"$L\", Some ($L ($L.$L input)))$L", headerName, toTextFunc, inputType, memberName, comma);
+                    // Optional list
+                    if (elementToText.isEmpty()) {
+                        writer.write("(\"$L\", Optional.map (lst -> Text.join \",\" lst) ($L.$L input))$L", 
+                                headerName, inputType, memberName, comma);
+                    } else {
+                        writer.write("(\"$L\", Optional.map (lst -> Text.join \",\" (List.map $L lst)) ($L.$L input))$L", 
+                                headerName, elementToText, inputType, memberName, comma);
+                    }
                 }
             } else {
-                // Optional field - map to Text
-                if (toTextFunc.isEmpty()) {
-                    // Already Optional Text, just use it
-                    writer.write("(\"$L\", $L.$L input)$L", headerName, inputType, memberName, comma);
+                // Non-list types - original logic
+                String toTextFunc = getToTextFunction(targetShape);
+                
+                if (isRequired) {
+                    // Required field - wrap in Some and convert to Text
+                    if (toTextFunc.isEmpty()) {
+                        writer.write("(\"$L\", Some ($L.$L input))$L", headerName, inputType, memberName, comma);
+                    } else {
+                        writer.write("(\"$L\", Some ($L ($L.$L input)))$L", headerName, toTextFunc, inputType, memberName, comma);
+                    }
                 } else {
-                    // Convert using map
-                    writer.write("(\"$L\", Optional.map $L ($L.$L input))$L", headerName, toTextFunc, inputType, memberName, comma);
+                    // Optional field - map to Text
+                    if (toTextFunc.isEmpty()) {
+                        // Already Optional Text, just use it
+                        writer.write("(\"$L\", $L.$L input)$L", headerName, inputType, memberName, comma);
+                    } else {
+                        // Convert using map
+                        writer.write("(\"$L\", Optional.map $L ($L.$L input))$L", headerName, toTextFunc, inputType, memberName, comma);
+                    }
                 }
             }
         }
@@ -410,6 +466,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     private void generateRequestBodyBinding(OperationShape operation, Model model,
                                             List<MemberShape> bodyMembers,
                                             Optional<MemberShape> payloadMember,
+                                            String inputType,
                                             UnisonWriter writer) {
         if (payloadMember.isPresent()) {
             // @httpPayload present - use the payload member directly
@@ -419,12 +476,12 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             writer.write("-- @httpPayload: use payload member directly");
             if (targetShape.isBlobShape()) {
-                writer.write("body = input.$L", memberName);
+                writer.write("body = $L.$L input", inputType, memberName);
             } else if (targetShape.isStringShape()) {
-                writer.write("body = Text.toUtf8 input.$L", memberName);
+                writer.write("body = Text.toUtf8 ($L.$L input)", inputType, memberName);
             } else {
                 // Structure payload - serialize as XML
-                writer.write("body = Aws.Xml.encode input.$L", memberName);
+                writer.write("body = Aws.Xml.encode ($L.$L input)", inputType, memberName);
             }
         } else if (bodyMembers.isEmpty()) {
             // No body members - empty body
@@ -468,8 +525,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         
         if (hasHeadersOrStatusCode) {
             // Need to build response from multiple sources
-            writer.write("let");
-            writer.indent();
+            // In do blocks, bindings are scoped to the rest of the block (no need for 'let')
             
             // Extract response headers
             generateResponseHeaderExtraction(headerMembers, writer);
@@ -479,19 +535,17 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 // Add 'Val' suffix to avoid name clash with accessor functions
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(
                         responseCodeMember.get().getMemberName()) + "Val";
-                writer.write("$L = Http.Response.status response |> Http.Status.code", memberName);
+                writer.write("$L = Response.statusCode response", memberName);
             }
             
             // Extract body content
             if (payloadMember.isPresent()) {
                 generatePayloadExtraction(payloadMember.get(), model, writer);
             } else if (!bodyMembers.isEmpty()) {
-                writer.write("bodyData = Aws.Xml.decode (Http.Response.body response)");
+                writer.write("bodyData = Aws.Xml.decode (Response.body response)");
             }
             
-            writer.dedent();
-            
-            // Build the result record
+            // Build the result record (final expression of the do block)
             generateResultRecordConstruction(output, payloadMember, headerMembers, 
                     responseCodeMember, bodyMembers, writer);
         } else if (payloadMember.isPresent()) {
@@ -500,11 +554,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
             
             if (targetShape.isBlobShape()) {
-                writer.write("$L.$L (Http.Response.body response)", outputTypeName, outputTypeName);
+                writer.write("$L.$L (Response.body response)", outputTypeName, outputTypeName);
             } else if (targetShape.isStringShape()) {
-                writer.write("$L.$L (Bytes.toUtf8 (Http.Response.body response))", outputTypeName, outputTypeName);
+                writer.write("$L.$L (Bytes.toUtf8 (Response.body response))", outputTypeName, outputTypeName);
             } else {
-                writer.write("Aws.Xml.decode (Http.Response.body response)");
+                writer.write("Aws.Xml.decode (Response.body response)");
             }
         } else if (bodyMembers.isEmpty()) {
             // No body content expected - return unit or empty record
@@ -513,7 +567,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             writer.write("-- No body content expected");
             writer.write("$L.default", outputTypeName);
         } else {
-            writer.write("Aws.Xml.decode (Http.Response.body response)");
+            writer.write("Aws.Xml.decode (Response.body response)");
         }
     }
     
@@ -530,8 +584,16 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             // Add 'Val' suffix to avoid name clash with accessor functions
             String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName()) + "Val";
             String headerName = ProtocolUtils.getHeaderName(member);
-            writer.write("$L = Optional.getOrElse \"\" (Http.Response.header \"$L\" response)", 
-                    memberName, headerName);
+            
+            // Check if the field is required - required fields get Text, optional get Optional Text
+            if (member.isRequired()) {
+                writer.write("$L = Optional.getOrElse \"\" (Response.getHeader \"$L\" response)", 
+                        memberName, headerName);
+            } else {
+                // Optional field - just return the Optional Text from getHeader
+                writer.write("$L = Response.getHeader \"$L\" response", 
+                        memberName, headerName);
+            }
         }
     }
     
@@ -544,11 +606,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         String memberName = UnisonSymbolProvider.toUnisonFunctionName(payloadMember.getMemberName()) + "Val";
         
         if (targetShape.isBlobShape()) {
-            writer.write("$L = Http.Response.body response", memberName);
+            writer.write("$L = Response.body response", memberName);
         } else if (targetShape.isStringShape()) {
-            writer.write("$L = Bytes.toUtf8 (Http.Response.body response)", memberName);
+            writer.write("$L = Bytes.toUtf8 (Response.body response)", memberName);
         } else {
-            writer.write("$L = Aws.Xml.decode (Http.Response.body response)", memberName);
+            writer.write("$L = Aws.Xml.decode (Response.body response)", memberName);
         }
     }
     
@@ -686,11 +748,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             writer.writeComment("@httpPayload - extract payload member");
             if (targetShape.isBlobShape()) {
-                writer.write("{ $L = Http.Response.body response }", memberName);
+                writer.write("{ $L = Response.body response }", memberName);
             } else if (targetShape.isStringShape()) {
-                writer.write("{ $L = Bytes.toUtf8 (Http.Response.body response) }", memberName);
+                writer.write("{ $L = Bytes.toUtf8 (Response.body response) }", memberName);
             } else {
-                writer.write("Aws.Xml.decode (Http.Response.body response)");
+                writer.write("Aws.Xml.decode (Response.body response)");
             }
         } else {
             List<MemberShape> bodyMembers = ProtocolUtils.getBodyMembers(outputShape.get());
@@ -700,7 +762,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 writer.write("{}");
             } else {
                 writer.writeComment("Decode XML response body");
-                writer.write("Aws.Xml.decode (Http.Response.body response)");
+                writer.write("Aws.Xml.decode (Response.body response)");
             }
         }
     }
@@ -716,10 +778,10 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         String errorTypeName = UnisonSymbolProvider.toUnisonTypeName(serviceName) + "ServiceError";
         
         writer.writeDocComment("Parse REST-XML error response");
-        writer.write("parseError : Http.Response -> $L", errorTypeName);
+        writer.write("parseError : Response -> $L", errorTypeName);
         writer.write("parseError response =");
         writer.indent();
-        writer.write("errorBody = Bytes.toUtf8 (Http.Response.body response)");
+        writer.write("errorBody = Bytes.toUtf8 (Response.body response)");
         writer.write("-- Parse XML error: <Error><Code>...</Code><Message>...</Message></Error>");
         writer.write("code = Aws.Xml.extractElement \"Code\" errorBody");
         writer.write("message = Aws.Xml.extractElement \"Message\" errorBody");
