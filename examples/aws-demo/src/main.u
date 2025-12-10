@@ -1,5 +1,12 @@
 -- S3 Demo Application
 -- Tests the generated S3 client against Moto mock server
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests (not placeholders), install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
 
 -- =============================================================================
 -- Configuration
@@ -12,38 +19,90 @@ defaultConfig =
   creds = Credentials.Credentials "dummy" "dummy" None
   Config.Config "http://moto:5050" "us-east-1" creds true
 
+-- Test bucket name - created by terraform provisioner in docker-compose
+testBucket : Text
+testBucket = "us-east-1-nonprod-configs"
+
+-- Test object key
+testObjectKey : Text
+testObjectKey = "configs/unison-test.txt"
+
+-- Test object content
+testObjectContent : Text
+testObjectContent = "Hello from Unison S3 Client!"
+
 -- =============================================================================
 -- Main Demo
 -- =============================================================================
 
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
-  printLine "=== Running S3 Client Demo ==="
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════╗"
+  printLine "║      S3 Client Demo (Moto Backend)       ║"
+  printLine "╚══════════════════════════════════════════╝"
   printLine ""
   
   config = defaultConfig
+  printLine ("Endpoint: " ++ Config.endpoint config)
+  printLine ("Region: " ++ Config.region config)
+  printLine ("Bucket: " ++ testBucket)
+  printLine ""
   
   -- Demo 1: List Buckets
-  printLine "1. Listing buckets..."
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: List Buckets"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   !(listBucketsDemo config)
   
   -- Demo 2: Put Object
   printLine ""
-  printLine "2. Putting object..."
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Put Object"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   !(putObjectDemo config)
   
-  -- Demo 3: List Objects
+  -- Demo 3: List Objects (should include our new file)
   printLine ""
-  printLine "3. Listing objects..."
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: List Objects"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   !(listObjectsV2Demo config)
   
   -- Demo 4: Get Object
   printLine ""
-  printLine "4. Getting object..."
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 4: Get Object"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   !(getObjectDemo config)
   
+  -- Demo 5: Delete Object (cleanup)
   printLine ""
-  printLine "=== S3 Client Demo Complete ==="
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 5: Delete Object (cleanup)"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(deleteObjectDemo config)
+  
+  -- Demo 6: Verify Deletion
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 6: Verify Deletion"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(verifyDeletionDemo config)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════╗"
+  printLine "║         S3 Demo Complete!                ║"
+  printLine "╚══════════════════════════════════════════╝"
 
 -- =============================================================================
 -- Demo Functions
@@ -51,87 +110,159 @@ main = do
 
 {{
 List all buckets in the account.
-The terraform provisioner creates 'us1-nonprod-configs' bucket.
+The terraform provisioner creates 'us-east-1-nonprod-configs' bucket.
 }}
-listBucketsDemo : Config -> '{IO, Exception} ()
+listBucketsDemo : Config -> '{IO, Exception, Threads} ()
 listBucketsDemo config = do
+  printLine "  → Creating ListBucketsRequest..."
+  
   -- Create request with all optional fields as None
   request = ListBucketsRequest.ListBucketsRequest None None None None
   
   -- Call the S3 client
+  printLine "  → Calling listBuckets..."
   result = !(listBuckets config request)
   
   -- Extract and print buckets
-  printLine "   SUCCESS: ListBuckets returned"
+  printLine "  ✓ SUCCESS: ListBuckets returned"
   match ListBucketsOutput.buckets result with
     Some buckets -> 
-      printLine ("   Found " ++ Nat.toText (List.size buckets) ++ " bucket(s):")
-      List.foreach (bucket -> printLine ("   - " ++ Optional.getOrElse "unknown" (Bucket.name bucket))) buckets
-    None -> printLine "   No buckets found"
+      count = List.size buckets
+      printLine ("  → Found " ++ Nat.toText count ++ " bucket(s):")
+      List.foreach (bucket -> printLine ("      • " ++ Optional.getOrElse "<unnamed>" (Bucket.name bucket))) buckets
+    None -> 
+      printLine "  → No buckets found (response was empty)"
 
 {{
 Upload a test object to the configs bucket.
 }}
-putObjectDemo : Config -> '{IO, Exception} ()
+putObjectDemo : Config -> '{IO, Exception, Threads} ()
 putObjectDemo config = do
-  body = Text.toUtf8 "Hello from Unison S3 Client!"
-  -- PutObjectRequest: 41 fields total
-  -- aCL(1) body(2) bucket(3) bucketKeyEnabled(4) cacheControl(5) checksumAlgorithm(6)
-  -- checksumCRC32(7) checksumCRC32C(8) checksumCRC64NVME(9) checksumSHA1(10) checksumSHA256(11)
-  -- contentDisposition(12) contentEncoding(13) contentLanguage(14) contentLength(15) contentMD5(16)
-  -- contentType(17) expectedBucketOwner(18) expires(19) grantFullControl(20) grantRead(21)
-  -- grantReadACP(22) grantWriteACP(23) ifMatch(24) ifNoneMatch(25) key(26) metadata(27)
-  -- objectLockLegalHoldStatus(28) objectLockMode(29) objectLockRetainUntilDate(30) requestPayer(31)
-  -- serverSideEncryption(32) sSECustomerAlgorithm(33) sSECustomerKey(34) sSECustomerKeyMD5(35)
-  -- sSEKMSEncryptionContext(36) sSEKMSKeyId(37) storageClass(38) tagging(39) websiteRedirectLocation(40)
-  -- writeOffsetBytes(41)
-  request = PutObjectRequest.PutObjectRequest None body "us1-nonprod-configs" None None None None None None None None None None None None None (Some "text/plain") None None None None None None None None "configs/unison-test.txt" None None None None None None None None None None None None None None None
+  printLine ("  → Creating PutObjectRequest...")
+  printLine ("    Bucket: " ++ testBucket)
+  printLine ("    Key: " ++ testObjectKey)
+  printLine ("    Content: \"" ++ testObjectContent ++ "\"")
+  
+  body = Text.toUtf8 testObjectContent
+  
+  -- PutObjectRequest with minimal required fields (41 fields)
+  -- Field order: aCL body bucket bucketKeyEnabled cacheControl checksumAlgorithm ...
+  -- Set ACL to public-read so we can read the object back
+  request = PutObjectRequest.PutObjectRequest (Some ObjectCannedACL'public_read) body testBucket None None None None None None None None None None None None None (Some "text/plain") None None None None None None None None testObjectKey None None None None None None None None None None None None None None None
   
   -- Call the S3 client
+  printLine "  → Calling putObject..."
   result = !(putObject config request)
   
-  printLine "   SUCCESS: PutObject returned"
-  printLine "   - Bucket: us1-nonprod-configs"
-  printLine "   - Key: configs/unison-test.txt"
+  printLine "  ✓ SUCCESS: PutObject completed"
+  -- Print ETag if available
+  match PutObjectOutput.eTag result with
+    Some etag -> printLine ("    ETag: " ++ etag)
+    None -> ()
 
 {{
 List objects in the configs prefix.
 }}
-listObjectsV2Demo : Config -> '{IO, Exception} ()
+listObjectsV2Demo : Config -> '{IO, Exception, Threads} ()
 listObjectsV2Demo config = do
-  -- ListObjectsV2Request fields: bucket, continuationToken, delimiter, encodingType,
-  -- expectedBucketOwner, fetchOwner, maxKeys, optionalObjectAttributes, prefix,
-  -- requestPayer, startAfter
-  request = ListObjectsV2Request.ListObjectsV2Request "us1-nonprod-configs" None None None None None (Some +100) None (Some "configs/") None None
+  printLine "  → Creating ListObjectsV2Request..."
+  printLine ("    Bucket: " ++ testBucket)
+  printLine ("    Prefix: configs/")
+  
+  -- ListObjectsV2Request (11 fields)
+  request = ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
   
   -- Call the S3 client
+  printLine "  → Calling listObjectsV2..."
   result = !(listObjectsV2 config request)
   
-  printLine "   SUCCESS: ListObjectsV2 returned"
+  printLine "  ✓ SUCCESS: ListObjectsV2 returned"
   match ListObjectsV2Output.contents result with
     Some objects ->
-      printLine ("   Found " ++ Nat.toText (List.size objects) ++ " object(s):")
-      List.foreach (obj -> printLine ("   - " ++ Optional.getOrElse "unknown" (Object.key obj))) objects
-    None -> printLine "   No objects found"
+      count = List.size objects
+      printLine ("  → Found " ++ Nat.toText count ++ " object(s):")
+      List.foreach (obj -> printLine ("      • " ++ Optional.getOrElse "<unnamed>" (Object.key obj) ++ " (" ++ Int.toText (Optional.getOrElse +0 (Object.size obj)) ++ " bytes)")) objects
+    None -> 
+      printLine "  → No objects found"
 
 {{
 Get the test object we uploaded.
 }}
-getObjectDemo : Config -> '{IO, Exception} ()
+getObjectDemo : Config -> '{IO, Exception, Threads} ()
 getObjectDemo config = do
-  -- GetObjectRequest fields: bucket, checksumMode, expectedBucketOwner, ifMatch,
-  -- ifModifiedSince, ifNoneMatch, ifUnmodifiedSince, key, partNumber, range,
-  -- requestPayer, responseCacheControl, responseContentDisposition, responseContentEncoding,
-  -- responseContentLanguage, responseContentType, responseExpires, sSECustomerAlgorithm,
-  -- sSECustomerKey, sSECustomerKeyMD5, versionId
-  request = GetObjectRequest.GetObjectRequest "us1-nonprod-configs" None None None None None None "configs/unison-test.txt" None None None None None None None None None None None None None
+  printLine "  → Creating GetObjectRequest..."
+  printLine ("    Bucket: " ++ testBucket)
+  printLine ("    Key: " ++ testObjectKey)
+  
+  -- GetObjectRequest (21 fields)
+  request = GetObjectRequest.GetObjectRequest testBucket None None None None None None testObjectKey None None None None None None None None None None None None None
   
   -- Call the S3 client
+  printLine "  → Calling getObject..."
   result = !(getObject config request)
   
   -- Extract and print body
   body = GetObjectOutput.body result
   bodyText = fromUtf8 body
   
-  printLine "   SUCCESS: GetObject returned"
-  printLine ("   Body: " ++ bodyText)
+  printLine "  ✓ SUCCESS: GetObject returned"
+  printLine ("    Body: \"" ++ bodyText ++ "\"")
+  
+  -- Verify content matches what we uploaded
+  if Text.eq bodyText testObjectContent then
+    printLine "    ✓ Content matches uploaded data!"
+  else
+    printLine ("    ✗ Content does NOT match! Expected: \"" ++ testObjectContent ++ "\"")
+
+{{
+Delete the test object (cleanup).
+}}
+deleteObjectDemo : Config -> '{IO, Exception, Threads} ()
+deleteObjectDemo config = do
+  printLine "  → Creating DeleteObjectRequest..."
+  printLine ("    Bucket: " ++ testBucket)
+  printLine ("    Key: " ++ testObjectKey)
+  
+  -- DeleteObjectRequest (10 fields)
+  request = DeleteObjectRequest.DeleteObjectRequest testBucket None None None None None testObjectKey None None None
+  
+  -- Call the S3 client
+  printLine "  → Calling deleteObject..."
+  result = !(deleteObject config request)
+  
+  printLine "  ✓ SUCCESS: DeleteObject completed"
+  -- Print delete marker if versioned
+  match DeleteObjectOutput.deleteMarker result with
+    Some true -> printLine "    Delete marker created (versioned bucket)"
+    _ -> ()
+
+{{
+Verify the test object was deleted by listing objects.
+}}
+verifyDeletionDemo : Config -> '{IO, Exception, Threads} ()
+verifyDeletionDemo config = do
+  printLine "  → Listing objects after deletion..."
+  printLine ("    Bucket: " ++ testBucket)
+  printLine ("    Prefix: configs/")
+  
+  -- ListObjectsV2Request (11 fields)
+  request = ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
+  
+  -- Call the S3 client
+  result = !(listObjectsV2 config request)
+  
+  printLine "  ✓ SUCCESS: ListObjectsV2 returned"
+  match ListObjectsV2Output.contents result with
+    Some objects ->
+      count = List.size objects
+      printLine ("  → Found " ++ Nat.toText count ++ " object(s):")
+      List.foreach (obj -> printLine ("      • " ++ Optional.getOrElse "<unnamed>" (Object.key obj))) objects
+      -- Check if our test object is still there
+      hasTestObject = List.any (obj -> Text.eq (Optional.getOrElse "" (Object.key obj)) testObjectKey) objects
+      if hasTestObject then
+        printLine ("    ✗ Object " ++ testObjectKey ++ " still exists!")
+      else
+        printLine ("    ✓ Object " ++ testObjectKey ++ " was successfully deleted!")
+    None -> 
+      printLine "  → No objects found in prefix"
+      printLine "    ✓ Deletion verified (prefix is empty)"
