@@ -4,6 +4,12 @@
 
 ### Added
 
+#### XML to Record Mapping
+- Structure list parsing: `parseList`, `parseChildList`, `parseWrappedList`
+- Nested structure parsing: `parseNested`, `parseOptionalWrappedList`
+- Required field extraction with exceptions: `requireText`, `requireInt`, `requireNat`, `requireBool`
+- Text-based parsing for aws_xml.u compatibility: `parseListFromText`, `parseWrappedListFromText`, `parseNestedFromText`
+
 #### XML Bridge Module
 - `aws_xml_bridge.u` providing integration with `@unison/xml` library
 - Soup-based XML parsing and navigation functions

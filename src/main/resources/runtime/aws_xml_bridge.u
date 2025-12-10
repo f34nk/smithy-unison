@@ -294,6 +294,206 @@ Aws.Xml.nodeAttrs : XMLNode -> Map Text Text
 Aws.Xml.nodeAttrs = XMLNode.attributes
 
 -- =============================================================================
+-- XML to Record Mapping
+-- =============================================================================
+-- 
+-- These functions help map XML elements to Unison record types.
+-- Since Unison doesn't have runtime reflection, generated code provides
+-- specific parser functions for each structure type.
+--
+-- Pattern for generated parsers:
+--   parseBucket : Soup -> Bucket
+--   parseBucket soup = 
+--     Bucket.Bucket
+--       (Aws.Xml.findText "BucketArn" soup)
+--       (Aws.Xml.findText "BucketRegion" soup)
+--       (Aws.Xml.findText "CreationDate" soup)
+--       (Aws.Xml.findText "Name" soup)
+--
+
+{{
+Parse a list of child elements using a mapper function.
+
+Finds all child elements with the given tag name and applies
+the parser function to each one.
+
+Example:
+  buckets = Aws.Xml.parseList "Bucket" parseBucket bucketsElem
+}}
+Aws.Xml.parseList : Text -> (Soup -> a) -> Soup -> [a]
+Aws.Xml.parseList tagName parser soup =
+  match Soup.withXML (Soup.toXML soup) do
+    s ->
+      child = Soup.named tagName (Soup.root s)
+      parser child
+  with
+    Left _ -> []
+    Right results -> results
+
+{{
+Parse a list of child elements without filtering by tag name.
+
+Maps over all direct child tags (not text nodes).
+
+Example:
+  items = Aws.Xml.parseChildList parseItem containerElem
+}}
+Aws.Xml.parseChildList : (Soup -> a) -> Soup -> [a]
+Aws.Xml.parseChildList parser soup =
+  match Soup.withXML (Soup.toXML soup) do
+    s ->
+      child = Soup.childTags (Soup.root s)
+      parser child
+  with
+    Left _ -> []
+    Right results -> results
+
+{{
+Parse a nested structure element.
+
+Finds the element by name and applies the parser function.
+Returns None if element not found.
+
+Example:
+  owner = Aws.Xml.parseNested "Owner" parseOwner response
+}}
+Aws.Xml.parseNested : Text -> (Soup -> a) -> Soup -> Optional a
+Aws.Xml.parseNested tagName parser soup =
+  match Aws.Xml.findOpt tagName soup with
+    None -> None
+    Some elem -> Some (parser elem)
+
+{{
+Parse a nested structure that wraps a list.
+
+Common S3 pattern where a container element holds a list:
+<Buckets><Bucket>...</Bucket><Bucket>...</Bucket></Buckets>
+
+Example:
+  buckets = Aws.Xml.parseWrappedList "Buckets" "Bucket" parseBucket response
+}}
+Aws.Xml.parseWrappedList : Text -> Text -> (Soup -> a) -> Soup -> [a]
+Aws.Xml.parseWrappedList containerTag itemTag parser soup =
+  match Aws.Xml.findOpt containerTag soup with
+    None -> []
+    Some container -> Aws.Xml.parseList itemTag parser container
+
+{{
+Parse a nested structure that wraps a list, returning Optional.
+
+Returns None if container element not found, Some [] if empty.
+
+Example:
+  buckets = Aws.Xml.parseOptionalWrappedList "Buckets" "Bucket" parseBucket response
+}}
+Aws.Xml.parseOptionalWrappedList : Text -> Text -> (Soup -> a) -> Soup -> Optional [a]
+Aws.Xml.parseOptionalWrappedList containerTag itemTag parser soup =
+  match Aws.Xml.findOpt containerTag soup with
+    None -> None
+    Some container -> Some (Aws.Xml.parseList itemTag parser container)
+
+{{
+Parse a flattened list (no container element).
+
+Some AWS APIs use flattened lists where items appear directly:
+<Item>...</Item><Item>...</Item>
+
+Example:
+  items = Aws.Xml.parseFlatList "Item" parseItem response
+}}
+Aws.Xml.parseFlatList : Text -> (Soup -> a) -> Soup -> [a]
+Aws.Xml.parseFlatList = Aws.Xml.parseList
+
+-- =============================================================================
+-- Field Extraction for Record Building
+-- =============================================================================
+
+{{
+Extract a required text field, throwing if not found.
+
+Use this for required fields in generated parsers.
+}}
+Aws.Xml.requireText : Text -> Soup ->{Exception} Text
+Aws.Xml.requireText tagName soup =
+  match Aws.Xml.findText tagName soup with
+    Some text -> text
+    None -> Exception.raise (Failure (typeLink XMLError) ("Required element not found: " ++ tagName) (Any tagName))
+
+{{
+Extract a required integer field, throwing if not found or invalid.
+}}
+Aws.Xml.requireInt : Text -> Soup ->{Exception} Int
+Aws.Xml.requireInt tagName soup =
+  match Aws.Xml.findInt tagName soup with
+    Some n -> n
+    None -> Exception.raise (Failure (typeLink XMLError) ("Required integer element not found: " ++ tagName) (Any tagName))
+
+{{
+Extract a required Nat field, throwing if not found or invalid.
+}}
+Aws.Xml.requireNat : Text -> Soup ->{Exception} Nat
+Aws.Xml.requireNat tagName soup =
+  match Aws.Xml.findNat tagName soup with
+    Some n -> n
+    None -> Exception.raise (Failure (typeLink XMLError) ("Required Nat element not found: " ++ tagName) (Any tagName))
+
+{{
+Extract a required boolean field, throwing if not found or invalid.
+}}
+Aws.Xml.requireBool : Text -> Soup ->{Exception} Boolean
+Aws.Xml.requireBool tagName soup =
+  match Aws.Xml.findBool tagName soup with
+    Some b -> b
+    None -> Exception.raise (Failure (typeLink XMLError) ("Required boolean element not found: " ++ tagName) (Any tagName))
+
+-- =============================================================================
+-- Text-based Structure Parsing (for aws_xml.u compatibility)
+-- =============================================================================
+-- 
+-- These functions work with raw XML text instead of Soup, for use with
+-- the existing text-based extraction in aws_xml.u.
+--
+
+{{
+Parse a list of structure elements from raw XML text.
+
+Uses text-based extraction to find element blocks, then parses each.
+
+Example:
+  buckets = Aws.Xml.parseListFromText "Bucket" parseBucketFromText xmlText
+}}
+Aws.Xml.parseListFromText : Text -> (Text -> a) -> Text -> [a]
+Aws.Xml.parseListFromText tagName parser xmlText =
+  blocks = Aws.Xml.extractAllBlocks tagName xmlText
+  List.map parser blocks
+
+{{
+Parse a wrapped list from raw XML text.
+
+Extracts the container element, then parses child element blocks.
+
+Example:
+  buckets = Aws.Xml.parseWrappedListFromText "Buckets" "Bucket" parseBucketFromText xmlText
+}}
+Aws.Xml.parseWrappedListFromText : Text -> Text -> (Text -> a) -> Text -> [a]
+Aws.Xml.parseWrappedListFromText containerTag itemTag parser xmlText =
+  containerXml = Aws.Xml.extractBlock containerTag xmlText
+  if Text.isEmpty containerXml then []
+  else Aws.Xml.parseListFromText itemTag parser containerXml
+
+{{
+Parse a nested structure from raw XML text.
+
+Example:
+  owner = Aws.Xml.parseNestedFromText "Owner" parseOwnerFromText xmlText
+}}
+Aws.Xml.parseNestedFromText : Text -> (Text -> a) -> Text -> Optional a
+Aws.Xml.parseNestedFromText tagName parser xmlText =
+  block = Aws.Xml.extractBlock tagName xmlText
+  if Text.isEmpty block then None
+  else Some (parser block)
+
+-- =============================================================================
 -- Building XML (using @unison/xml)
 -- =============================================================================
 
