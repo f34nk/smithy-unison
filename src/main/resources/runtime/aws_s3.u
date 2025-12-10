@@ -23,17 +23,29 @@ Example (virtual-hosted): buildUrl "s3.us-east-1.amazonaws.com" "mybucket" "path
 
 Example (path-style): buildUrl "s3.us-east-1.amazonaws.com" "mybucket" "path/to/file.txt" true
   -> "https://s3.us-east-1.amazonaws.com/mybucket/path/to/file.txt"
+
+Example (full URL endpoint): buildUrl "http://moto:5050" "mybucket" "path/to/file.txt" true
+  -> "http://moto:5050/mybucket/path/to/file.txt"
 }}
 Aws.S3.buildUrl : Text -> Text -> Text -> Boolean -> Text
 Aws.S3.buildUrl endpoint bucket key usePathStyle =
   let
     encodedKey = Aws.S3.urlEncodeKey key
-    if usePathStyle then
-      -- Path style: https://endpoint/bucket/key
-      "https://" ++ endpoint ++ "/" ++ bucket ++ "/" ++ encodedKey
+    -- Check if endpoint already has a scheme (http:// or https://)
+    hasScheme = Text.startsWith "http://" endpoint || Text.startsWith "https://" endpoint
+    if hasScheme then
+      -- Endpoint is a full URL (e.g., http://moto:5050 or http://localhost:4566)
+      if usePathStyle then
+        endpoint ++ "/" ++ bucket ++ "/" ++ encodedKey
+      else
+        -- Virtual-hosted style not supported for full URL endpoints, use path style
+        endpoint ++ "/" ++ bucket ++ "/" ++ encodedKey
     else
-      -- Virtual-hosted style: https://bucket.endpoint/key
-      "https://" ++ bucket ++ "." ++ endpoint ++ "/" ++ encodedKey
+      -- Endpoint is just hostname (e.g., s3.us-east-1.amazonaws.com)
+      if usePathStyle then
+        "https://" ++ endpoint ++ "/" ++ bucket ++ "/" ++ encodedKey
+      else
+        "https://" ++ bucket ++ "." ++ endpoint ++ "/" ++ encodedKey
 
 {{
 Build an S3 URL with query string.
@@ -54,13 +66,23 @@ Used for operations like ListObjects, CreateBucket, etc.
 
 Example: buildBucketUrl "s3.us-east-1.amazonaws.com" "mybucket" false
   -> "https://mybucket.s3.us-east-1.amazonaws.com/"
+
+Example (full URL): buildBucketUrl "http://moto:5050" "mybucket" true
+  -> "http://moto:5050/mybucket"
 }}
 Aws.S3.buildBucketUrl : Text -> Text -> Boolean -> Text
 Aws.S3.buildBucketUrl endpoint bucket usePathStyle =
-  if usePathStyle then
-    "https://" ++ endpoint ++ "/" ++ bucket
+  -- Check if endpoint already has a scheme
+  hasScheme = Text.startsWith "http://" endpoint || Text.startsWith "https://" endpoint
+  if hasScheme then
+    -- Full URL endpoint - always use path style
+    endpoint ++ "/" ++ bucket
   else
-    "https://" ++ bucket ++ "." ++ endpoint
+    -- Hostname only
+    if usePathStyle then
+      "https://" ++ endpoint ++ "/" ++ bucket
+    else
+      "https://" ++ bucket ++ "." ++ endpoint
 
 -- =============================================================================
 -- S3 Key Encoding
