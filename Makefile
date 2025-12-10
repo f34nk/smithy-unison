@@ -12,8 +12,8 @@ build:
 	rm -rf build-errors.log
 	./gradlew clean build publishToMavenLocal 2>build-errors.log
 	[ -s build-errors.log ] || rm -rf build-errors.log
-	tree build/libs
-	tree ~/.m2/repository/io/smithy/unison/smithy-unison
+	tree -h build/libs
+	tree -h ~/.m2/repository/io/smithy/unison/smithy-unison
 
 .PHONY: test
 test: test/java

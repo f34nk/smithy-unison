@@ -7,7 +7,7 @@ generate:
 	# Generate Unison code from Smithy model
 	#
 	smithy build
-	tree generated
+	tree -h generated
 
 .PHONY: clean
 clean:
