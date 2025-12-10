@@ -4,6 +4,12 @@
 
 ### Added
 
+#### XML Bridge Module
+- `aws_xml_bridge.u` providing integration with `@unison/xml` library
+- Soup-based XML parsing and navigation functions
+- Convenience extraction: `findText`, `findInt`, `findBool`, `findNat`
+- Error bridging between `XMLError` and `Exception`
+
 #### HTTP Method Support
 - Complete HTTP method support in `aws_http.u`: GET, POST, PUT, DELETE, HEAD, PATCH, OPTIONS
 - Convenience execute functions in `aws_http_bridge.u` for all HTTP methods
