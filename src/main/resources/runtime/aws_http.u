@@ -364,11 +364,29 @@ Aws.Http.getExtendedRequestId headers =
   Aws.Http.getHeader Aws.Http.extendedRequestIdHeader headers
 
 -- =============================================================================
--- HTTP Response Type
+-- HTTP Request/Response Types (AWS Client Types)
 -- =============================================================================
 
 {{
-HTTP response containing status code, headers, and body.
+HTTP Request type for building AWS requests.
+
+This type is used internally by the AWS client. It uses simple types
+(Text for method, URL; list for headers) for easy construction.
+
+To execute requests, use Aws.Http.execute which bridges to @unison/http.
+}}
+type Http.Request = {
+  method : Text,
+  url : Text,
+  headers : [(Text, Text)],
+  body : Bytes
+}
+
+{{
+HTTP Response type for AWS responses.
+
+This type is used internally by the AWS client. It uses simple types
+for easy handling in generated code.
 }}
 type Http.Response = {
   statusCode : Nat,
@@ -377,18 +395,8 @@ type Http.Response = {
 }
 
 -- =============================================================================
--- HTTP Request Functions (Placeholders)
+-- Request Constructors
 -- =============================================================================
-
-{{
-HTTP Request type for building requests.
-}}
-type Http.Request = {
-  method : Text,
-  url : Text,
-  headers : [(Text, Text)],
-  body : Bytes
-}
 
 {{
 Create a GET request.
@@ -425,17 +433,53 @@ Http.Request.head : Text -> [(Text, Text)] -> Http.Request
 Http.Request.head url headers =
   Http.Request.Request "HEAD" url headers Bytes.empty
 
+-- =============================================================================
+-- Type Bridge: AWS Types <-> @unison/http Types
+-- =============================================================================
+--
+-- To make real HTTP requests, install the @unison/http library:
+--
+--   lib.install @unison/http/releases/8.0.0
+--
+-- Then uncomment the bridge functions in aws_http_bridge.u (provided separately)
+-- or use the patterns documented in UNISON_HTTP_API_RESEARCH.md
+--
+-- Type mapping when using @unison/http:
+--   Http.Request  { method: Text, url: Text, headers: list, body: Bytes }
+--       ↓
+--   HttpRequest   { method: Method, version: Version, uri: URI, headers: Headers, body: Body }
+--
+--   HttpResponse  { status: Status, version: Version, headers: Headers, body: Body }
+--       ↓
+--   Http.Response { statusCode: Nat, headers: list, body: Bytes }
+--
+-- =============================================================================
+
+-- =============================================================================
+-- HTTP Execution (Placeholder)
+-- =============================================================================
+
 {{
 Execute an HTTP request.
 
-This is a placeholder implementation that returns an empty response.
-TODO: Implement actual HTTP request using Unison's HTTP library.
+NOTE: This is a placeholder that returns an empty 200 OK response.
+To make real HTTP requests, install @unison/http library and use
+the bridge functions documented in UNISON_HTTP_API_RESEARCH.md.
+
+Installation:
+  lib.install @unison/http/releases/8.0.0
+
+Then implement Aws.Http.execute using Http.run from the library.
 }}
 Http.request : Http.Request -> '{IO, Exception} Http.Response
 Http.request req _ =
   -- Placeholder: Return empty response
-  -- TODO: Use Unison's @unison/http library to make actual requests
+  -- Use Aws.Http.execute for real HTTP calls with @unison/http
   Http.Response.Response 200 [] Bytes.empty
+
+-- =============================================================================
+-- Response Helpers
+-- =============================================================================
 
 {{
 Get a response header value by name.
@@ -455,13 +499,54 @@ Aws.Http.bytesToText bytes = fromUtf8 bytes
 Decode response body bytes to UTF-8 text.
 Requires Exception ability as the decode can fail.
 }}
-Response.bodyText : Response ->{Exception} Text
-Response.bodyText resp = Aws.Http.bytesToText (Response.body resp)
+Http.Response.bodyText : Http.Response ->{Exception} Text
+Http.Response.bodyText resp = Aws.Http.bytesToText (Http.Response.body resp)
 
 {{
-Handle HTTP response errors.
+Check if response indicates success (2xx status).
+}}
+Http.Response.isSuccess : Http.Response -> Boolean
+Http.Response.isSuccess resp =
+  Aws.Http.isSuccess (Http.Response.statusCode resp)
 
-Checks the status code and raises an exception if it indicates an error.
+{{
+Check if response indicates an error (4xx or 5xx status).
+}}
+Http.Response.isError : Http.Response -> Boolean
+Http.Response.isError resp =
+  Aws.Http.isError (Http.Response.statusCode resp)
+
+{{
+Ensure response is successful, raising exception if not.
+
+Returns the response if successful (2xx), raises Failure otherwise.
+
+Example:
+  response = !Aws.Http.execute request
+  !Http.Response.ensureSuccess response
+  -- Now safe to process response body
+}}
+Http.Response.ensureSuccess : Http.Response ->{Exception} Http.Response
+Http.Response.ensureSuccess resp =
+  if Http.Response.isSuccess resp then resp
+  else
+    statusCode = Http.Response.statusCode resp
+    bodyText = match catch do Aws.Http.bytesToText (Http.Response.body resp) with
+      Left _ -> "(binary body)"
+      Right t -> t
+    Exception.raise (Failure (typeLink HttpError) ("HTTP error " ++ Nat.toText statusCode ++ ": " ++ bodyText) (Any resp))
+
+{{
+Type for HTTP errors.
+}}
+type HttpError = HttpError
+
+{{
+Handle HTTP response errors (legacy function).
+
+DEPRECATED: Use Http.Response.ensureSuccess instead.
+
+Checks the status code and calls bug if it indicates an error.
 Returns Unit if the response is successful.
 }}
 handleHttpResponse : Http.Response -> ()
