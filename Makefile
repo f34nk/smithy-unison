@@ -71,5 +71,17 @@ examples/clean:
 
 .PHONY: demo
 demo: clean build
+	#
+	# Run the examples/aws-demo against a mocked S3 bucket
+	#
 	cd examples/aws-demo && \
 	make docker/test
+
+.PHONY: integration-test
+integration-test: clean build
+	#
+	# Install the AWS SDK from Unison Share and 
+	# run the examples/aws-demo against a mocked S3 bucket
+	#
+	cd examples/aws-demo && \
+	make docker/integration-test
