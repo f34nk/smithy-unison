@@ -715,14 +715,13 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             memberValues.put(memberName, varName);
         }
         
-        // Add body members (from decoded body data)
-        // Use accessor function syntax: TypeName.field record
+        // Add body members (from XML extraction)
+        // Uses the extracted *Val variables defined in generateXmlFieldExtraction
         if (!bodyMembers.isEmpty() && !payloadMember.isPresent()) {
             for (MemberShape member : bodyMembers) {
                 String memberName = member.getMemberName();
-                String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
-                // Use accessor function syntax to avoid name conflicts
-                memberValues.put(memberName, "(" + outputTypeName + "." + varName + " bodyData)");
+                String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName) + "Val";
+                memberValues.put(memberName, varName);
             }
         }
         
@@ -903,7 +902,16 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             Shape targetShape, MemberShape member, Model model, UnisonWriter writer) {
         boolean isOptional = !member.isRequired();
         
-        if (targetShape.isStringShape()) {
+        // Check enum types FIRST (before string check, since enums may inherit from string)
+        if (targetShape instanceof EnumShape || 
+                (targetShape.isStringShape() && targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            // Enum type - extract text and convert using enumFromText
+            String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(targetShape.getId().getName()) + "FromText";
+            String textVarName = varName + "Text";
+            writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", textVarName, xmlElementName);
+            writer.write("$L = Optional.flatMap $L $L", varName, enumFromText, textVarName);
+        } else if (targetShape.isStringShape()) {
+            // Regular string type
             if (isOptional) {
                 writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", varName, xmlElementName);
             } else {
@@ -942,24 +950,39 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     writer.write("$L = $L", varName, itemsVarName);
                 }
             } else if (memberTarget instanceof StructureShape) {
-                // List of structures - for now, return None (TODO: generate parse functions)
-                // The full solution would be to generate parseTypeName functions for each structure
-                writer.write("$L = None -- TODO: parse list of structures ($L)", varName, memberTarget.getId().getName());
+                // List of structures - TODO: generate parse functions
+                // For now, return empty list for required, None for optional
+                if (isOptional) {
+                    writer.write("$L = None -- TODO: parse list of structures ($L)", varName, memberTarget.getId().getName());
+                } else {
+                    writer.write("$L = [] -- TODO: parse list of structures ($L)", varName, memberTarget.getId().getName());
+                }
+            } else if (memberTarget instanceof EnumShape || 
+                    (memberTarget.isStringShape() && memberTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                // List of enums - TODO: generate parse functions
+                if (isOptional) {
+                    writer.write("$L = None -- TODO: parse list of enums ($L)", varName, memberTarget.getId().getName());
+                } else {
+                    writer.write("$L = [] -- TODO: parse list of enums ($L)", varName, memberTarget.getId().getName());
+                }
             } else {
                 // Fallback for other list types
-                writer.write("$L = None -- TODO: parse list of $L", varName, memberTarget.getType());
+                if (isOptional) {
+                    writer.write("$L = None -- TODO: parse list of $L", varName, memberTarget.getType());
+                } else {
+                    writer.write("$L = [] -- TODO: parse list of $L", varName, memberTarget.getType());
+                }
             }
         } else if (targetShape instanceof StructureShape) {
-            // Nested structure - for now, return None (TODO: generate parse functions)
-            // The full solution would be to generate parseTypeName functions for each structure
-            writer.write("$L = None -- TODO: parse nested structure ($L)", varName, targetShape.getId().getName());
-        } else if (targetShape instanceof EnumShape || 
-                (targetShape.isStringShape() && targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
-            // Enum type
-            String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(targetShape.getId().getName()) + "FromText";
-            String textVarName = varName + "Text";
-            writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", textVarName, xmlElementName);
-            writer.write("$L = Optional.flatMap $L $L", varName, enumFromText, textVarName);
+            // Nested structure - TODO: generate parse functions
+            // For now, return None for optional
+            if (isOptional) {
+                writer.write("$L = None -- TODO: parse nested structure ($L)", varName, targetShape.getId().getName());
+            } else {
+                // Required nested structure - this is a problem, we can't easily construct a default
+                // For now, still use None but this will cause a type error
+                writer.write("$L = bug \"TODO: parse required nested structure ($L)\"", varName, targetShape.getId().getName());
+            }
         } else {
             // Unknown type - use None as placeholder
             writer.write("$L = None -- TODO: parse $L", varName, targetShape.getType());
