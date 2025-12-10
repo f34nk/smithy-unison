@@ -734,14 +734,37 @@ Parse an optional wrapped list from XML text.
 
 Returns None if container not found, Some empty list if container is empty.
 
-Example:
+Handles two XML patterns:
+1. Wrapped: container holds item elements, e.g., Buckets with Bucket items
+2. Flat: container IS the item tag, repeated directly in parent
+
+Example (wrapped):
   buckets = Aws.Xml.parseOptionalWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
+
+Example (flat - used when itemTag is "Member" but XML has no Member tags):
+  contents = Aws.Xml.parseOptionalWrappedListFromXml "Contents" "Member" parseObjectFromXml xmlText
+  This will parse all Contents elements directly from xmlText
 }}
 Aws.Xml.parseOptionalWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> Optional [a]
 Aws.Xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText =
-  containerXml = Aws.Xml.extractBlock containerTag xmlText
-  if Text.isEmpty containerXml then None
-  else Some (Aws.Xml.parseListFromXml itemTag parser containerXml)
+  -- First try flat list pattern: multiple containerTag elements directly in xmlText
+  -- This handles S3's <Contents>...</Contents><Contents>...</Contents> pattern
+  allContainerBlocks = Aws.Xml.extractAllBlocks containerTag xmlText
+  if Nat.gt (List.size allContainerBlocks) 1 then
+    -- Multiple container elements found - flat list pattern
+    Some (List.map parser allContainerBlocks)
+  else
+    -- Single or no container element - try wrapped pattern
+    containerXml = Aws.Xml.extractBlock containerTag xmlText
+    if Text.isEmpty containerXml then None
+    else
+      -- Container found - try to extract items from inside it
+      wrappedItems = Aws.Xml.parseListFromXml itemTag parser containerXml
+      if List.isEmpty wrappedItems then
+        -- No items found inside - containerTag IS the item (single item or flat pattern)
+        Some [parser containerXml]
+      else
+        Some wrappedItems
 
 -- =============================================================================
 -- XML Decoding (Placeholder)
