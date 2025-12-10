@@ -1,7 +1,26 @@
 #!/bin/bash
 set -ex
 
+# Docker entrypoint script
+# Runs pre-compiled Unison code against Moto mock S3
+
 echo "=== Starting Unison S3 Demo ==="
+echo ""
+
+# Show UCM version
+echo "UCM version: $(ucm version 2>&1)"
+echo ""
+
+# Verify compiled code exists
+if [ ! -f "compiled/main.uc" ]; then
+    echo "ERROR: compiled/main.uc not found!"
+    echo "Run 'make compile' locally first."
+    exit 1
+fi
+
+echo "Found compiled bytecode: compiled/main.uc"
+ls -la compiled/main.uc
+echo ""
 
 # Wait for moto to be available
 echo "Waiting for Moto server..."
@@ -10,55 +29,12 @@ until curl --silent --fail http://moto:5050 > /dev/null 2>&1; do
     sleep 2
 done
 echo "Moto is ready!"
-
 echo ""
-echo "UCM version: $(ucm version 2>&1)"
 
-# Codebase location
-CODEBASE="/app/.unison/codebase"
-mkdir -p "$CODEBASE"
-
-# Create a transcript - pull base library for IO functions
-cat > /tmp/init-and-run.md << 'TRANSCRIPT'
-# Initialize and Run
-
-First, merge builtins and pull base library:
-
-```ucm
-scratch/main> builtins.merge
-scratch/main> lib.install @unison/base/releases/3.18.0
-```
-
-Now define a simple test:
-
-```unison
-helloWorld : '{IO, Exception} ()
-helloWorld = do
-  printLine "Hello from Unison!"
-  printLine "UCM is working correctly!"
-```
-
-```ucm
-scratch/main> add
-scratch/main> run helloWorld
-```
-TRANSCRIPT
-
+echo "=== Running S3 Demo ==="
 echo ""
-echo "Transcript file:"
-cat /tmp/init-and-run.md
 
-echo ""
-echo "=== Running UCM transcript ==="
-
-# Disable pager and colors
-export PAGER=cat
-export TERM=dumb
-export NO_COLOR=1
-export LESS="-F -X"
-
-# Run UCM with output piped through cat
-yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript /tmp/init-and-run.md 2>&1 | cat
+ucm run.compiled compiled/main.uc
 
 echo ""
 echo "=== Demo Complete ==="

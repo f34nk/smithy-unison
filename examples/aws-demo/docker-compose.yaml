@@ -4,7 +4,7 @@ services:
     build:
       context: compose/moto
     ports:
-      - "5050:5050" # moto port
+      - "5050:5050"
     healthcheck:
       test: curl --fail --silent localhost:5050 || exit 1
       interval: 10s
@@ -35,6 +35,7 @@ services:
     build:
       context: .
       args:
+        # UCM version - must match compile.sh
         UCM_VERSION: ${UCM_VERSION:-1.0.0}
     depends_on:
       moto:
@@ -43,5 +44,6 @@ services:
         condition: service_completed_successfully
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-    # stdin_open without tty - provides input but no pager
     stdin_open: true
+    # Running pre-compiled code needs minimal memory
+    mem_limit: 1g
