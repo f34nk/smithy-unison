@@ -1,5 +1,12 @@
 package io.smithy.unison.codegen.protocols;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
@@ -14,14 +21,6 @@ import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.HttpHeaderTrait;
 import software.amazon.smithy.model.traits.HttpQueryTrait;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Protocol generator for REST-XML protocol.
@@ -528,7 +527,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             // In do blocks, bindings are scoped to the rest of the block (no need for 'let')
             
             // Extract response headers
-            generateResponseHeaderExtraction(headerMembers, writer);
+            generateResponseHeaderExtraction(headerMembers, model, writer);
             
             // Extract response code if needed
             if (responseCodeMember.isPresent()) {
@@ -550,22 +549,33 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     responseCodeMember, bodyMembers, writer);
         } else if (payloadMember.isPresent()) {
             // Simple payload extraction - use positional arguments
-            Shape targetShape = model.expectShape(payloadMember.get().getTarget());
+            MemberShape payload = payloadMember.get();
+            Shape targetShape = model.expectShape(payload.getTarget());
             String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
+            boolean isOptional = !payload.isRequired();
             
             if (targetShape.isBlobShape()) {
-                writer.write("$L.$L (Response.body response)", outputTypeName, outputTypeName);
+                if (isOptional) {
+                    writer.write("$L.$L (Some (Response.body response))", outputTypeName, outputTypeName);
+                } else {
+                    writer.write("$L.$L (Response.body response)", outputTypeName, outputTypeName);
+                }
             } else if (targetShape.isStringShape()) {
-                writer.write("$L.$L (Bytes.toUtf8 (Response.body response))", outputTypeName, outputTypeName);
+                if (isOptional) {
+                    writer.write("$L.$L (Some (Aws.Http.bytesToText (Response.body response)))", outputTypeName, outputTypeName);
+                } else {
+                    writer.write("$L.$L (Aws.Http.bytesToText (Response.body response))", outputTypeName, outputTypeName);
+                }
             } else {
                 writer.write("Aws.Xml.decode (Response.body response)");
             }
         } else if (bodyMembers.isEmpty()) {
-            // No body content expected - return unit or empty record
+            // No body content expected - return empty record using constructor
+            // For empty records like "type X = X", we construct with just "X"
             String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
                     operation.getOutput().get().getName());
             writer.write("-- No body content expected");
-            writer.write("$L.default", outputTypeName);
+            writer.write("$L.$L", outputTypeName, outputTypeName);
         } else {
             writer.write("Aws.Xml.decode (Response.body response)");
         }
@@ -573,8 +583,16 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     
     /**
      * Generates code to extract response headers.
+     * 
+     * <p>Handles different target types:
+     * <ul>
+     *   <li>Text - direct extraction from header</li>
+     *   <li>Boolean - parse "true"/"false" text to Boolean</li>
+     *   <li>Integer/Long - parse text to number</li>
+     *   <li>Enum types - convert Text to enum using fromText function</li>
+     * </ul>
      */
-    private void generateResponseHeaderExtraction(List<MemberShape> headerMembers, UnisonWriter writer) {
+    private void generateResponseHeaderExtraction(List<MemberShape> headerMembers, Model model, UnisonWriter writer) {
         if (headerMembers.isEmpty()) {
             return;
         }
@@ -584,13 +602,43 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             // Add 'Val' suffix to avoid name clash with accessor functions
             String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName()) + "Val";
             String headerName = ProtocolUtils.getHeaderName(member);
+            Shape targetShape = model.expectShape(member.getTarget());
             
-            // Check if the field is required - required fields get Text, optional get Optional Text
-            if (member.isRequired()) {
+            // Check if target is an enum type (need to convert Text -> EnumType)
+            boolean isEnumType = targetShape instanceof EnumShape || 
+                    (targetShape.isStringShape() && targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class));
+            
+            if (isEnumType) {
+                // Enum type - need to convert Optional Text to Optional EnumType
+                // Using pattern matching per UNISON_LANGUAGE_SPEC.md
+                String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(targetShape.getId().getName()) + "FromText";
+                
+                writer.write("$L = match Response.getHeader \"$L\" response with", memberName, headerName);
+                writer.indent();
+                writer.write("Some text -> $L text", enumFromText);
+                writer.write("None -> None");
+                writer.dedent();
+            } else if (targetShape.isBooleanShape()) {
+                // Boolean type - parse "true"/"false" text
+                writer.write("$L = match Response.getHeader \"$L\" response with", memberName, headerName);
+                writer.indent();
+                writer.write("Some \"true\" -> Some true");
+                writer.write("Some \"false\" -> Some false");
+                writer.write("_ -> None");
+                writer.dedent();
+            } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
+                // Integer type - parse text to number using Int.fromText
+                writer.write("$L = match Response.getHeader \"$L\" response with", memberName, headerName);
+                writer.indent();
+                writer.write("Some text -> Int.fromText text");
+                writer.write("None -> None");
+                writer.dedent();
+            } else if (member.isRequired()) {
+                // Required Text field - use getOrElse to extract Text
                 writer.write("$L = Optional.getOrElse \"\" (Response.getHeader \"$L\" response)", 
                         memberName, headerName);
             } else {
-                // Optional field - just return the Optional Text from getHeader
+                // Optional Text field - return Optional Text directly
                 writer.write("$L = Response.getHeader \"$L\" response", 
                         memberName, headerName);
             }
@@ -608,7 +656,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         if (targetShape.isBlobShape()) {
             writer.write("$L = Response.body response", memberName);
         } else if (targetShape.isStringShape()) {
-            writer.write("$L = Bytes.toUtf8 (Response.body response)", memberName);
+            writer.write("$L = Aws.Http.bytesToText (Response.body response)", memberName);
         } else {
             writer.write("$L = Aws.Xml.decode (Response.body response)", memberName);
         }
@@ -750,7 +798,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             if (targetShape.isBlobShape()) {
                 writer.write("{ $L = Response.body response }", memberName);
             } else if (targetShape.isStringShape()) {
-                writer.write("{ $L = Bytes.toUtf8 (Response.body response) }", memberName);
+                writer.write("{ $L = Aws.Http.bytesToText (Response.body response) }", memberName);
             } else {
                 writer.write("Aws.Xml.decode (Response.body response)");
             }
@@ -781,7 +829,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("parseError : Response -> $L", errorTypeName);
         writer.write("parseError response =");
         writer.indent();
-        writer.write("errorBody = Bytes.toUtf8 (Response.body response)");
+        writer.write("errorBody = Aws.Http.bytesToText (Response.body response)");
         writer.write("-- Parse XML error: <Error><Code>...</Code><Message>...</Message></Error>");
         writer.write("code = Aws.Xml.extractElement \"Code\" errorBody");
         writer.write("message = Aws.Xml.extractElement \"Message\" errorBody");

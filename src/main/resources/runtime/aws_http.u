@@ -445,6 +445,20 @@ Http.Response.getHeader name resp =
   Aws.Http.getHeader name (Http.Response.headers resp)
 
 {{
+Decode bytes to UTF-8 text.
+Requires Exception ability as the decode can fail.
+}}
+Aws.Http.bytesToText : Bytes ->{Exception} Text
+Aws.Http.bytesToText bytes = fromUtf8 bytes
+
+{{
+Decode response body bytes to UTF-8 text.
+Requires Exception ability as the decode can fail.
+}}
+Response.bodyText : Response ->{Exception} Text
+Response.bodyText resp = Aws.Http.bytesToText (Response.body resp)
+
+{{
 Handle HTTP response errors.
 
 Checks the status code and raises an exception if it indicates an error.

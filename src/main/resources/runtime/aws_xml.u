@@ -679,3 +679,31 @@ TODO: Implement type-specific XML serialization for AWS request bodies.
 }}
 Aws.Xml.toXml : a -> Text
 Aws.Xml.toXml value = ""
+
+-- =============================================================================
+-- XML Decoding (Placeholder)
+-- =============================================================================
+
+{{
+Decode XML bytes to a value.
+
+This is a placeholder function that needs to be implemented
+for each specific type that needs XML deserialization.
+Currently crashes with an error.
+
+TODO: Implement type-specific XML deserialization for AWS response bodies.
+}}
+Aws.Xml.decode : Bytes -> a
+Aws.Xml.decode bytes = bug "Aws.Xml.decode not implemented"
+
+{{
+Decode XML text to a value.
+
+This is a placeholder function that needs to be implemented
+for each specific type that needs XML deserialization.
+Currently crashes with an error.
+
+TODO: Implement type-specific XML deserialization for AWS response bodies.
+}}
+Aws.Xml.fromXml : Text -> a
+Aws.Xml.fromXml text = bug "Aws.Xml.fromXml not implemented"
