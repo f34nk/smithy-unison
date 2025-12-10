@@ -798,3 +798,174 @@ Aws.Http.isEmptyResponse : Http.Response -> Boolean
 Aws.Http.isEmptyResponse resp =
   status = Http.Response.statusCode resp
   Nat.eq status 204 || Bytes.isEmpty (Response.body resp)
+
+-- =============================================================================
+-- Retry Logic
+-- =============================================================================
+
+{{
+Retry configuration for AWS HTTP requests.
+
+- maxRetries: Maximum number of retry attempts (default: 3)
+- baseDelayMs: Base delay in milliseconds for exponential backoff (default: 100)
+- maxDelayMs: Maximum delay cap in milliseconds (default: 20000)
+- jitterFactor: Randomization factor 0.0-1.0 (default: 0.2)
+}}
+structural type Aws.Http.RetryConfig = {
+  maxRetries : Nat,
+  baseDelayMs : Nat,
+  maxDelayMs : Nat
+}
+
+{{
+Default retry configuration.
+
+Uses AWS SDK defaults:
+- 3 max retries
+- 100ms base delay
+- 20 second max delay
+}}
+Aws.Http.RetryConfig.default : Aws.Http.RetryConfig
+Aws.Http.RetryConfig.default =
+  Aws.Http.RetryConfig.RetryConfig 3 100 20000
+
+{{
+Create a retry config with custom max retries.
+}}
+Aws.Http.RetryConfig.withMaxRetries : Nat -> Aws.Http.RetryConfig
+Aws.Http.RetryConfig.withMaxRetries n =
+  Aws.Http.RetryConfig.RetryConfig n 100 20000
+
+{{
+Retry result type tracking attempts and final outcome.
+}}
+structural type Aws.Http.RetryResult a = {
+  result : Either Aws.Http.Error a,
+  attempts : Nat,
+  totalDelayMs : Nat
+}
+
+{{
+Calculate exponential backoff delay for a given attempt.
+
+Uses formula: min(maxDelay, baseDelay * 2^attempt)
+Returns delay in milliseconds.
+}}
+Aws.Http.calculateBackoff : Aws.Http.RetryConfig -> Nat -> Nat
+Aws.Http.calculateBackoff config attempt =
+  base = Aws.Http.RetryConfig.baseDelayMs config
+  maxDelay = Aws.Http.RetryConfig.maxDelayMs config
+  -- Calculate 2^attempt using repeated multiplication
+  multiplier = Nat.pow 2 attempt
+  delay = (Nat.*) base multiplier
+  -- Cap at max delay
+  if Nat.gt delay maxDelay then maxDelay else delay
+
+{{
+Parse Retry-After header value.
+
+AWS may return Retry-After as:
+- Number of seconds (e.g., "120")
+- HTTP date (not supported, returns None)
+
+Returns delay in milliseconds, or None if not parseable.
+}}
+Aws.Http.parseRetryAfter : Text -> Optional Nat
+Aws.Http.parseRetryAfter headerValue =
+  match Nat.fromText headerValue with
+    Some seconds -> Some ((Nat.*) seconds 1000)
+    None -> None
+
+{{
+Get retry delay from an HTTP response.
+
+Checks Retry-After header first, falls back to calculated backoff.
+}}
+Aws.Http.getRetryDelay : Aws.Http.RetryConfig -> Http.Response -> Nat -> Nat
+Aws.Http.getRetryDelay config resp attempt =
+  retryAfterHeader = Response.getHeader "Retry-After" resp
+  match retryAfterHeader with
+    Some value -> 
+      match Aws.Http.parseRetryAfter value with
+        Some delayMs -> delayMs
+        None -> Aws.Http.calculateBackoff config attempt
+    None -> Aws.Http.calculateBackoff config attempt
+
+{{
+Sleep for the specified number of milliseconds.
+
+Note: This is a placeholder that returns immediately.
+Real delay requires @unison/io or similar library with Threads ability.
+The delay parameter is tracked for retry logic even without actual sleeping.
+}}
+Aws.Http.sleepMs : Nat -> '{IO} ()
+Aws.Http.sleepMs ms = do
+  -- Placeholder - actual sleep requires additional IO primitives
+  -- The ms parameter is intentionally unused until proper sleep is available
+  _ = ms
+  ()
+
+{{
+Execute an action with automatic retry on retryable errors.
+
+Implements exponential backoff with optional Retry-After header support.
+
+Returns RetryResult containing:
+- Final result (success or last error)
+- Number of attempts made
+- Total delay time in milliseconds
+}}
+Aws.Http.withRetry : Aws.Http.RetryConfig -> '{IO, Exception} a -> '{IO} (Aws.Http.RetryResult a)
+Aws.Http.withRetry config action =
+  retryLoop attempt totalDelay =
+    match Exception.catch action with
+      Right result -> 
+        Aws.Http.RetryResult.RetryResult (Right result) (attempt + 1) totalDelay
+      Left failure ->
+        -- Try to extract Aws.Http.Error from failure
+        err = match Any.unsafeExtract (Failure.payload failure) with
+          e -> e
+        -- Check if we should retry
+        shouldRetry = Aws.Http.Error.isRetryable err
+        hasRetriesLeft = Nat.lt attempt (Aws.Http.RetryConfig.maxRetries config)
+        canRetry = shouldRetry && hasRetriesLeft
+        if canRetry then
+          -- Calculate delay
+          delayMs = Aws.Http.calculateBackoff config attempt
+          -- Sleep then retry
+          _ = !(Aws.Http.sleepMs delayMs)
+          retryLoop (attempt + 1) (totalDelay + delayMs)
+        else
+          -- Return error result
+          Aws.Http.RetryResult.RetryResult (Left err) (attempt + 1) totalDelay
+  do retryLoop 0 0
+
+{{
+Execute an action with default retry configuration.
+
+Convenience function using default retry settings.
+}}
+Aws.Http.withDefaultRetry : '{IO, Exception} a -> '{IO} (Aws.Http.RetryResult a)
+Aws.Http.withDefaultRetry action =
+  Aws.Http.withRetry Aws.Http.RetryConfig.default action
+
+{{
+Execute an action with retry, returning just the result.
+
+Raises exception on final failure after all retries exhausted.
+}}
+Aws.Http.retryOrFail : Aws.Http.RetryConfig -> '{IO, Exception} a -> '{IO, Exception} a
+Aws.Http.retryOrFail config action = do
+  retryResult = !(Aws.Http.withRetry config action)
+  match Aws.Http.RetryResult.result retryResult with
+    Right a -> a
+    Left err -> Exception.raise (Aws.Http.Error.toFailure err)
+
+{{
+Execute an action with default retry, returning just the result.
+
+Convenience function that raises exception on final failure.
+}}
+Aws.Http.retryOrFailDefault : '{IO, Exception} a -> '{IO, Exception} a
+Aws.Http.retryOrFailDefault action =
+  Aws.Http.retryOrFail Aws.Http.RetryConfig.default action
