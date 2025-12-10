@@ -277,6 +277,7 @@ public final class ErrorGenerator {
                 messageExpr = typeName + ".message err";
             } else {
                 // Optional message field - use getOrElse
+                // Note: Optional.getOrElse takes default first, then optional
                 messageExpr = "Optional.getOrElse \"\" (" + typeName + ".message err)";
             }
         } else {
