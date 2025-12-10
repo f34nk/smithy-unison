@@ -33,10 +33,11 @@ import java.util.logging.Logger;
  * listObjectsV2All config input =
  *   let
  *     go token acc =
- *       response = listObjectsV2 config { input with continuationToken = token }
- *       newItems = Optional.getOrElse [] response.contents
+ *       inputWithToken = ListObjectsV2Request.continuationToken.set token input
+ *       response = listObjectsV2 config inputWithToken
+ *       newItems = Optional.getOrElse [] (ListObjectsV2Output.contents response)
  *       allItems = acc ++ newItems
- *       match response.nextContinuationToken with
+ *       match (ListObjectsV2Output.nextContinuationToken response) with
  *         Some next -> go (Some next) allItems
  *         None -> allItems
  *   go None []
@@ -166,15 +167,18 @@ public class PaginationGenerator {
         // Unison record update syntax: TypeName.field.set newValue record
         String inputTokenField = UnisonSymbolProvider.toUnisonFunctionName(inputToken);
         writer.write("inputWithToken = $L.$L.set token input", inputType, inputTokenField);
-        writer.write("response = $L config inputWithToken", opName);
-        writer.write("newItems = Optional.getOrElse [] response.$L", itemsField);
+        // Force the delayed computation with !
+        writer.write("response = !($L config inputWithToken)", opName);
+        // Note: Unison uses accessor functions: TypeName.field record, not record.field
+        // Optional.getOrElse takes default first, then optional
+        writer.write("newItems = Optional.getOrElse [] ($L.$L response)", outputType, itemsField);
         writer.write("allItems = acc ++ newItems");
         
         writer.dedent();
         
         // Check for next page
         String outputTokenField = UnisonSymbolProvider.toUnisonFunctionName(outputToken);
-        writer.write("match response.$L with", outputTokenField);
+        writer.write("match ($L.$L response) with", outputType, outputTokenField);
         writer.indent();
         writer.write("Some nextToken -> go (Some nextToken) allItems");
         writer.write("None -> allItems");
@@ -241,10 +245,12 @@ public class PaginationGenerator {
         writer.indent();
         // Unison record update syntax: TypeName.field.set newValue record
         writer.write("inputWithToken = $L.$L.set token input", inputType, inputTokenField);
-        writer.write("response = $L config inputWithToken", opName);
+        // Force the delayed computation with !
+        writer.write("response = !($L config inputWithToken)", opName);
         writer.write("Stream.emit response");
         writer.dedent();
-        writer.write("match response.$L with", outputTokenField);
+        // Note: Unison uses accessor functions: TypeName.field record, not record.field
+        writer.write("match ($L.$L response) with", outputType, outputTokenField);
         writer.indent();
         writer.write("Some nextToken -> go (Some nextToken)");
         writer.write("None -> ()");
