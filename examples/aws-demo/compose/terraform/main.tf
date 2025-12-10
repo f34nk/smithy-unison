@@ -24,7 +24,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "config_bucket" {
-  bucket = "us1-nonprod-configs"
+  bucket = "us-east-1-nonprod-configs"
 }
 
 resource "aws_s3_object" "config_file1" {
