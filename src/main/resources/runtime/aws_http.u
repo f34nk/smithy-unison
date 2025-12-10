@@ -556,18 +556,86 @@ Type for HTTP errors.
 type HttpError = HttpError
 
 {{
-Handle HTTP response errors (legacy function).
+AWS HTTP Error type for structured error information.
 
-DEPRECATED: Use Http.Response.ensureSuccess instead.
-
-Checks the status code and calls bug if it indicates an error.
-Returns Unit if the response is successful.
+Contains error details parsed from AWS XML error responses.
 }}
-handleHttpResponse : Http.Response -> ()
+structural type Aws.Http.Error = { statusCode : Nat, code : Text, message : Text, requestId : Text }
+
+{{
+Convert an Aws.Http.Error to a Failure for exception handling.
+}}
+Aws.Http.Error.toFailure : Aws.Http.Error -> Failure
+Aws.Http.Error.toFailure err =
+  Failure (typeLink Aws.Http.Error) (Aws.Http.Error.message err) (Any err)
+
+{{
+Extract text content between XML tags using simple text matching.
+Used for parsing AWS error responses without depending on aws_xml.u.
+}}
+Aws.Http.extractXmlTag : Text -> Text -> Text
+Aws.Http.extractXmlTag tagName xml =
+  openTag = "<" ++ tagName ++ ">"
+  closeTag = "</" ++ tagName ++ ">"
+  match Text.indexOf openTag xml with
+    None -> ""
+    Some startIdx ->
+      contentStart = startIdx + Text.size openTag
+      restText = Text.drop contentStart xml
+      match Text.indexOf closeTag restText with
+        None -> ""
+        Some endIdx -> Text.take endIdx restText
+
+{{
+Check if XML text contains an Error element.
+}}
+Aws.Http.isErrorXml : Text -> Boolean
+Aws.Http.isErrorXml xml =
+  match Text.indexOf "<Error>" xml with
+    None -> false
+    Some _ -> true
+
+{{
+Handle HTTP response errors.
+
+Checks the status code and raises an Exception if it indicates an error.
+For error responses, attempts to parse AWS XML error format to provide
+detailed error information.
+
+For 2xx status codes, returns Unit without error.
+For 204 No Content, returns Unit (empty response is expected).
+For 4xx/5xx status codes, raises an Exception with error details.
+}}
+handleHttpResponse : Http.Response ->{Exception} ()
 handleHttpResponse resp =
-  let
-    status = Http.Response.statusCode resp
-    if Aws.Http.isError status then
-      bug ("HTTP error: " ++ Nat.toText status)
+  status = Http.Response.statusCode resp
+  -- 2xx responses are successful
+  if Nat.lt status 300 then ()
+  else
+    -- Error response - try to parse AWS error XML
+    bodyText = fromUtf8 (Response.body resp)
+    errorInfo = if Aws.Http.isErrorXml bodyText then
+      code = Aws.Http.extractXmlTag "Code" bodyText
+      msg = Aws.Http.extractXmlTag "Message" bodyText
+      reqId = Aws.Http.extractXmlTag "RequestId" bodyText
+      Aws.Http.Error.Error status code msg reqId
     else
-      ()
+      -- Not an XML error - use generic error
+      Aws.Http.Error.Error status ("HTTP" ++ Nat.toText status) ("HTTP error: status " ++ Nat.toText status) ""
+    Exception.raise (Aws.Http.Error.toFailure errorInfo)
+
+{{
+Check if a response indicates success (2xx status code).
+}}
+Aws.Http.isSuccessResponse : Http.Response -> Boolean
+Aws.Http.isSuccessResponse resp =
+  status = Http.Response.statusCode resp
+  Nat.gteq status 200 && Nat.lt status 300
+
+{{
+Check if a response is empty (204 No Content or empty body).
+}}
+Aws.Http.isEmptyResponse : Http.Response -> Boolean
+Aws.Http.isEmptyResponse resp =
+  status = Http.Response.statusCode resp
+  Nat.eq status 204 || Bytes.isEmpty (Response.body resp)
