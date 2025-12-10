@@ -4,6 +4,13 @@
 
 ### Added
 
+#### AWS Error Classification and Parsing
+- Error classification helpers: `isNotFound`, `isAccessDenied`, `isThrottled`, `isRetryable`
+- `Aws.Http.Error.toText` for detailed error logging
+- `Aws.Http.parseErrorXml` and `Aws.Http.parseError` for structured error parsing
+- Try/catch helpers: `Aws.Http.try`, `Aws.Http.tryOptional`
+- Extended `Aws.Http.Error` with `hostId` field for S3 debugging
+
 #### Improved HTTP Error Handling
 - `Aws.Http.Error` type for structured AWS error information
 - `handleHttpResponse` now parses AWS XML error responses and raises proper exceptions
