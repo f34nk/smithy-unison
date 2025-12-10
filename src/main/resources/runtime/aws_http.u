@@ -559,15 +559,46 @@ type HttpError = HttpError
 AWS HTTP Error type for structured error information.
 
 Contains error details parsed from AWS XML error responses.
+Includes all standard AWS error fields for comprehensive error handling.
+
+Example AWS error XML:
+  <Error>
+    <Code>NoSuchBucket</Code>
+    <Message>The specified bucket does not exist</Message>
+    <RequestId>4442587FB7D0A2F9</RequestId>
+    <HostId>...</HostId>
+  </Error>
 }}
-structural type Aws.Http.Error = { statusCode : Nat, code : Text, message : Text, requestId : Text }
+structural type Aws.Http.Error = { 
+  statusCode : Nat,    -- HTTP status code (e.g., 404, 403, 500)
+  code : Text,         -- AWS error code (e.g., "NoSuchBucket", "AccessDenied")
+  message : Text,      -- Human-readable error message
+  requestId : Text,    -- AWS request ID for support/debugging
+  hostId : Text        -- AWS host ID (S3 specific, for debugging)
+}
 
 {{
 Convert an Aws.Http.Error to a Failure for exception handling.
+
+The error message includes the AWS error code for easy identification.
 }}
 Aws.Http.Error.toFailure : Aws.Http.Error -> Failure
 Aws.Http.Error.toFailure err =
-  Failure (typeLink Aws.Http.Error) (Aws.Http.Error.message err) (Any err)
+  errorMessage = (Aws.Http.Error.code err) ++ ": " ++ (Aws.Http.Error.message err)
+  Failure (typeLink Aws.Http.Error) errorMessage (Any err)
+
+{{
+Format an Aws.Http.Error as a detailed string for logging/display.
+
+Includes all error fields in a readable format.
+}}
+Aws.Http.Error.toText : Aws.Http.Error -> Text
+Aws.Http.Error.toText err =
+  "AWS Error [" ++ Nat.toText (Aws.Http.Error.statusCode err) ++ "]\n" ++
+  "  Code: " ++ (Aws.Http.Error.code err) ++ "\n" ++
+  "  Message: " ++ (Aws.Http.Error.message err) ++ "\n" ++
+  "  RequestId: " ++ (Aws.Http.Error.requestId err) ++ "\n" ++
+  "  HostId: " ++ (Aws.Http.Error.hostId err)
 
 {{
 Extract text content between XML tags using simple text matching.
@@ -596,6 +627,35 @@ Aws.Http.isErrorXml xml =
     Some _ -> true
 
 {{
+Parse an AWS error from XML text.
+
+Extracts all standard AWS error fields from XML error responses.
+Returns an Aws.Http.Error record with parsed fields.
+}}
+Aws.Http.parseErrorXml : Nat -> Text -> Aws.Http.Error
+Aws.Http.parseErrorXml statusCode xml =
+  code = Aws.Http.extractXmlTag "Code" xml
+  msg = Aws.Http.extractXmlTag "Message" xml
+  reqId = Aws.Http.extractXmlTag "RequestId" xml
+  hostId = Aws.Http.extractXmlTag "HostId" xml
+  Aws.Http.Error.Error statusCode code msg reqId hostId
+
+{{
+Parse an AWS error from an HTTP response.
+
+Attempts to parse the response body as AWS XML error format.
+If not XML, creates a generic error with the HTTP status.
+}}
+Aws.Http.parseError : Http.Response -> Aws.Http.Error
+Aws.Http.parseError resp =
+  status = Http.Response.statusCode resp
+  bodyText = fromUtf8 (Response.body resp)
+  if Aws.Http.isErrorXml bodyText then
+    Aws.Http.parseErrorXml status bodyText
+  else
+    Aws.Http.Error.Error status ("HTTP" ++ Nat.toText status) ("HTTP error: status " ++ Nat.toText status) "" ""
+
+{{
 Handle HTTP response errors.
 
 Checks the status code and raises an Exception if it indicates an error.
@@ -612,17 +672,116 @@ handleHttpResponse resp =
   -- 2xx responses are successful
   if Nat.lt status 300 then ()
   else
-    -- Error response - try to parse AWS error XML
-    bodyText = fromUtf8 (Response.body resp)
-    errorInfo = if Aws.Http.isErrorXml bodyText then
-      code = Aws.Http.extractXmlTag "Code" bodyText
-      msg = Aws.Http.extractXmlTag "Message" bodyText
-      reqId = Aws.Http.extractXmlTag "RequestId" bodyText
-      Aws.Http.Error.Error status code msg reqId
-    else
-      -- Not an XML error - use generic error
-      Aws.Http.Error.Error status ("HTTP" ++ Nat.toText status) ("HTTP error: status " ++ Nat.toText status) ""
+    -- Error response - parse and raise exception
+    errorInfo = Aws.Http.parseError resp
     Exception.raise (Aws.Http.Error.toFailure errorInfo)
+
+-- =============================================================================
+-- Error Code Checking
+-- =============================================================================
+
+{{
+Check if an error matches a specific AWS error code.
+
+Example:
+  if Aws.Http.Error.isCode "NoSuchBucket" err then ...
+}}
+Aws.Http.Error.isCode : Text -> Aws.Http.Error -> Boolean
+Aws.Http.Error.isCode expectedCode err =
+  Text.eq (Aws.Http.Error.code err) expectedCode
+
+{{
+Check if the error indicates the resource was not found.
+
+Matches common AWS "not found" error codes.
+}}
+Aws.Http.Error.isNotFound : Aws.Http.Error -> Boolean
+Aws.Http.Error.isNotFound err =
+  code = Aws.Http.Error.code err
+  isNoSuchBucket = Text.eq code "NoSuchBucket"
+  isNoSuchKey = Text.eq code "NoSuchKey"
+  isNotFound = Text.eq code "NotFound"
+  is404 = Text.eq code "404"
+  isNoSuchBucket || isNoSuchKey || isNotFound || is404
+
+{{
+Check if the error indicates access was denied.
+
+Matches common AWS access/permission error codes.
+}}
+Aws.Http.Error.isAccessDenied : Aws.Http.Error -> Boolean
+Aws.Http.Error.isAccessDenied err =
+  code = Aws.Http.Error.code err
+  isAccessDenied = Text.eq code "AccessDenied"
+  isForbidden = Text.eq code "Forbidden"
+  is403 = Text.eq code "403"
+  isAccessDenied || isForbidden || is403
+
+{{
+Check if the error indicates the request was throttled.
+
+Matches AWS throttling error codes.
+}}
+Aws.Http.Error.isThrottled : Aws.Http.Error -> Boolean
+Aws.Http.Error.isThrottled err =
+  code = Aws.Http.Error.code err
+  status = Aws.Http.Error.statusCode err
+  isThrottling = Text.eq code "Throttling"
+  isThrottlingException = Text.eq code "ThrottlingException"
+  isSlowDown = Text.eq code "SlowDown"
+  is429 = Nat.eq status 429
+  isThrottling || isThrottlingException || isSlowDown || is429
+
+{{
+Check if the error is retryable.
+
+Retryable errors include:
+- 5xx server errors
+- 429 Too Many Requests (throttling)
+- Specific AWS error codes like "ServiceUnavailable"
+}}
+Aws.Http.Error.isRetryable : Aws.Http.Error -> Boolean
+Aws.Http.Error.isRetryable err =
+  status = Aws.Http.Error.statusCode err
+  code = Aws.Http.Error.code err
+  -- 5xx errors are generally retryable
+  is5xx = Nat.gteq status 500 && Nat.lt status 600
+  -- 429 is throttling
+  is429 = Nat.eq status 429
+  -- Specific retryable codes
+  isServiceUnavailable = Text.eq code "ServiceUnavailable"
+  isInternalError = Text.eq code "InternalError"
+  isRequestTimeout = Text.eq code "RequestTimeout"
+  isSlowDown = Text.eq code "SlowDown"
+  isRetryableCode = isServiceUnavailable || isInternalError || isRequestTimeout || isSlowDown
+  is5xx || is429 || isRetryableCode
+
+-- =============================================================================
+-- Try/Catch Helpers for AWS Errors
+-- =============================================================================
+
+{{
+Try an operation and catch AWS errors, returning Either.
+
+Left contains the Aws.Http.Error on failure.
+Right contains the result on success.
+}}
+Aws.Http.try : '{IO, Exception} a -> '{IO} (Either Aws.Http.Error a)
+Aws.Http.try action = do
+  match Exception.catch action with
+    Left failure -> 
+      match Any.unsafeExtract (Failure.payload failure) with
+        err -> Left err
+    Right result -> Right result
+
+{{
+Try an operation and return Optional, discarding error details.
+}}
+Aws.Http.tryOptional : '{IO, Exception} a -> '{IO} (Optional a)
+Aws.Http.tryOptional action = do
+  match !(Aws.Http.try action) with
+    Left _ -> None
+    Right result -> Some result
 
 {{
 Check if a response indicates success (2xx status code).
