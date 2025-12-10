@@ -30,7 +30,7 @@ test/java:
 .PHONY: clean
 clean:
 	#
-	# Clear the build
+	# Clean the build
 	#
 	rm -rf build bin test-errors.log build-errors.log
 	rm -rf ~/.m2/repository/io/smithy/unison/smithy-unison
