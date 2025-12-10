@@ -4,6 +4,13 @@
 
 ### Added
 
+#### Retry Logic with Exponential Backoff
+- `Aws.Http.RetryConfig` type for configurable retry behavior
+- `Aws.Http.RetryResult` tracking attempts and delay times
+- `Aws.Http.calculateBackoff` for exponential backoff calculation
+- `Aws.Http.parseRetryAfter` to parse Retry-After headers
+- `Aws.Http.withRetry` and convenience retry functions
+
 #### AWS Error Classification and Parsing
 - Error classification helpers: `isNotFound`, `isAccessDenied`, `isThrottled`, `isRetryable`
 - `Aws.Http.Error.toText` for detailed error logging
