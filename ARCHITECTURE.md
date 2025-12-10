@@ -154,7 +154,7 @@ public final class RuntimeModuleCopier {
     
     // Protocol-aware module copying
     public List<String> copyAwsModulesForProtocol(AwsProtocol protocol, ServiceShape service) {
-        // Core modules: aws_sigv4.u, aws_config.u, aws_credentials.u, aws_http.u
+        // Core modules: aws_sigv4.u, aws_config.u, aws_credentials.u, aws_http.u, aws_http_bridge.u
         // XML protocol: aws_xml.u
         // S3 service: aws_s3.u
     }

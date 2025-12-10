@@ -49,8 +49,8 @@ Check out [AWS_SDK_SUPPORT.md](https://github.com/f34nk/smithy-unison/blob/main/
 - Java 11+
 - Gradle 8.0+
 - Unison (UCM)
-
 - Smithy CLI
+- Docker Compose (for testing)
 
 ## Build
 
@@ -72,19 +72,13 @@ Run all example builds:
 make examples
 ```
 
-Or build a specific example:
-
-```bash
-make examples/error-types
-```
-
-<!-- NOT YET IMPLEMENTED
 Or generate and run the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01):
 
 ```bash
 make demo
 ```
--->
+
+The [demo application](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/src/main.u) executes functions from the generated `s3_client` against a mocked S3 bucket.
 
 ## Basic Usage
 
@@ -128,6 +122,7 @@ For AWS services, additional runtime modules are copied:
 - `aws_sigv4.u` - AWS Signature V4 request signing
 - `aws_xml.u` - XML encoding/decoding (REST-XML protocol only)
 - `aws_http.u` - HTTP request/response utilities
+- `aws_http_bridge.u` - Bridge for @unison/http library (enables real HTTP)
 - `aws_s3.u` - S3-specific URL routing (S3 only)
 - `aws_config.u` - AWS configuration types
 - `aws_credentials.u` - Credential provider chain
@@ -182,8 +177,8 @@ com.example.CustomIntegration
 | Integration | Status | Purpose |
 |-------------|--------|---------|
 | `SigV4Generator` | ✅ | Generates AWS SigV4 request signing code |
-| `AwsProtocolIntegration` | Planned | Copies protocol-specific runtime modules |
-| `AwsRetryIntegration` | Planned | Copies retry logic module |
+| `RuntimeModuleCopier` | ✅ | Copies protocol-specific runtime modules |
+| Retry Logic | ✅ | Exponential backoff with jitter in aws_http.u |
 
 ## Smithy Traits
 
@@ -238,7 +233,7 @@ NoSuchKey.toFailure err =
   IO.Failure.Failure (typeLink NoSuchKey) err.message (Any err)
 
 -- Operation with exception-based error handling
-getObject : Config -> GetObjectInput -> '{IO, Exception, Http} GetObjectOutput
+getObject : Config -> GetObjectInput -> '{IO, Exception, Threads} GetObjectOutput
 getObject config input =
   -- Raises exception on error, returns output directly on success
 ```
