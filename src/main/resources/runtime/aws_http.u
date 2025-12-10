@@ -474,22 +474,38 @@ Http.Request.options url headers =
 -- =============================================================================
 
 {{
-Execute an HTTP request.
+Execute an HTTP request (placeholder).
 
 NOTE: This is a placeholder that returns an empty 200 OK response.
-To make real HTTP requests, install @unison/http library and use
-the bridge functions documented in UNISON_HTTP_API_RESEARCH.md.
+To make real HTTP requests, load aws_http_bridge.u after installing @unison/http.
 
 Installation:
   lib.install @unison/http/releases/8.0.0
 
-Then implement Aws.Http.execute using Http.run from the library.
+The bridge module will override executeRequest with real HTTP calls.
 }}
-Http.request : Http.Request -> '{IO, Exception} Http.Response
-Http.request req _ =
+Aws.Http.requestPlaceholder : Http.Request -> '{IO, Exception} Http.Response
+Aws.Http.requestPlaceholder req _ =
   -- Placeholder: Return empty response
-  -- Use Aws.Http.execute for real HTTP calls with @unison/http
   Http.Response.Response 200 [] Bytes.empty
+
+{{
+Execute an HTTP request - main entry point for generated code.
+
+This function is called by all generated S3 client operations.
+By default, it uses the placeholder implementation.
+
+To enable real HTTP requests:
+1. Install @unison/http library
+2. Load aws_http_bridge.u 
+3. The bridge module will override this with real implementation
+
+Usage in generated code:
+  response = !(executeRequest (Http.Request.get url headers))
+}}
+executeRequest : Http.Request -> '{IO, Exception} Http.Response
+executeRequest req =
+  Aws.Http.requestPlaceholder req
 
 -- =============================================================================
 -- Response Helpers

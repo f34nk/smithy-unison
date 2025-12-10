@@ -63,6 +63,12 @@ public final class RuntimeModuleCopier {
         AWS_HTTP("aws_http.u", "HTTP request helpers"),
         
         /**
+         * HTTP bridge for @unison/http library.
+         * Enables real HTTP requests in generated client code.
+         */
+        AWS_HTTP_BRIDGE("aws_http_bridge.u", "HTTP bridge for @unison/http"),
+        
+        /**
          * S3-specific utilities.
          */
         AWS_S3("aws_s3.u", "S3-specific utilities"),
@@ -256,6 +262,10 @@ public final class RuntimeModuleCopier {
         }
         if (copyModule(RuntimeModule.AWS_HTTP)) {
             copied.add(RuntimeModule.AWS_HTTP.getFilename());
+        }
+        // HTTP bridge for @unison/http library - enables real HTTP requests
+        if (copyModule(RuntimeModule.AWS_HTTP_BRIDGE)) {
+            copied.add(RuntimeModule.AWS_HTTP_BRIDGE.getFilename());
         }
         
         // Protocol-specific modules
