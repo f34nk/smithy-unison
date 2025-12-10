@@ -34,7 +34,7 @@ compile: generate install
 	./compile.sh
 
 .PHONY: test-local
-test-local: generate
+test: generate
 	#
 	# Test compilation locally (syntax check only)
 	#

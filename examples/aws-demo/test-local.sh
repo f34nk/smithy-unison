@@ -55,6 +55,12 @@ scratch/main> builtins.merge
 scratch/main> lib.install @unison/base/releases/3.18.0
 ```
 
+Install HTTP library (required for Threads ability):
+
+```ucm
+scratch/main> lib.install @unison/http/releases/8.0.0
+```
+
 Load AWS runtime modules (order matters for dependencies):
 
 ```ucm
@@ -87,10 +93,24 @@ scratch/main> load generated/aws_s3.u
 scratch/main> add
 ```
 
+Load HTTP bridge (enables real HTTP via @unison/http):
+
+```ucm
+scratch/main> load generated/aws_http_bridge.u
+scratch/main> add
+```
+
 Load the generated S3 client:
 
 ```ucm
 scratch/main> load generated/aws_s3_client.u
+scratch/main> add
+```
+
+Load the main application:
+
+```ucm
+scratch/main> load src/main.u
 scratch/main> add
 ```
 

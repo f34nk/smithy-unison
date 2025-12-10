@@ -3,9 +3,8 @@ set -e
 
 # Compile Unison code locally
 # This script:
-# 1. Installs/updates UCM from GitHub releases (same as Docker)
-# 2. Compiles all Unison code to bytecode
-# 3. Outputs compiled/main.uc
+# 1. Compiles all Unison code to bytecode
+# 2. Outputs compiled/main.uc
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -57,6 +56,12 @@ scratch/main> builtins.merge
 scratch/main> lib.install @unison/base/releases/3.18.0
 \`\`\`
 
+Install HTTP library for real network requests:
+
+\`\`\`ucm
+scratch/main> lib.install @unison/http/releases/8.0.0
+\`\`\`
+
 Load AWS runtime modules:
 
 \`\`\`ucm
@@ -86,6 +91,13 @@ scratch/main> add
 
 \`\`\`ucm
 scratch/main> load generated/aws_s3.u
+scratch/main> add
+\`\`\`
+
+Load HTTP bridge module (enables real HTTP requests):
+
+\`\`\`ucm
+scratch/main> load generated/aws_http_bridge.u
 scratch/main> add
 \`\`\`
 
