@@ -541,7 +541,15 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             if (payloadMember.isPresent()) {
                 generatePayloadExtraction(payloadMember.get(), model, writer);
             } else if (!bodyMembers.isEmpty()) {
-                writer.write("bodyData = Aws.Xml.decode (Response.body response)");
+                // Generate XML parsing for body members
+                writer.write("xmlText = fromUtf8 (Response.body response)");
+                for (MemberShape member : bodyMembers) {
+                    String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                    String varName = memberName + "Val";
+                    String xmlElementName = getXmlElementName(member);
+                    Shape targetShape = model.expectShape(member.getTarget());
+                    generateXmlFieldExtraction(varName, xmlElementName, targetShape, member, model, writer);
+                }
             }
             
             // Build the result record (final expression of the do block)
@@ -567,7 +575,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     writer.write("$L.$L (Aws.Http.bytesToText (Response.body response))", outputTypeName, outputTypeName);
                 }
             } else {
-                writer.write("Aws.Xml.decode (Response.body response)");
+                // Structure payload - generate XML parsing
+                generateXmlResponseParsing(output, bodyMembers, model, writer);
             }
         } else if (bodyMembers.isEmpty()) {
             // No body content expected - return empty record using constructor
@@ -577,7 +586,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             writer.write("-- No body content expected");
             writer.write("$L.$L", outputTypeName, outputTypeName);
         } else {
-            writer.write("Aws.Xml.decode (Response.body response)");
+            // Has body members - generate XML parsing
+            generateXmlResponseParsing(output, bodyMembers, model, writer);
         }
     }
     
@@ -800,7 +810,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else if (targetShape.isStringShape()) {
                 writer.write("{ $L = Aws.Http.bytesToText (Response.body response) }", memberName);
             } else {
-                writer.write("Aws.Xml.decode (Response.body response)");
+                // Structure payload - generate inline XML parsing
+                writer.writeComment("Structure payload - parse XML");
+                generateXmlResponseParsing(outputShape.get(), ProtocolUtils.getBodyMembers(outputShape.get()), model, writer);
             }
         } else {
             List<MemberShape> bodyMembers = ProtocolUtils.getBodyMembers(outputShape.get());
@@ -810,7 +822,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 writer.write("{}");
             } else {
                 writer.writeComment("Decode XML response body");
-                writer.write("Aws.Xml.decode (Response.body response)");
+                generateXmlResponseParsing(outputShape.get(), bodyMembers, model, writer);
             }
         }
     }
@@ -836,6 +848,138 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);
         writer.dedent();
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates XML response parsing code that extracts fields from XML and constructs
+     * the output record.
+     * 
+     * <p>This generates code like:
+     * <pre>
+     * xmlText = fromUtf8 (Response.body response)
+     * field1Val = Aws.Xml.extractElementOpt "Field1" xmlText
+     * field2Val = Aws.Xml.extractInt "Field2" xmlText
+     * OutputType.OutputType field1Val field2Val ...
+     * </pre>
+     */
+    private void generateXmlResponseParsing(StructureShape output, List<MemberShape> bodyMembers, 
+            Model model, UnisonWriter writer) {
+        String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
+        
+        // Convert response body to text
+        writer.write("xmlText = fromUtf8 (Response.body response)");
+        
+        // Get all members in order (important for constructor)
+        List<MemberShape> allMembers = new ArrayList<>(output.getAllMembers().values());
+        
+        // Extract each body member from XML
+        for (MemberShape member : allMembers) {
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            String varName = memberName + "Val";
+            Shape targetShape = model.expectShape(member.getTarget());
+            
+            // Get the XML element name - use member name by default
+            String xmlElementName = getXmlElementName(member);
+            
+            generateXmlFieldExtraction(varName, xmlElementName, targetShape, member, model, writer);
+        }
+        
+        // Construct the output record with extracted values
+        writer.write("$L.$L", outputTypeName, outputTypeName);
+        writer.indent();
+        for (int i = 0; i < allMembers.size(); i++) {
+            MemberShape member = allMembers.get(i);
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            String varName = memberName + "Val";
+            writer.write(varName);
+        }
+        writer.dedent();
+    }
+    
+    /**
+     * Generates code to extract a single field from XML.
+     */
+    private void generateXmlFieldExtraction(String varName, String xmlElementName, 
+            Shape targetShape, MemberShape member, Model model, UnisonWriter writer) {
+        boolean isOptional = !member.isRequired();
+        
+        if (targetShape.isStringShape()) {
+            if (isOptional) {
+                writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", varName, xmlElementName);
+            } else {
+                writer.write("$L = Aws.Xml.extractElement \"$L\" xmlText", varName, xmlElementName);
+            }
+        } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
+            // Int extraction returns Optional Int
+            writer.write("$L = Aws.Xml.extractInt \"$L\" xmlText", varName, xmlElementName);
+        } else if (targetShape.isBooleanShape()) {
+            // Bool extraction returns Optional Boolean
+            writer.write("$L = Aws.Xml.extractBool \"$L\" xmlText", varName, xmlElementName);
+        } else if (targetShape.isBlobShape()) {
+            // Blob from base64 encoded text
+            if (isOptional) {
+                writer.write("$L = Optional.map base64.decode (Aws.Xml.extractElementOpt \"$L\" xmlText)", 
+                        varName, xmlElementName);
+            } else {
+                String textVar = varName + "Text";
+                writer.write("$L = Aws.Xml.extractElement \"$L\" xmlText", textVar, xmlElementName);
+                writer.write("$L = base64.decode $L", varName, textVar);
+            }
+        } else if (targetShape instanceof ListShape) {
+            // List - extract all elements with the member name
+            ListShape listShape = (ListShape) targetShape;
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            String itemElementName = getXmlElementName(listShape.getMember());
+            String itemsVarName = varName + "Items";
+            
+            if (memberTarget.isStringShape()) {
+                // List of strings
+                writer.write("$L = Aws.Xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
+                if (isOptional) {
+                    writer.write("$L = if List.isEmpty $L then None else Some $L", 
+                            varName, itemsVarName, itemsVarName);
+                } else {
+                    writer.write("$L = $L", varName, itemsVarName);
+                }
+            } else if (memberTarget instanceof StructureShape) {
+                // List of structures - for now, return None (TODO: generate parse functions)
+                // The full solution would be to generate parseTypeName functions for each structure
+                writer.write("$L = None -- TODO: parse list of structures ($L)", varName, memberTarget.getId().getName());
+            } else {
+                // Fallback for other list types
+                writer.write("$L = None -- TODO: parse list of $L", varName, memberTarget.getType());
+            }
+        } else if (targetShape instanceof StructureShape) {
+            // Nested structure - for now, return None (TODO: generate parse functions)
+            // The full solution would be to generate parseTypeName functions for each structure
+            writer.write("$L = None -- TODO: parse nested structure ($L)", varName, targetShape.getId().getName());
+        } else if (targetShape instanceof EnumShape || 
+                (targetShape.isStringShape() && targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            // Enum type
+            String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(targetShape.getId().getName()) + "FromText";
+            String textVarName = varName + "Text";
+            writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", textVarName, xmlElementName);
+            writer.write("$L = Optional.flatMap $L $L", varName, enumFromText, textVarName);
+        } else {
+            // Unknown type - use None as placeholder
+            writer.write("$L = None -- TODO: parse $L", varName, targetShape.getType());
+        }
+    }
+    
+    /**
+     * Gets the XML element name for a member.
+     * Uses @xmlName trait if present, otherwise uses the member name.
+     */
+    private String getXmlElementName(MemberShape member) {
+        // Check for @xmlName trait
+        Optional<software.amazon.smithy.model.traits.XmlNameTrait> xmlNameTrait = 
+                member.getTrait(software.amazon.smithy.model.traits.XmlNameTrait.class);
+        if (xmlNameTrait.isPresent()) {
+            return xmlNameTrait.get().getValue();
+        }
+        // Use member name with first letter capitalized (AWS XML convention)
+        String name = member.getMemberName();
+        return name.substring(0, 1).toUpperCase() + name.substring(1);
     }
     
     /**
