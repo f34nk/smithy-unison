@@ -9,6 +9,11 @@ all: generate
 .PHONY: generate
 generate: clean
 	#
+	# Download S3 model from AWS SDKs: https://github.com/aws/api-models-aws/blob/main/models/s3/service/2006-03-01/s3-2006-03-01.json
+	#
+	wget https://raw.githubusercontent.com/aws/api-models-aws/refs/heads/main/models/s3/service/2006-03-01/s3-2006-03-01.json
+	mv s3-2006-03-01.json model/
+	#
 	# Generate Unison code from Smithy model
 	#
 	smithy build
@@ -18,6 +23,7 @@ generate: clean
 clean:
 	rm -rf generated/*.u ./build
 	rm -f compiled/main.uc
+	rm -f model/*.json
 
 .PHONY: install
 install:
