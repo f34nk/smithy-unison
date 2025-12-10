@@ -4,6 +4,12 @@
 
 ### Added
 
+#### Improved HTTP Error Handling
+- `Aws.Http.Error` type for structured AWS error information
+- `handleHttpResponse` now parses AWS XML error responses and raises proper exceptions
+- Helper functions: `Aws.Http.isSuccessResponse`, `Aws.Http.isEmptyResponse`
+- Proper handling of 204 No Content responses
+
 #### XML Response Parser Generation
 - Code generator now produces `parseXxxFromXml` functions for all structure types
 - Handles nested structures, lists of structures, enums, and primitive types
