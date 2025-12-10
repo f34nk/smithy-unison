@@ -119,17 +119,17 @@ class PaginationGeneratorTest {
         generator.generatePaginationHelper(operation, model, writer);
         String output = writer.toString();
         
-        // Verify function signature
+        // Verify function signature - now uses concrete type [Item]
         assertTrue(output.contains("listItemsAll"), 
             "Should generate listItemsAll helper");
-        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception} [a]"),
-            "Should have correct signature");
+        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception} [Item]"),
+            "Should have correct signature with concrete item type");
         
-        // Verify recursive structure
-        assertTrue(output.contains("go : Optional Text -> [a]"),
-            "Should have recursive go helper");
-        assertTrue(output.contains("go token acc"),
-            "Should have token and accumulator parameters");
+        // Verify recursive structure - now uses concrete type [Item]
+        assertTrue(output.contains("go : Optional Text -> [Item]"),
+            "Should have recursive go helper with concrete type");
+        assertTrue(output.contains("go token acc = do"),
+            "Should have token and accumulator parameters with do block");
         
         // Verify token handling - uses Unison record update syntax: TypeName.field.set value record
         assertTrue(output.contains("inputWithToken = ListItemsInput.nextToken.set token input"),
@@ -142,12 +142,12 @@ class PaginationGeneratorTest {
             "Should access items field using accessor function");
         assertTrue(output.contains("newItems = Optional.getOrElse [] (ListItemsOutput.items response)"),
             "Should handle optional items with correct argument order (default first)");
-        assertTrue(output.contains("allItems = acc ++ newItems"),
-            "Should accumulate items");
+        assertTrue(output.contains("allItems = (List.++) acc newItems"),
+            "Should accumulate items with qualified List.++ operator");
         
-        // Verify pagination loop
-        assertTrue(output.contains("Some nextToken -> go (Some nextToken) allItems"),
-            "Should recurse on next token");
+        // Verify pagination loop - recursive call must be forced with !
+        assertTrue(output.contains("Some nextToken -> !(go (Some nextToken) allItems)"),
+            "Should recurse on next token with forced evaluation");
         assertTrue(output.contains("None -> allItems"),
             "Should return accumulated items when done");
         
