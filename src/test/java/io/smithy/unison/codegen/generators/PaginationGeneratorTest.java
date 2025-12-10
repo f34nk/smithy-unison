@@ -134,14 +134,14 @@ class PaginationGeneratorTest {
         // Verify token handling - uses Unison record update syntax: TypeName.field.set value record
         assertTrue(output.contains("inputWithToken = ListItemsInput.nextToken.set token input"),
             "Should update input with token using Unison record update syntax");
-        assertTrue(output.contains("response.nextToken"),
-            "Should check output token");
+        assertTrue(output.contains("ListItemsOutput.nextToken response"),
+            "Should check output token using accessor function");
         
-        // Verify items collection
-        assertTrue(output.contains("response.items"),
-            "Should access items field");
-        assertTrue(output.contains("newItems = Optional.getOrElse [] response.items"),
-            "Should handle optional items");
+        // Verify items collection - uses accessor functions: TypeName.field record
+        assertTrue(output.contains("ListItemsOutput.items response"),
+            "Should access items field using accessor function");
+        assertTrue(output.contains("newItems = Optional.getOrElse [] (ListItemsOutput.items response)"),
+            "Should handle optional items with correct argument order (default first)");
         assertTrue(output.contains("allItems = acc ++ newItems"),
             "Should accumulate items");
         
@@ -184,13 +184,13 @@ class PaginationGeneratorTest {
         generator.generatePaginationHelper(operation, model, writer);
         String output = writer.toString();
         
-        // Verify custom token names are used - uses Unison record update syntax
+        // Verify custom token names are used - uses Unison record update syntax and accessor functions
         assertTrue(output.contains("ListPartsInput.partNumberMarker.set token input"),
             "Should use custom input token name with Unison record update syntax");
-        assertTrue(output.contains("response.nextPartNumberMarker"),
-            "Should use custom output token name");
-        assertTrue(output.contains("response.parts"),
-            "Should use custom items field name");
+        assertTrue(output.contains("ListPartsOutput.nextPartNumberMarker response"),
+            "Should use custom output token name with accessor function");
+        assertTrue(output.contains("ListPartsOutput.parts response"),
+            "Should use custom items field name with accessor function");
     }
     
     @Test
