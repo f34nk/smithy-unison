@@ -950,38 +950,66 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     writer.write("$L = $L", varName, itemsVarName);
                 }
             } else if (memberTarget instanceof StructureShape) {
-                // List of structures - TODO: generate parse functions
-                // For now, return empty list for required, None for optional
+                // List of structures - use parseListFromXml with inline parser
+                StructureShape structShape = (StructureShape) memberTarget;
+                String structTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
+                String parserName = "parse" + structTypeName + "FromXml";
+                
+                // Generate inline parsing that uses the structure parser
                 if (isOptional) {
-                    writer.write("$L = None -- TODO: parse list of structures ($L)", varName, memberTarget.getId().getName());
+                    writer.write("$L = Aws.Xml.parseOptionalWrappedListFromXml \"$L\" \"$L\" $L xmlText",
+                            varName, xmlElementName, itemElementName, parserName);
                 } else {
-                    writer.write("$L = [] -- TODO: parse list of structures ($L)", varName, memberTarget.getId().getName());
+                    writer.write("$L = Aws.Xml.parseListFromXml \"$L\" $L xmlText",
+                            varName, itemElementName, parserName);
                 }
             } else if (memberTarget instanceof EnumShape || 
                     (memberTarget.isStringShape() && memberTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
-                // List of enums - TODO: generate parse functions
+                // List of enums - extract text and map using fromText function
+                String enumTypeName = UnisonSymbolProvider.toUnisonTypeName(memberTarget.getId().getName());
+                String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(memberTarget.getId().getName()) + "FromText";
+                writer.write("$L = Aws.Xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
+                writer.write("$L = List.filterMap $L $L", varName + "Parsed", enumFromText, itemsVarName);
                 if (isOptional) {
-                    writer.write("$L = None -- TODO: parse list of enums ($L)", varName, memberTarget.getId().getName());
+                    writer.write("$L = if List.isEmpty $L then None else Some $L", 
+                            varName, varName + "Parsed", varName + "Parsed");
                 } else {
-                    writer.write("$L = [] -- TODO: parse list of enums ($L)", varName, memberTarget.getId().getName());
+                    writer.write("$L = $L", varName, varName + "Parsed");
                 }
             } else {
-                // Fallback for other list types
-                if (isOptional) {
-                    writer.write("$L = None -- TODO: parse list of $L", varName, memberTarget.getType());
+                // Fallback for other list types (integers, etc.)
+                if (memberTarget.isIntegerShape() || memberTarget.isLongShape()) {
+                    writer.write("$L = Aws.Xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
+                    writer.write("$L = List.filterMap Int.fromText $L", varName + "Parsed", itemsVarName);
+                    if (isOptional) {
+                        writer.write("$L = if List.isEmpty $L then None else Some $L", 
+                                varName, varName + "Parsed", varName + "Parsed");
+                    } else {
+                        writer.write("$L = $L", varName, varName + "Parsed");
+                    }
                 } else {
-                    writer.write("$L = [] -- TODO: parse list of $L", varName, memberTarget.getType());
+                    // Unknown list member type
+                    if (isOptional) {
+                        writer.write("$L = None -- unsupported list member type: $L", varName, memberTarget.getType());
+                    } else {
+                        writer.write("$L = [] -- unsupported list member type: $L", varName, memberTarget.getType());
+                    }
                 }
             }
         } else if (targetShape instanceof StructureShape) {
-            // Nested structure - TODO: generate parse functions
-            // For now, return None for optional
+            // Nested structure - use parseNestedFromXml with structure parser
+            StructureShape structShape = (StructureShape) targetShape;
+            String structTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
+            String parserName = "parse" + structTypeName + "FromXml";
+            
             if (isOptional) {
-                writer.write("$L = None -- TODO: parse nested structure ($L)", varName, targetShape.getId().getName());
+                writer.write("$L = Aws.Xml.parseNestedFromXml \"$L\" $L xmlText", varName, xmlElementName, parserName);
             } else {
-                // Required nested structure - this is a problem, we can't easily construct a default
-                // For now, still use None but this will cause a type error
-                writer.write("$L = bug \"TODO: parse required nested structure ($L)\"", varName, targetShape.getId().getName());
+                // Required nested structure - parse and extract, bug if missing
+                String optVarName = varName + "Opt";
+                writer.write("$L = Aws.Xml.parseNestedFromXml \"$L\" $L xmlText", optVarName, xmlElementName, parserName);
+                writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
+                        varName, xmlElementName, optVarName);
             }
         } else {
             // Unknown type - use None as placeholder
