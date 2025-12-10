@@ -19,13 +19,19 @@ clean:
 	rm -rf generated/*.u ./build
 	rm -f compiled/main.uc
 
+.PHONY: install
+install:
+	#
+	# Install UCM $(UCM_VERSION) from GitHub if needed
+	#
+	UCM_VERSION=$(UCM_VERSION) ./install.sh
+
 .PHONY: compile
-compile: generate
+compile: generate install
 	#
 	# Compile Unison code locally
-	# Installs UCM $(UCM_VERSION) from GitHub if needed
 	#
-	UCM_VERSION=$(UCM_VERSION) ./compile.sh
+	./compile.sh
 
 .PHONY: test-local
 test-local: generate
