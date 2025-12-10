@@ -26,7 +26,7 @@ Example: basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCY
 }}
 Aws.Config.basicCredentials : Text -> Text -> Aws.Config.Credentials
 Aws.Config.basicCredentials accessKeyId secretAccessKey =
-  Aws.Config.Credentials accessKeyId secretAccessKey None
+  Aws.Config.Credentials.Credentials accessKeyId secretAccessKey None
 
 {{
 Create credentials with a session token (for temporary credentials).
@@ -35,14 +35,14 @@ Example: temporaryCredentials "AKIAIOSFODNN7EXAMPLE" "secret" "token123"
 }}
 Aws.Config.temporaryCredentials : Text -> Text -> Text -> Aws.Config.Credentials
 Aws.Config.temporaryCredentials accessKeyId secretAccessKey sessionToken =
-  Aws.Config.Credentials accessKeyId secretAccessKey (Some sessionToken)
+  Aws.Config.Credentials.Credentials accessKeyId secretAccessKey (Some sessionToken)
 
 {{
 Check if credentials have a session token (are temporary credentials).
 }}
 Aws.Config.hasSessionToken : Aws.Config.Credentials -> Boolean
 Aws.Config.hasSessionToken creds =
-  match creds.sessionToken with
+  match Aws.Config.Credentials.sessionToken creds with
     Some _ -> true
     None -> false
 
@@ -70,14 +70,14 @@ Example: serviceConfig "s3.us-east-1.amazonaws.com" "us-east-1" credentials
 }}
 Aws.Config.serviceConfig : Text -> Text -> Aws.Config.Credentials -> Aws.Config.ServiceConfig
 Aws.Config.serviceConfig endpoint region credentials =
-  Aws.Config.ServiceConfig endpoint region credentials None None
+  Aws.Config.ServiceConfig.ServiceConfig endpoint region credentials None None
 
 {{
 Create a service configuration with custom timeout and retries.
 }}
 Aws.Config.serviceConfigWithOptions : Text -> Text -> Aws.Config.Credentials -> Nat -> Nat -> Aws.Config.ServiceConfig
 Aws.Config.serviceConfigWithOptions endpoint region credentials timeout maxRetries =
-  Aws.Config.ServiceConfig endpoint region credentials (Some timeout) (Some maxRetries)
+  Aws.Config.ServiceConfig.ServiceConfig endpoint region credentials (Some timeout) (Some maxRetries)
 
 -- =============================================================================
 -- S3-Specific Configuration
@@ -106,9 +106,8 @@ Example: s3Config "us-east-1" credentials
 }}
 Aws.Config.s3Config : Text -> Aws.Config.Credentials -> Aws.Config.S3Config
 Aws.Config.s3Config region credentials =
-  let
-    endpoint = "s3." ++ region ++ ".amazonaws.com"
-  Aws.Config.S3Config endpoint region credentials false false false
+  endpoint = "s3." ++ region ++ ".amazonaws.com"
+  Aws.Config.S3Config.S3Config endpoint region credentials false false false
 
 {{
 Create an S3 configuration with path-style addressing.
@@ -117,9 +116,8 @@ Use this for S3-compatible services like MinIO or LocalStack.
 }}
 Aws.Config.s3ConfigPathStyle : Text -> Aws.Config.Credentials -> Aws.Config.S3Config
 Aws.Config.s3ConfigPathStyle region credentials =
-  let
-    endpoint = "s3." ++ region ++ ".amazonaws.com"
-  Aws.Config.S3Config endpoint region credentials true false false
+  endpoint = "s3." ++ region ++ ".amazonaws.com"
+  Aws.Config.S3Config.S3Config endpoint region credentials true false false
 
 {{
 Create an S3 configuration for a custom endpoint.
@@ -130,7 +128,7 @@ Example: s3ConfigCustom "localhost:4566" "us-east-1" credentials true
 }}
 Aws.Config.s3ConfigCustom : Text -> Text -> Aws.Config.Credentials -> Boolean -> Aws.Config.S3Config
 Aws.Config.s3ConfigCustom endpoint region credentials usePathStyle =
-  Aws.Config.S3Config endpoint region credentials usePathStyle false false
+  Aws.Config.S3Config.S3Config endpoint region credentials usePathStyle false false
 
 {{
 Create an S3 configuration for LocalStack testing.
@@ -139,9 +137,8 @@ Example: s3ConfigLocalStack 4566 credentials
 }}
 Aws.Config.s3ConfigLocalStack : Nat -> Aws.Config.Credentials -> Aws.Config.S3Config
 Aws.Config.s3ConfigLocalStack port credentials =
-  let
-    endpoint = "localhost:" ++ Nat.toText port
-  Aws.Config.S3Config endpoint "us-east-1" credentials true false false
+  endpoint = "localhost:" ++ Nat.toText port
+  Aws.Config.S3Config.S3Config endpoint "us-east-1" credentials true false false
 
 -- =============================================================================
 -- Region Helpers
@@ -191,8 +188,8 @@ Aws.Config.isValidRegion region =
   let
     hasCorrectFormat = Text.contains "-" region
     notEmpty = not (Text.isEmpty region)
-    notTooLong = Text.size region <= 20
-  hasCorrectFormat && notEmpty && notTooLong
+    notTooLong = Nat.lteq (Text.size region) 20
+    hasCorrectFormat && notEmpty && notTooLong
 
 -- =============================================================================
 -- Default Configuration
