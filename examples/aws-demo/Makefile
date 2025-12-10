@@ -33,12 +33,12 @@ compile: generate install
 	#
 	./compile.sh
 
-.PHONY: test-local
-test: generate
+.PHONY: test
+test: generate install
 	#
 	# Test compilation locally (syntax check only)
 	#
-	./test-local.sh
+	./test.sh
 
 .PHONY: docker/test
 docker/test: compile docker/clean
