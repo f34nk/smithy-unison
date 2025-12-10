@@ -433,6 +433,20 @@ Http.Request.head : Text -> [(Text, Text)] -> Http.Request
 Http.Request.head url headers =
   Http.Request.Request "HEAD" url headers Bytes.empty
 
+{{
+Create a PATCH request.
+}}
+Http.Request.patch : Text -> [(Text, Text)] -> Bytes -> Http.Request
+Http.Request.patch url headers body =
+  Http.Request.Request "PATCH" url headers body
+
+{{
+Create an OPTIONS request.
+}}
+Http.Request.options : Text -> [(Text, Text)] -> Http.Request
+Http.Request.options url headers =
+  Http.Request.Request "OPTIONS" url headers Bytes.empty
+
 -- =============================================================================
 -- Type Bridge: AWS Types <-> @unison/http Types
 -- =============================================================================

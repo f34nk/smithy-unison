@@ -4,6 +4,11 @@
 
 ### Added
 
+#### HTTP Method Support
+- Complete HTTP method support in `aws_http.u`: GET, POST, PUT, DELETE, HEAD, PATCH, OPTIONS
+- Convenience execute functions in `aws_http_bridge.u` for all HTTP methods
+- Proper header conversion between AWS client types and `@unison/http` library
+
 #### Conditional Code Generation
 - AWS service detection using `aws.api#service` and `aws.auth#sigv4` traits
 - Conditional runtime module copying (only for AWS services)

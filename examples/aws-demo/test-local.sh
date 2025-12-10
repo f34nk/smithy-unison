@@ -11,13 +11,19 @@ cd "$SCRIPT_DIR"
 echo "=== Local UCM Compilation Test ==="
 echo ""
 
-# Check UCM is available
-if ! command -v ucm &> /dev/null; then
+# Check UCM is available - use local .ucm if system ucm not found
+if command -v ucm &> /dev/null; then
+    UCM="ucm"
+elif [ -x "$SCRIPT_DIR/.ucm/ucm" ]; then
+    UCM="$SCRIPT_DIR/.ucm/ucm"
+else
     echo "ERROR: ucm is not installed or not in PATH"
+    echo "Run ./install.sh first to install UCM locally"
     exit 1
 fi
 
-echo "UCM version: $(ucm version 2>&1)"
+echo "UCM: $UCM"
+echo "UCM version: $($UCM version 2>&1)"
 echo ""
 
 # Check generated files exist
@@ -115,7 +121,7 @@ export NO_COLOR=1
 export LESS="-F -X"
 
 # Run UCM
-yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript /tmp/test-compile.md 2>&1 | cat
+yes "" 2>/dev/null | $UCM -C "$CODEBASE" transcript /tmp/test-compile.md 2>&1 | cat
 
 echo ""
 echo "=== Test Complete ==="

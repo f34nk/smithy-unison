@@ -65,12 +65,15 @@ Aws.Http.toHeaders headerList =
 {{
 Convert @unison/http Headers to our header list format.
 
-Note: Simplified implementation - returns empty list.
-Full implementation would iterate the Headers map.
+Iterates over all header entries and flattens multi-value headers
+into separate tuples.
 }}
 Aws.Http.fromHeaders : Headers -> [(Text, Text)]
 Aws.Http.fromHeaders headers =
-  []
+  -- Headers is Map Text [Text] - flatten to [(Text, Text)]
+  Headers.toList headers
+    |> List.flatMap (cases (name, values) ->
+         List.map (value -> (name, value)) values)
 
 -- =============================================================================
 -- Body Conversion
@@ -143,3 +146,98 @@ Aws.Http.execute req = do
   httpResponse = Http.run do
     Http.request httpRequest
   Aws.Http.fromHttpResponse httpResponse
+
+-- =============================================================================
+-- Convenience HTTP Method Functions
+-- =============================================================================
+
+{{
+Execute a GET request.
+
+Convenience function for executing GET requests without body.
+
+Example:
+  response = !Aws.Http.get "https://s3.amazonaws.com/bucket" [("Host", "s3.amazonaws.com")]
+}}
+Aws.Http.get : Text -> [(Text, Text)] -> '{IO, Exception, Threads} Http.Response
+Aws.Http.get url headers =
+  Aws.Http.execute (Http.Request.get url headers)
+
+{{
+Execute a POST request with body.
+
+Convenience function for executing POST requests with a body.
+
+Example:
+  body = toUtf8 "<xml>data</xml>"
+  response = !Aws.Http.post "https://s3.amazonaws.com/bucket" headers body
+}}
+Aws.Http.post : Text -> [(Text, Text)] -> Bytes -> '{IO, Exception, Threads} Http.Response
+Aws.Http.post url headers body =
+  Aws.Http.execute (Http.Request.post url headers body)
+
+{{
+Execute a PUT request with body.
+
+Convenience function for executing PUT requests with a body.
+Commonly used for S3 object uploads.
+
+Example:
+  body = toUtf8 "file contents"
+  response = !Aws.Http.put "https://s3.amazonaws.com/bucket/key" headers body
+}}
+Aws.Http.put : Text -> [(Text, Text)] -> Bytes -> '{IO, Exception, Threads} Http.Response
+Aws.Http.put url headers body =
+  Aws.Http.execute (Http.Request.put url headers body)
+
+{{
+Execute a DELETE request.
+
+Convenience function for executing DELETE requests without body.
+Commonly used for S3 object deletion.
+
+Example:
+  response = !Aws.Http.delete "https://s3.amazonaws.com/bucket/key" headers
+}}
+Aws.Http.delete : Text -> [(Text, Text)] -> '{IO, Exception, Threads} Http.Response
+Aws.Http.delete url headers =
+  Aws.Http.execute (Http.Request.delete url headers)
+
+{{
+Execute a HEAD request.
+
+Convenience function for executing HEAD requests.
+Commonly used for S3 object metadata retrieval.
+
+Example:
+  response = !Aws.Http.head "https://s3.amazonaws.com/bucket/key" headers
+}}
+Aws.Http.head : Text -> [(Text, Text)] -> '{IO, Exception, Threads} Http.Response
+Aws.Http.head url headers =
+  Aws.Http.execute (Http.Request.head url headers)
+
+{{
+Execute a PATCH request with body.
+
+Convenience function for executing PATCH requests.
+
+Example:
+  body = toUtf8 "{\"update\": \"data\"}"
+  response = !Aws.Http.patch "https://api.example.com/resource" headers body
+}}
+Aws.Http.patch : Text -> [(Text, Text)] -> Bytes -> '{IO, Exception, Threads} Http.Response
+Aws.Http.patch url headers body =
+  Aws.Http.execute (Http.Request.patch url headers body)
+
+{{
+Execute an OPTIONS request.
+
+Convenience function for executing OPTIONS requests.
+Used for CORS preflight checks.
+
+Example:
+  response = !Aws.Http.options "https://api.example.com/resource" headers
+}}
+Aws.Http.options : Text -> [(Text, Text)] -> '{IO, Exception, Threads} Http.Response
+Aws.Http.options url headers =
+  Aws.Http.execute (Http.Request.options url headers)
