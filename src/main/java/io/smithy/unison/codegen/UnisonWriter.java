@@ -150,10 +150,10 @@ public final class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportC
     /**
      * Writes a Unison record type definition.
      * 
-     * <p>Generates a record type with named fields:
+     * <p>Generates a record type with named fields (NO commas - Unison uses newlines):
      * <pre>
      * type MyType = {
-     *   field1 : Text,
+     *   field1 : Text
      *   field2 : Int
      * }
      * </pre>
@@ -176,10 +176,8 @@ public final class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportC
         
         write("type $L = {", typeName);
         indent();
-        for (int i = 0; i < fields.size(); i++) {
-            TypeField field = fields.get(i);
-            String comma = (i < fields.size() - 1) ? "," : "";
-            write("$L : $L$L", field.name(), field.type(), comma);
+        for (TypeField field : fields) {
+            write("$L : $L", field.name(), field.type());
         }
         dedent();
         write("}");

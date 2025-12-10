@@ -161,9 +161,10 @@ public class PaginationGenerator {
         writer.write("let");
         writer.indent();
         
-        // Build input with token
+        // Build input with updated token field
+        // Unison record update syntax: TypeName.field.set newValue record
         String inputTokenField = UnisonSymbolProvider.toUnisonFunctionName(inputToken);
-        writer.write("inputWithToken = { input with $L = token }", inputTokenField);
+        writer.write("inputWithToken = $L.$L.set token input", inputType, inputTokenField);
         writer.write("response = $L config inputWithToken", opName);
         writer.write("newItems = Optional.getOrElse [] response.$L", itemsField);
         writer.write("allItems = acc ++ newItems");
@@ -237,7 +238,8 @@ public class PaginationGenerator {
         writer.indent();
         writer.write("let");
         writer.indent();
-        writer.write("inputWithToken = { input with $L = token }", inputTokenField);
+        // Unison record update syntax: TypeName.field.set newValue record
+        writer.write("inputWithToken = $L.$L.set token input", inputType, inputTokenField);
         writer.write("response = $L config inputWithToken", opName);
         writer.write("Stream.emit response");
         writer.dedent();

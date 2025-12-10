@@ -15,7 +15,9 @@ import software.amazon.smithy.model.traits.HttpQueryTrait;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -321,22 +323,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             // No body members - empty body
             writer.write("body = Bytes.empty");
         } else {
-            // Serialize body members as XML
+            // Serialize body members as XML - pass input directly
             writer.write("-- Serialize body members as XML");
-            writer.write("bodyMap = {");
-            writer.indent();
-            
-            for (int i = 0; i < bodyMembers.size(); i++) {
-                MemberShape member = bodyMembers.get(i);
-                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                String xmlName = member.getMemberName();
-                String comma = (i < bodyMembers.size() - 1) ? "," : "";
-                writer.write("$L = input.$L$L", xmlName, memberName, comma);
-            }
-            
-            writer.dedent();
-            writer.write("}");
-            writer.write("body = Aws.Xml.encode bodyMap");
+            writer.write("body = Aws.Xml.encode input");
         }
     }
     
@@ -398,14 +387,14 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             generateResultRecordConstruction(output, payloadMember, headerMembers, 
                     responseCodeMember, bodyMembers, writer);
         } else if (payloadMember.isPresent()) {
-            // Simple payload extraction
+            // Simple payload extraction - use positional arguments
             Shape targetShape = model.expectShape(payloadMember.get().getTarget());
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(payloadMember.get().getMemberName());
+            String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
             
             if (targetShape.isBlobShape()) {
-                writer.write("{ $L = Http.Response.body response }", memberName);
+                writer.write("$L.$L (Http.Response.body response)", outputTypeName, outputTypeName);
             } else if (targetShape.isStringShape()) {
-                writer.write("{ $L = Bytes.toUtf8 (Http.Response.body response) }", memberName);
+                writer.write("$L.$L (Bytes.toUtf8 (Http.Response.body response))", outputTypeName, outputTypeName);
             } else {
                 writer.write("Aws.Xml.decode (Http.Response.body response)");
             }
@@ -455,6 +444,13 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     
     /**
      * Generates code to construct the result record from extracted parts.
+     * 
+     * <p>In Unison, records are constructed with POSITIONAL arguments, NOT named fields:
+     * <pre>
+     * TypeName.TypeName value1 value2 value3
+     * </pre>
+     * 
+     * <p>Fields must be provided in the same order as defined in the type.
      */
     private void generateResultRecordConstruction(StructureShape output,
                                                    Optional<MemberShape> payloadMember,
@@ -462,46 +458,60 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                                                    Optional<MemberShape> responseCodeMember,
                                                    List<MemberShape> bodyMembers,
                                                    UnisonWriter writer) {
-        writer.write("{");
-        writer.indent();
+        String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
         
-        List<String> allFields = new ArrayList<>();
+        // Build a map of member name to value expression
+        Map<String, String> memberValues = new LinkedHashMap<>();
         
         // Add header members
         for (MemberShape member : headerMembers) {
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-            allFields.add(memberName + " = " + memberName);
+            String memberName = member.getMemberName();
+            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+            memberValues.put(memberName, varName);
         }
         
         // Add response code member
         if (responseCodeMember.isPresent()) {
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(
-                    responseCodeMember.get().getMemberName());
-            allFields.add(memberName + " = " + memberName);
+            String memberName = responseCodeMember.get().getMemberName();
+            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+            memberValues.put(memberName, varName);
         }
         
         // Add payload member
         if (payloadMember.isPresent()) {
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(payloadMember.get().getMemberName());
-            allFields.add(memberName + " = " + memberName);
+            String memberName = payloadMember.get().getMemberName();
+            String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+            memberValues.put(memberName, varName);
         }
         
         // Add body members (from decoded body data)
         if (!bodyMembers.isEmpty() && !payloadMember.isPresent()) {
             for (MemberShape member : bodyMembers) {
-                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                allFields.add(memberName + " = bodyData." + memberName);
+                String memberName = member.getMemberName();
+                String varName = UnisonSymbolProvider.toUnisonFunctionName(memberName);
+                memberValues.put(memberName, "bodyData." + varName);
             }
         }
         
-        // Write all fields with proper commas
-        for (int i = 0; i < allFields.size(); i++) {
-            String comma = (i < allFields.size() - 1) ? "," : "";
-            writer.write("$L$L", allFields.get(i), comma);
+        // Generate positional arguments in the order of the output structure's members
+        List<String> args = new ArrayList<>();
+        for (MemberShape member : output.getAllMembers().values()) {
+            String memberName = member.getMemberName();
+            String value = memberValues.getOrDefault(memberName, "None");  // Default to None for missing optional fields
+            args.add(value);
         }
         
-        writer.dedent();
-        writer.write("}");
+        // Write the constructor call with positional arguments
+        if (args.isEmpty()) {
+            writer.write("$L.$L", outputTypeName, outputTypeName);
+        } else {
+            StringBuilder sb = new StringBuilder();
+            sb.append(outputTypeName).append(".").append(outputTypeName);
+            for (String arg : args) {
+                sb.append(" ").append(arg);
+            }
+            writer.write("$L", sb.toString());
+        }
     }
     
     @Override
