@@ -64,7 +64,8 @@ class StructureGeneratorTest {
         generator.generate(writer);
         
         String output = writer.toString();
-        assertTrue(output.contains("type EmptyStruct = {}"));
+        // Empty records use simple constructor (Unison doesn't support empty braces)
+        assertTrue(output.contains("type EmptyStruct = EmptyStruct"));
     }
     
     @Test

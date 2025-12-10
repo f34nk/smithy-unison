@@ -131,9 +131,9 @@ class PaginationGeneratorTest {
         assertTrue(output.contains("go token acc"),
             "Should have token and accumulator parameters");
         
-        // Verify token handling
-        assertTrue(output.contains("inputWithToken = { input with nextToken = token }"),
-            "Should update input with token");
+        // Verify token handling - uses Unison record update syntax: TypeName.field.set value record
+        assertTrue(output.contains("inputWithToken = ListItemsInput.nextToken.set token input"),
+            "Should update input with token using Unison record update syntax");
         assertTrue(output.contains("response.nextToken"),
             "Should check output token");
         
@@ -184,9 +184,9 @@ class PaginationGeneratorTest {
         generator.generatePaginationHelper(operation, model, writer);
         String output = writer.toString();
         
-        // Verify custom token names are used
-        assertTrue(output.contains("partNumberMarker = token"),
-            "Should use custom input token name");
+        // Verify custom token names are used - uses Unison record update syntax
+        assertTrue(output.contains("ListPartsInput.partNumberMarker.set token input"),
+            "Should use custom input token name with Unison record update syntax");
         assertTrue(output.contains("response.nextPartNumberMarker"),
             "Should use custom output token name");
         assertTrue(output.contains("response.parts"),
