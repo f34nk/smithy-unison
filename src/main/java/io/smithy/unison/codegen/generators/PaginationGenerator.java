@@ -146,8 +146,9 @@ public class PaginationGenerator {
             "Uses '" + inputToken + "' as input token and '" + outputToken + "' as output token.");
         
         // Function signature
+        // Note: HTTP operations use {IO, Exception} abilities - there is no separate Http ability in Unison
         String helperName = opName + "All";
-        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception, Http} [a]");
+        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception} [a]");
         
         writer.write("$L config input =", helperName);
         writer.indent();
@@ -155,7 +156,7 @@ public class PaginationGenerator {
         writer.indent();
         
         // Recursive helper function
-        writer.write("go : Optional Text -> [a] -> '{IO, Exception, Http} [a]");
+        writer.write("go : Optional Text -> [a] -> '{IO, Exception} [a]");
         writer.write("go token acc =");
         writer.indent();
         writer.write("let");
@@ -223,7 +224,7 @@ public class PaginationGenerator {
             "pages one at a time without loading all results into memory.");
         
         String helperName = opName + "Pages";
-        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception, Http, Stream} " + outputType);
+        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception, Stream} " + outputType);
         
         writer.write("$L config input =", helperName);
         writer.indent();
@@ -233,7 +234,7 @@ public class PaginationGenerator {
         String inputTokenField = UnisonSymbolProvider.toUnisonFunctionName(inputToken);
         String outputTokenField = UnisonSymbolProvider.toUnisonFunctionName(outputToken);
         
-        writer.write("go : Optional Text -> '{IO, Exception, Http, Stream} ()");
+        writer.write("go : Optional Text -> '{IO, Exception, Stream} ()");
         writer.write("go token =");
         writer.indent();
         writer.write("let");

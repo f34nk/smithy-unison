@@ -150,7 +150,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 "Raises exception on error, returns output directly on success.");
         
         // Write signature
-        String signature = String.format("Config -> %s -> '{IO, Exception, Http} %s", inputType, outputType);
+        // Note: HTTP operations use {IO, Exception} abilities - there is no separate Http ability in Unison
+        String signature = String.format("Config -> %s -> '{IO, Exception} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
         // Write function definition

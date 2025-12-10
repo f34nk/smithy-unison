@@ -122,7 +122,7 @@ class PaginationGeneratorTest {
         // Verify function signature
         assertTrue(output.contains("listItemsAll"), 
             "Should generate listItemsAll helper");
-        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception, Http} [a]"),
+        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception} [a]"),
             "Should have correct signature");
         
         // Verify recursive structure
