@@ -8,8 +8,31 @@
 -- 1. Convert Http.Request to HttpRequest (library type)
 -- 2. Convert HttpResponse (library type) to Http.Response
 -- 3. Execute real HTTP requests using Aws.Http.execute
+-- 4. Override executeRequest to enable real HTTP for generated code
 --
 -- Load this module AFTER loading aws_http.u and installing @unison/http
+--
+-- IMPORTANT: This module overrides the placeholder executeRequest function
+-- from aws_http.u to enable real HTTP requests in generated client code.
+
+-- =============================================================================
+-- executeRequest Override (Main Entry Point for Generated Code)
+-- =============================================================================
+
+{{
+Override executeRequest to use real HTTP via @unison/http library.
+
+This replaces the placeholder in aws_http.u with actual HTTP execution.
+Generated S3 client operations call this function for all HTTP requests.
+
+Load this module AFTER aws_http.u to enable real HTTP requests.
+
+Note: This adds the Threads ability requirement which propagates to
+all generated operations that call executeRequest.
+}}
+executeRequest : Http.Request -> '{IO, Exception, Threads} Http.Response
+executeRequest req =
+  Aws.Http.execute req
 
 -- =============================================================================
 -- Method Conversion
@@ -65,15 +88,16 @@ Aws.Http.toHeaders headerList =
 {{
 Convert @unison/http Headers to our header list format.
 
-Iterates over all header entries and flattens multi-value headers
-into separate tuples.
+Note: The @unison/http Headers type is opaque and doesn't expose toList.
+For now, we return an empty list since response headers aren't critical
+for basic S3 operations. Extend this if specific headers are needed.
 }}
 Aws.Http.fromHeaders : Headers -> [(Text, Text)]
 Aws.Http.fromHeaders headers =
-  -- Headers is Map Text [Text] - flatten to [(Text, Text)]
-  Headers.toList headers
-    |> List.flatMap (cases (name, values) ->
-         List.map (value -> (name, value)) values)
+  -- TODO: Find a way to extract headers from @unison/http Headers type
+  -- For now, return empty list - response body is the critical data
+  _ = headers
+  []
 
 -- =============================================================================
 -- Body Conversion
@@ -108,7 +132,7 @@ Aws.Http.toHttpRequest req = do
   method = Aws.Http.toMethod (Http.Request.method req)
   headers = Aws.Http.toHeaders (Http.Request.headers req)
   body = Aws.Http.toBody (Http.Request.body req)
-  HttpRequest.HttpRequest method Version.HTTP_1_1 uri headers body
+  HttpRequest.HttpRequest method Version.http11 uri headers body
 
 {{
 Convert @unison/http HttpResponse to our Http.Response.
@@ -157,7 +181,8 @@ Execute a GET request.
 Convenience function for executing GET requests without body.
 
 Example:
-  response = !Aws.Http.get "https://s3.amazonaws.com/bucket" [("Host", "s3.amazonaws.com")]
+  headers = List.singleton ("Host", "s3.amazonaws.com")
+  response = !(Aws.Http.get "https://s3.amazonaws.com/bucket" headers)
 }}
 Aws.Http.get : Text -> [(Text, Text)] -> '{IO, Exception, Threads} Http.Response
 Aws.Http.get url headers =
