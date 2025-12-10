@@ -8,8 +8,10 @@ import java.util.logging.Logger;
 
 import io.smithy.unison.codegen.aws.AwsProtocol;
 import io.smithy.unison.codegen.aws.AwsProtocolDetector;
+import io.smithy.unison.codegen.generators.EnumGenerator;
 import io.smithy.unison.codegen.generators.PaginationGenerator;
 import io.smithy.unison.codegen.generators.StructureGenerator;
+import io.smithy.unison.codegen.generators.UnionGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGeneratorFactory;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
@@ -115,11 +117,8 @@ public final class ClientModuleWriter {
         }
         
         // Generate model types (structures, enums, errors) referenced by operations
-        if (!useProtocolGenerator) {
-            // For non-AWS or stub operations, we need to generate the types
-            // AWS protocol generators handle type generation internally
-            generateModelTypes(writer);
-        }
+        // Types are always needed - protocol generators use these types but don't generate them
+        generateModelTypes(writer);
         
         // Generate operations
         for (ShapeId opId : service.getOperations()) {
@@ -204,6 +203,7 @@ public final class ClientModuleWriter {
         Set<ShapeId> generatedTypes = new HashSet<>();
         Set<StructureShape> structures = new HashSet<>();
         Set<StructureShape> errors = new HashSet<>();
+        Set<Shape> enums = new HashSet<>();
         
         // Collect all shapes referenced by operations
         for (ShapeId opId : service.getOperations()) {
@@ -211,21 +211,44 @@ public final class ClientModuleWriter {
             
             // Collect input shape
             operation.getInput().ifPresent(inputId -> {
-                collectReferencedShapes(inputId, structures, errors, generatedTypes);
+                collectReferencedShapes(inputId, structures, errors, enums, generatedTypes);
             });
             
             // Collect output shape
             operation.getOutput().ifPresent(outputId -> {
-                collectReferencedShapes(outputId, structures, errors, generatedTypes);
+                collectReferencedShapes(outputId, structures, errors, enums, generatedTypes);
             });
             
             // Collect error shapes
             for (ShapeId errorId : operation.getErrors()) {
-                collectReferencedShapes(errorId, structures, errors, generatedTypes);
+                collectReferencedShapes(errorId, structures, errors, enums, generatedTypes);
             }
         }
         
-        // Generate structures (non-errors first)
+        // Generate enums first (they may be referenced by structures)
+        if (!enums.isEmpty()) {
+            writer.writeComment("=== Enums ===");
+            writer.writeBlankLine();
+            
+            for (Shape enumShape : enums) {
+                if (enumShape instanceof EnumShape) {
+                    EnumGenerator generator = new EnumGenerator((EnumShape) enumShape, model);
+                    generator.generate(writer);
+                    writer.writeBlankLine();
+                } else if (enumShape instanceof StringShape && enumShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
+                    EnumGenerator generator = new EnumGenerator((StringShape) enumShape, context);
+                    generator.generate(writer);
+                    writer.writeBlankLine();
+                } else if (enumShape instanceof UnionShape) {
+                    // Generate union types as sum types
+                    UnionGenerator generator = new UnionGenerator((UnionShape) enumShape, model);
+                    generator.generate(writer);
+                    writer.writeBlankLine();
+                }
+            }
+        }
+        
+        // Generate structures (non-errors)
         if (!structures.isEmpty()) {
             writer.writeComment("=== Types ===");
             writer.writeBlankLine();
@@ -259,7 +282,7 @@ public final class ClientModuleWriter {
      * Recursively collects all shapes referenced by a shape.
      */
     private void collectReferencedShapes(ShapeId shapeId, Set<StructureShape> structures,
-                                         Set<StructureShape> errors, Set<ShapeId> visited) {
+                                         Set<StructureShape> errors, Set<Shape> enums, Set<ShapeId> visited) {
         if (visited.contains(shapeId)) {
             return;
         }
@@ -279,15 +302,26 @@ public final class ClientModuleWriter {
             
             // Recursively collect member shapes
             for (MemberShape member : structure.getAllMembers().values()) {
-                collectReferencedShapes(member.getTarget(), structures, errors, visited);
+                collectReferencedShapes(member.getTarget(), structures, errors, enums, visited);
             }
+        } else if (shape instanceof EnumShape || shape instanceof IntEnumShape) {
+            // Collect enum types
+            enums.add(shape);
         } else if (shape instanceof ListShape) {
             ListShape list = (ListShape) shape;
-            collectReferencedShapes(list.getMember().getTarget(), structures, errors, visited);
+            collectReferencedShapes(list.getMember().getTarget(), structures, errors, enums, visited);
         } else if (shape instanceof MapShape) {
             MapShape map = (MapShape) shape;
-            collectReferencedShapes(map.getKey().getTarget(), structures, errors, visited);
-            collectReferencedShapes(map.getValue().getTarget(), structures, errors, visited);
+            collectReferencedShapes(map.getKey().getTarget(), structures, errors, enums, visited);
+            collectReferencedShapes(map.getValue().getTarget(), structures, errors, enums, visited);
+        } else if (shape instanceof UnionShape) {
+            // Collect union types (treat similar to enums)
+            enums.add(shape);
+            // Recursively collect member shapes
+            UnionShape union = (UnionShape) shape;
+            for (MemberShape member : union.getAllMembers().values()) {
+                collectReferencedShapes(member.getTarget(), structures, errors, enums, visited);
+            }
         }
         // Simple types (String, Integer, etc.) don't need generation
     }

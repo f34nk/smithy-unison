@@ -119,35 +119,35 @@ class PaginationGeneratorTest {
         generator.generatePaginationHelper(operation, model, writer);
         String output = writer.toString();
         
-        // Verify function signature
+        // Verify function signature - now uses concrete type [Item]
         assertTrue(output.contains("listItemsAll"), 
             "Should generate listItemsAll helper");
-        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception, Http} [a]"),
-            "Should have correct signature");
+        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception} [Item]"),
+            "Should have correct signature with concrete item type");
         
-        // Verify recursive structure
-        assertTrue(output.contains("go : Optional Text -> [a]"),
-            "Should have recursive go helper");
-        assertTrue(output.contains("go token acc"),
-            "Should have token and accumulator parameters");
+        // Verify recursive structure - now uses concrete type [Item]
+        assertTrue(output.contains("go : Optional Text -> [Item]"),
+            "Should have recursive go helper with concrete type");
+        assertTrue(output.contains("go token acc = do"),
+            "Should have token and accumulator parameters with do block");
         
-        // Verify token handling
-        assertTrue(output.contains("inputWithToken = { input with nextToken = token }"),
-            "Should update input with token");
-        assertTrue(output.contains("response.nextToken"),
-            "Should check output token");
+        // Verify token handling - uses Unison record update syntax: TypeName.field.set value record
+        assertTrue(output.contains("inputWithToken = ListItemsInput.nextToken.set token input"),
+            "Should update input with token using Unison record update syntax");
+        assertTrue(output.contains("ListItemsOutput.nextToken response"),
+            "Should check output token using accessor function");
         
-        // Verify items collection
-        assertTrue(output.contains("response.items"),
-            "Should access items field");
-        assertTrue(output.contains("newItems = Optional.getOrElse [] response.items"),
-            "Should handle optional items");
-        assertTrue(output.contains("allItems = acc ++ newItems"),
-            "Should accumulate items");
+        // Verify items collection - uses accessor functions: TypeName.field record
+        assertTrue(output.contains("ListItemsOutput.items response"),
+            "Should access items field using accessor function");
+        assertTrue(output.contains("newItems = Optional.getOrElse [] (ListItemsOutput.items response)"),
+            "Should handle optional items with correct argument order (default first)");
+        assertTrue(output.contains("allItems = (List.++) acc newItems"),
+            "Should accumulate items with qualified List.++ operator");
         
-        // Verify pagination loop
-        assertTrue(output.contains("Some nextToken -> go (Some nextToken) allItems"),
-            "Should recurse on next token");
+        // Verify pagination loop - recursive call must be forced with !
+        assertTrue(output.contains("Some nextToken -> !(go (Some nextToken) allItems)"),
+            "Should recurse on next token with forced evaluation");
         assertTrue(output.contains("None -> allItems"),
             "Should return accumulated items when done");
         
@@ -184,13 +184,13 @@ class PaginationGeneratorTest {
         generator.generatePaginationHelper(operation, model, writer);
         String output = writer.toString();
         
-        // Verify custom token names are used
-        assertTrue(output.contains("partNumberMarker = token"),
-            "Should use custom input token name");
-        assertTrue(output.contains("response.nextPartNumberMarker"),
-            "Should use custom output token name");
-        assertTrue(output.contains("response.parts"),
-            "Should use custom items field name");
+        // Verify custom token names are used - uses Unison record update syntax and accessor functions
+        assertTrue(output.contains("ListPartsInput.partNumberMarker.set token input"),
+            "Should use custom input token name with Unison record update syntax");
+        assertTrue(output.contains("ListPartsOutput.nextPartNumberMarker response"),
+            "Should use custom output token name with accessor function");
+        assertTrue(output.contains("ListPartsOutput.parts response"),
+            "Should use custom items field name with accessor function");
     }
     
     @Test

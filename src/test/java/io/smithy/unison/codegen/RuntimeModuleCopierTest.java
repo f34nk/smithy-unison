@@ -741,10 +741,10 @@ class RuntimeModuleCopierTest {
         // Verify expected content
         assertTrue(content.contains("Aws.Credentials.fromEnvironment"),
             "Module should define fromEnvironment function");
-        assertTrue(content.contains("Aws.Credentials.fromCredentialsFile"),
-            "Module should define fromCredentialsFile function");
-        assertTrue(content.contains("Aws.Credentials.fromProviderChain"),
-            "Module should define fromProviderChain function");
+        assertTrue(content.contains("Aws.Credentials.defaultCredentials"),
+            "Module should define defaultCredentials function");
+        assertTrue(content.contains("Aws.Credentials.defaultRegion"),
+            "Module should define defaultRegion function");
     }
     
     @Test
@@ -765,26 +765,26 @@ class RuntimeModuleCopierTest {
     void testCredentialsModuleHasFileLoading() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
         
-        assertTrue(content.contains("Aws.Credentials.fromCredentialsFile"),
-            "Module should have fromCredentialsFile function");
-        assertTrue(content.contains("Aws.Credentials.fromDefaultCredentialsFile"),
-            "Module should have fromDefaultCredentialsFile function");
+        assertTrue(content.contains("Aws.Credentials.defaultCredentialsFilePath"),
+            "Module should have defaultCredentialsFilePath function");
+        assertTrue(content.contains("Aws.Credentials.defaultConfigFilePath"),
+            "Module should have defaultConfigFilePath function");
         assertTrue(content.contains("/.aws/credentials"),
             "Module should reference credentials file path");
-        assertTrue(content.contains("Aws.Credentials.parseProfile"),
-            "Module should have parseProfile function");
+        assertTrue(content.contains("/.aws/config"),
+            "Module should reference config file path");
     }
     
     @Test
     void testCredentialsModuleHasProviderChain() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
         
-        assertTrue(content.contains("Aws.Credentials.fromProviderChain"),
-            "Module should have fromProviderChain function");
-        assertTrue(content.contains("Aws.Credentials.ProviderResult"),
-            "Module should have ProviderResult type");
-        assertTrue(content.contains("Aws.Credentials.loadOrFail"),
-            "Module should have loadOrFail function");
+        assertTrue(content.contains("Aws.Credentials.defaultCredentials"),
+            "Module should have defaultCredentials function");
+        assertTrue(content.contains("Aws.Credentials.lookupEntry"),
+            "Module should have lookupEntry function");
+        assertTrue(content.contains("Aws.Credentials.profileFromEnvironment"),
+            "Module should have profileFromEnvironment function");
     }
     
     @Test
@@ -795,20 +795,22 @@ class RuntimeModuleCopierTest {
             "Module should reference AWS_REGION");
         assertTrue(content.contains("AWS_DEFAULT_REGION"),
             "Module should reference AWS_DEFAULT_REGION");
-        assertTrue(content.contains("Aws.Credentials.resolveRegion"),
-            "Module should have resolveRegion function");
         assertTrue(content.contains("Aws.Credentials.regionFromEnvironment"),
             "Module should have regionFromEnvironment function");
+        assertTrue(content.contains("Aws.Credentials.defaultRegion"),
+            "Module should have defaultRegion function");
     }
     
     @Test
     void testCredentialsModuleHasConvenienceFunctions() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
         
-        assertTrue(content.contains("Aws.Credentials.loadS3Config"),
-            "Module should have loadS3Config function");
-        assertTrue(content.contains("Aws.Credentials.loadS3ConfigForProfile"),
-            "Module should have loadS3ConfigForProfile function");
+        assertTrue(content.contains("Aws.Credentials.envAccessKeyId"),
+            "Module should have envAccessKeyId constant");
+        assertTrue(content.contains("Aws.Credentials.envSecretAccessKey"),
+            "Module should have envSecretAccessKey constant");
+        assertTrue(content.contains("Aws.Credentials.envSessionToken"),
+            "Module should have envSessionToken constant");
     }
     
     @Test

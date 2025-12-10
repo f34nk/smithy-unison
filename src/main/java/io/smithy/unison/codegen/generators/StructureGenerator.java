@@ -155,13 +155,17 @@ public final class StructureGenerator {
     
     /**
      * Converts a member name to a Unison field name (camelCase).
+     * 
+     * <p>Also escapes reserved words by appending an underscore.
      */
     private String toFieldName(String memberName) {
         if (memberName == null || memberName.isEmpty()) {
             return memberName;
         }
         // Convert to camelCase (first letter lowercase)
-        return Character.toLowerCase(memberName.charAt(0)) + memberName.substring(1);
+        String fieldName = Character.toLowerCase(memberName.charAt(0)) + memberName.substring(1);
+        // Escape reserved words
+        return io.smithy.unison.codegen.symbol.UnisonReservedWords.escape(fieldName);
     }
     
     /**

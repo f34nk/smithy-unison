@@ -157,7 +157,7 @@ public class RestXmlProtocolGeneratorTest {
         String output = writer.toString();
         
         // Check that the function signature is generated
-        assertTrue(output.contains("getObject : Config -> GetObjectInput -> '{IO, Exception, Http} GetObjectOutput"),
+        assertTrue(output.contains("getObject : Config -> GetObjectInput -> '{IO, Exception} GetObjectOutput"),
                 "Should generate correct function signature. Got: " + output);
         
         // Check that HTTP method is set

@@ -344,8 +344,8 @@ class ServiceErrorGeneratorTest {
         String output = writer.toString();
         assertTrue(output.contains("S3ServiceError.fromXml : Text -> S3ServiceError"));
         assertTrue(output.contains("S3ServiceError.fromXml xmlText ="));
-        assertTrue(output.contains("code = extractXmlTag \"Code\" xmlText"));
-        assertTrue(output.contains("message = extractXmlTag \"Message\" xmlText"));
+        assertTrue(output.contains("code = Optional.getOrElse \"UnknownError\" (extractXmlTag \"Code\" xmlText)"));
+        assertTrue(output.contains("message = Optional.getOrElse \"\" (extractXmlTag \"Message\" xmlText)"));
         assertTrue(output.contains("S3ServiceError.fromCodeAndMessage code message"));
     }
     
@@ -375,8 +375,8 @@ class ServiceErrorGeneratorTest {
         String output = writer.toString();
         assertTrue(output.contains("ApiServiceError.fromJson : Text -> ApiServiceError"));
         assertTrue(output.contains("ApiServiceError.fromJson jsonText ="));
-        assertTrue(output.contains("code = extractJsonField \"__type\" jsonText"));
-        assertTrue(output.contains("message = extractJsonField \"message\" jsonText"));
+        assertTrue(output.contains("code = Optional.getOrElse \"UnknownError\" (extractJsonField \"__type\" jsonText)"));
+        assertTrue(output.contains("message = Optional.getOrElse \"\" (extractJsonField \"message\" jsonText)"));
         assertTrue(output.contains("ApiServiceError.fromCodeAndMessage code message"));
     }
     

@@ -1,0 +1,88 @@
+-- S3 Demo Application
+-- Tests the generated S3 client against Moto mock server
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create S3 client configuration for Moto
+-- Use 'moto' hostname as it's the Docker Compose service name
+defaultConfig : Aws.Config.S3Config
+defaultConfig = 
+  credentials = Aws.Config.basicCredentials "dummy" "dummy"
+  Aws.Config.s3ConfigCustom "http://moto:5050" "us-east-1" credentials true
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+main : '{IO, Exception} ()
+main = do
+  printLine "=== Running S3 Client Demo ==="
+  printLine ""
+  
+  config = defaultConfig
+  
+  -- Demo 1: List Buckets
+  printLine "1. Listing buckets..."
+  !listBucketsDemo
+  
+  -- Demo 2: Put Object
+  printLine "2. Putting object..."
+  !putObjectDemo
+  
+  -- Demo 3: List Objects
+  printLine "3. Listing objects..."
+  !listObjectsDemo
+  
+  -- Demo 4: Get Object
+  printLine "4. Getting object..."
+  !getObjectDemo
+  
+  printLine ""
+  printLine "=== S3 Client Demo Complete ==="
+
+-- =============================================================================
+-- Demo Functions (stubs for now)
+-- =============================================================================
+
+{{
+List all buckets in the account.
+The terraform provisioner creates 'us1-nonprod-configs' bucket.
+}}
+listBucketsDemo : '{IO, Exception} ()
+listBucketsDemo = do
+  printLine "   [STUB] Would call listBuckets"
+  printLine "   Expected: us1-nonprod-configs bucket"
+
+{{
+Upload a test object to the configs bucket.
+}}
+putObjectDemo : '{IO, Exception} ()
+putObjectDemo = do
+  printLine "   [STUB] Would call putObject with:"
+  printLine "   - Bucket: us1-nonprod-configs"
+  printLine "   - Key: configs/unison-test.txt"
+  printLine "   - Body: Hello from Unison S3 Client!"
+
+{{
+List objects in the configs prefix.
+}}
+listObjectsDemo : '{IO, Exception} ()
+listObjectsDemo = do
+  printLine "   [STUB] Would call listObjectsV2 with:"
+  printLine "   - Bucket: us1-nonprod-configs"
+  printLine "   - Prefix: configs/"
+  printLine "   Expected objects:"
+  printLine "   - configs/config1.toml (from terraform)"
+  printLine "   - configs/config2.toml (from terraform)"
+
+{{
+Get the test object we uploaded.
+}}
+getObjectDemo : '{IO, Exception} ()
+getObjectDemo = do
+  printLine "   [STUB] Would call getObject with:"
+  printLine "   - Bucket: us1-nonprod-configs"
+  printLine "   - Key: configs/unison-test.txt"
+  printLine "   Expected body: Hello from Unison S3 Client!"

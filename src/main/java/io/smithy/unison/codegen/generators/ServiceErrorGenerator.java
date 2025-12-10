@@ -272,8 +272,8 @@ public final class ServiceErrorGenerator {
      * S3ServiceError.fromXml xmlText =
      *   -- Parse error code and message from XML
      *   -- Expected format: &lt;Error&gt;&lt;Code&gt;...&lt;/Code&gt;&lt;Message&gt;...&lt;/Message&gt;&lt;/Error&gt;
-     *   code = extractXmlTag "Code" xmlText |> Optional.getOrElse "UnknownError"
-     *   message = extractXmlTag "Message" xmlText |> Optional.getOrElse ""
+     *   code = Optional.getOrElse "UnknownError" (extractXmlTag "Code" xmlText)
+     *   message = Optional.getOrElse "" (extractXmlTag "Message" xmlText)
      *   S3ServiceError.fromCodeAndMessage code message
      * </pre>
      *
@@ -291,8 +291,9 @@ public final class ServiceErrorGenerator {
         writer.write("$L xmlText =", funcName);
         writer.indent();
         writer.write("-- Extract error code and message from XML");
-        writer.write("code = extractXmlTag \"Code\" xmlText |> Optional.getOrElse \"UnknownError\"");
-        writer.write("message = extractXmlTag \"Message\" xmlText |> Optional.getOrElse \"\"");
+        // Note: Optional.getOrElse takes default first, then optional
+        writer.write("code = Optional.getOrElse \"UnknownError\" (extractXmlTag \"Code\" xmlText)");
+        writer.write("message = Optional.getOrElse \"\" (extractXmlTag \"Message\" xmlText)");
         writer.write("$L.fromCodeAndMessage code message", typeName);
         writer.dedent();
         writer.writeBlankLine();
@@ -309,8 +310,8 @@ public final class ServiceErrorGenerator {
      * ServiceError.fromJson jsonText =
      *   -- Parse error code and message from JSON
      *   -- Expected format: {"__type": "ErrorCode", "message": "..."}
-     *   code = extractJsonField "__type" jsonText |> Optional.getOrElse "UnknownError"
-     *   message = extractJsonField "message" jsonText |> Optional.getOrElse ""
+     *   code = Optional.getOrElse "UnknownError" (extractJsonField "__type" jsonText)
+     *   message = Optional.getOrElse "" (extractJsonField "message" jsonText)
      *   ServiceError.fromCodeAndMessage code message
      * </pre>
      *
@@ -328,8 +329,9 @@ public final class ServiceErrorGenerator {
         writer.write("$L jsonText =", funcName);
         writer.indent();
         writer.write("-- Extract error code and message from JSON");
-        writer.write("code = extractJsonField \"__type\" jsonText |> Optional.getOrElse \"UnknownError\"");
-        writer.write("message = extractJsonField \"message\" jsonText |> Optional.getOrElse \"\"");
+        // Note: Optional.getOrElse takes default first, then optional
+        writer.write("code = Optional.getOrElse \"UnknownError\" (extractJsonField \"__type\" jsonText)");
+        writer.write("message = Optional.getOrElse \"\" (extractJsonField \"message\" jsonText)");
         writer.write("$L.fromCodeAndMessage code message", typeName);
         writer.dedent();
         writer.writeBlankLine();

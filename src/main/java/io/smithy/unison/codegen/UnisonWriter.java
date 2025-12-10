@@ -150,13 +150,16 @@ public final class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportC
     /**
      * Writes a Unison record type definition.
      * 
-     * <p>Generates a record type with named fields:
+     * <p>Generates a record type with named fields (commas between fields):
      * <pre>
      * type MyType = {
      *   field1 : Text,
      *   field2 : Int
      * }
      * </pre>
+     * 
+     * <p>Note: Record TYPE definitions use commas, but record LITERALS (construction)
+     * use positional arguments without commas.
      * 
      * <p>For empty records:
      * <pre>
@@ -169,7 +172,9 @@ public final class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportC
      */
     public UnisonWriter writeRecordType(String typeName, List<TypeField> fields) {
         if (fields == null || fields.isEmpty()) {
-            write("type $L = {}", typeName);
+            // Empty records: use a simple constructor with no fields
+            // Unison doesn't support empty record syntax {}
+            write("type $L = $L", typeName, typeName);
             writeBlankLine();
             return this;
         }
@@ -178,6 +183,7 @@ public final class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportC
         indent();
         for (int i = 0; i < fields.size(); i++) {
             TypeField field = fields.get(i);
+            // Commas ARE required in record TYPE definitions
             String comma = (i < fields.size() - 1) ? "," : "";
             write("$L : $L$L", field.name(), field.type(), comma);
         }

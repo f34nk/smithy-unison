@@ -77,14 +77,16 @@ class UnisonWriterTest {
     void writeRecordType_empty() {
         writer.writeRecordType("EmptyRecord", List.of());
         String output = writer.toString();
-        assertEquals("type EmptyRecord = {}\n\n", output);
+        // Empty records use simple constructor (Unison doesn't support empty braces)
+        assertEquals("type EmptyRecord = EmptyRecord\n\n", output);
     }
     
     @Test
     void writeRecordType_null() {
         writer.writeRecordType("NullRecord", null);
         String output = writer.toString();
-        assertEquals("type NullRecord = {}\n\n", output);
+        // Empty records use simple constructor (Unison doesn't support empty braces)
+        assertEquals("type NullRecord = NullRecord\n\n", output);
     }
     
     @Test
