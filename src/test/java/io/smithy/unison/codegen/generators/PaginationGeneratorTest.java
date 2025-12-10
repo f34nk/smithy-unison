@@ -122,11 +122,11 @@ class PaginationGeneratorTest {
         // Verify function signature - now uses concrete type [Item]
         assertTrue(output.contains("listItemsAll"), 
             "Should generate listItemsAll helper");
-        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception} [Item]"),
+        assertTrue(output.contains("Config -> ListItemsInput -> '{IO, Exception, Threads} [Item]"),
             "Should have correct signature with concrete item type");
         
         // Verify recursive structure - now uses concrete type [Item]
-        assertTrue(output.contains("go : Optional Text -> [Item]"),
+        assertTrue(output.contains("go : Optional Text -> [Item] -> '{IO, Exception, Threads} [Item]"),
             "Should have recursive go helper with concrete type");
         assertTrue(output.contains("go token acc = do"),
             "Should have token and accumulator parameters with do block");

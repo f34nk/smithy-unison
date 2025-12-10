@@ -174,9 +174,9 @@ public class PaginationGenerator {
             "Uses '" + inputToken + "' as input token and '" + outputToken + "' as output token.");
         
         // Function signature with concrete item type
-        // Note: HTTP operations use {IO, Exception} abilities - there is no separate Http ability in Unison
+        // Note: HTTP operations use {IO, Exception, Threads} abilities for real HTTP via @unison/http
         String helperName = opName + "All";
-        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception} [" + itemType + "]");
+        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception, Threads} [" + itemType + "]");
         
         writer.write("$L config input =", helperName);
         writer.indent();
@@ -185,7 +185,7 @@ public class PaginationGenerator {
         
         // Recursive helper function with concrete type
         // In do blocks, bindings are scoped to the rest of the block (no need for inner 'let')
-        writer.write("go : Optional Text -> [" + itemType + "] -> '{IO, Exception} [" + itemType + "]");
+        writer.write("go : Optional Text -> [" + itemType + "] -> '{IO, Exception, Threads} [" + itemType + "]");
         writer.write("go token acc = do");
         writer.indent();
         

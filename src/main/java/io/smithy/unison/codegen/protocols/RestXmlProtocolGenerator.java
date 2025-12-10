@@ -152,11 +152,12 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         
         // Write signature
         // Note: HTTP operations use {IO, Exception} abilities - there is no separate Http ability in Unison
-        String signature = String.format("Config -> %s -> '{IO, Exception} %s", inputType, outputType);
+        // Use '{IO, Exception, Threads} to support real HTTP via @unison/http bridge
+        String signature = String.format("Config -> %s -> '{IO, Exception, Threads} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
         // Write function definition with do block for delayed computation
-        // The '{IO, Exception} return type requires a do block
+        // The '{IO, Exception, Threads} return type requires a do block
         // In Unison, do blocks allow bindings directly without 'let'
         writer.write("$L config input = do", opName);
         writer.indent();
@@ -184,12 +185,13 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("signedHeaders = headers");
         
         // Make HTTP request - force the delayed computation with !
+        // Uses executeRequest which can be overridden when bridge module is loaded
         // Some methods don't take a body parameter
         String methodLower = method.toLowerCase();
         if (methodLower.equals("get") || methodLower.equals("delete") || methodLower.equals("head")) {
-            writer.write("response = !(Http.request (Http.Request.$L fullUrl signedHeaders))", methodLower);
+            writer.write("response = !(executeRequest (Http.Request.$L fullUrl signedHeaders))", methodLower);
         } else {
-            writer.write("response = !(Http.request (Http.Request.$L fullUrl signedHeaders body))", methodLower);
+            writer.write("response = !(executeRequest (Http.Request.$L fullUrl signedHeaders body))", methodLower);
         }
         
         // Handle response - still in scope since we're in the do block
