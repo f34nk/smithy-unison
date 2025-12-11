@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/f34nk/smithy-unison/actions/workflows/ci.yml/badge.svg)](https://github.com/f34nk/smithy-unison/actions/workflows/ci.yml)
 
-Generates Unison client code from Smithy service models. Produces client modules, type definitions, and HTTP request/response handling for service operations.
+Generates [Unison](https://www.unison-lang.org/) client code from Smithy service models. Produces client modules, type definitions, and HTTP request/response handling for service operations.
 
 Reference: https://smithy.io/2.0/index.html
 
@@ -72,13 +72,21 @@ Run all example builds:
 make examples
 ```
 
-Or generate and run the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01):
+Run demo:
 
 ```bash
 make demo
 ```
 
-The [demo application](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/src/main.u) executes functions from the generated `s3_client` against a mocked S3 bucket.
+The [demo application](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/src/main.u) generates the `aws_s3_client` from the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01), compiles it locally and executes functions against a mocked S3 bucket in Docker Compose.
+
+Run integration-test:
+
+```bash
+make integration-test
+```
+
+The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/compile-with-lib.sh#L11) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [demo application](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/src/main.u) against a mocked S3 bucket in Docker Compose.
 
 ## Basic Usage
 
@@ -237,6 +245,12 @@ getObject : Config -> GetObjectInput -> '{IO, Exception, Threads} GetObjectOutpu
 getObject config input =
   -- Raises exception on error, returns output directly on success
 ```
+
+## AWS SDK Generator (experimental)
+
+Use the AWS SDK Generator to generate unison code for any available AWS SDK.
+
+Check out [generate-aws-sdk](https://github.com/f34nk/smithy-unison/blob/main/generate-aws-sdk) for details.
 
 ## License
 
