@@ -39,17 +39,25 @@ compile: generate install
 	#
 	./compile.sh
 
-.PHONY: test
-test: generate install
+.PHONY: compile-with-lib
+compile-with-lib: install
 	#
-	# Test compilation locally (syntax check only)
+	# Fetch deps from Unison Share and compile locally
 	#
-	./test.sh
+	./compile-with-lib.sh
 
 .PHONY: docker/test
 docker/test: compile docker/clean
 	#
-	# Run compiled code in Docker against Moto
+	# Run compiled code in Docker Compose
+	#
+	UCM_VERSION=$(UCM_VERSION) docker compose build
+	docker compose run --rm test
+
+.PHONY: docker/integration-test
+docker/integration-test: compile-with-lib docker/clean
+	#
+	# Run compiled code in Docker Compose
 	#
 	UCM_VERSION=$(UCM_VERSION) docker compose build
 	docker compose run --rm test

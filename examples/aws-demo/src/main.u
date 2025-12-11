@@ -8,6 +8,15 @@
 --   load aws_http_bridge.u
 --   add
 
+-- Import types from @f34nk/aws library (use statements are file-scoped in Unison)
+use lib.f34nk_aws_0_1_1 Config Credentials
+use lib.f34nk_aws_0_1_1 ListBucketsRequest ListBucketsOutput Bucket
+use lib.f34nk_aws_0_1_1 PutObjectRequest PutObjectOutput objectCannedACLFromText
+use lib.f34nk_aws_0_1_1 ListObjectsV2Request ListObjectsV2Output Object
+use lib.f34nk_aws_0_1_1 GetObjectRequest GetObjectOutput
+use lib.f34nk_aws_0_1_1 DeleteObjectRequest DeleteObjectOutput
+use lib.f34nk_aws_0_1_1 listBuckets putObject listObjectsV2 getObject deleteObject
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -148,7 +157,8 @@ putObjectDemo config = do
   -- PutObjectRequest with minimal required fields (41 fields)
   -- Field order: aCL body bucket bucketKeyEnabled cacheControl checksumAlgorithm ...
   -- Set ACL to public-read so we can read the object back
-  request = PutObjectRequest.PutObjectRequest (Some ObjectCannedACL'public_read) body testBucket None None None None None None None None None None None None None (Some "text/plain") None None None None None None None None testObjectKey None None None None None None None None None None None None None None None
+  acl = objectCannedACLFromText "public-read"
+  request = PutObjectRequest.PutObjectRequest acl body testBucket None None None None None None None None None None None None None (Some "text/plain") None None None None None None None None testObjectKey None None None None None None None None None None None None None None None
   
   -- Call the S3 client
   printLine "  → Calling putObject..."
