@@ -4,6 +4,16 @@
 
 ### Added
 
+#### Library Publishing Support
+- `compile-with-lib.sh` script for compiling using published `@f34nk/aws` library
+- Namespace aliases in `compile.sh` for portable demo code
+- `use lib.f34nk_aws_0_1_0` imports in demo for library compatibility
+- `README.u` package documentation for Unison Share
+
+### Fixed
+- Ambiguity errors in runtime modules by using fully qualified `lib.unison_base_3_18_0` paths
+- `Text.split` and `URI.parse` resolution when multiple base libraries in scope
+
 #### Retry Logic with Exponential Backoff
 - `Aws.Http.RetryConfig` type for configurable retry behavior
 - `Aws.Http.RetryResult` tracking attempts and delay times
