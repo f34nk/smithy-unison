@@ -251,7 +251,7 @@ Returns everything after the last slash.
 }}
 Aws.S3.getFileName : Text -> Text
 Aws.S3.getFileName key =
-  parts = base.Text.split ?/ key
+  parts = lib.unison_base_3_18_0.Text.split ?/ key
   match List.last parts with
     Some name -> name
     None -> key
@@ -264,7 +264,7 @@ Returns everything up to and including the last slash.
 Aws.S3.getDirectory : Text -> Text
 Aws.S3.getDirectory key =
   -- Simple approach: split by slash and rejoin all but last
-  parts = base.Text.split ?/ key
+  parts = lib.unison_base_3_18_0.Text.split ?/ key
   len = List.size parts
   if Nat.lteq len 1 
     then ""
@@ -278,7 +278,7 @@ Returns extension without the dot, or empty if none.
 Aws.S3.getExtension : Text -> Text
 Aws.S3.getExtension key =
   fileName = Aws.S3.getFileName key
-  parts = base.Text.split ?. fileName
+  parts = lib.unison_base_3_18_0.Text.split ?. fileName
   if List.size parts Nat.<= 1 
     then ""
     else match List.last parts with
