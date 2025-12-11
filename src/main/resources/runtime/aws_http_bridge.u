@@ -128,7 +128,7 @@ Requires Exception ability since URI.parse can fail on invalid URLs.
 }}
 Aws.Http.toHttpRequest : Http.Request -> '{Exception} HttpRequest
 Aws.Http.toHttpRequest req = do
-  uri = URI.parse (Http.Request.url req)
+  uri = base.IO.net.URI.parse (Http.Request.url req)
   method = Aws.Http.toMethod (Http.Request.method req)
   headers = Aws.Http.toHeaders (Http.Request.headers req)
   body = Aws.Http.toBody (Http.Request.body req)
