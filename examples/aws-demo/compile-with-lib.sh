@@ -8,7 +8,7 @@ cat > /tmp/compile.md << 'EOF'
 scratch/main> builtins.merge
 scratch/main> lib.install @unison/base/releases/3.18.0
 scratch/main> lib.install @unison/http/releases/8.0.0
-scratch/main> lib.install @f34nk/aws/releases/0.1.0
+scratch/main> lib.install @f34nk/aws/releases/0.1.1
 scratch/main> load src/main.u
 scratch/main> add
 scratch/main> compile main OUTPUT_FILE
