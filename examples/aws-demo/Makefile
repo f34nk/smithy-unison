@@ -46,13 +46,6 @@ compile-with-lib: install
 	#
 	./compile-with-lib.sh
 
-.PHONY: test
-test: generate install
-	#
-	# Test compilation locally (syntax check only)
-	#
-	./test.sh
-
 .PHONY: docker/test
 docker/test: compile docker/clean
 	#

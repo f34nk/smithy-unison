@@ -78,7 +78,7 @@ demo: clean build
 	make docker/test
 
 .PHONY: integration-test
-integration-test: clean build
+integration-test:
 	#
 	# Install the AWS SDK from Unison Share and 
 	# run the examples/aws-demo against a mocked S3 bucket
