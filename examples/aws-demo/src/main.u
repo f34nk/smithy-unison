@@ -9,13 +9,13 @@
 --   add
 
 -- Import types from @f34nk/aws library (use statements are file-scoped in Unison)
-use lib.f34nk_aws_0_1_1 Config Credentials
-use lib.f34nk_aws_0_1_1 ListBucketsRequest ListBucketsOutput Bucket
-use lib.f34nk_aws_0_1_1 PutObjectRequest PutObjectOutput objectCannedACLFromText
-use lib.f34nk_aws_0_1_1 ListObjectsV2Request ListObjectsV2Output Object
-use lib.f34nk_aws_0_1_1 GetObjectRequest GetObjectOutput
-use lib.f34nk_aws_0_1_1 DeleteObjectRequest DeleteObjectOutput
-use lib.f34nk_aws_0_1_1 listBuckets putObject listObjectsV2 getObject deleteObject
+use lib.f34nk_aws_0_1_2 Config Credentials
+use lib.f34nk_aws_0_1_2 ListBucketsRequest ListBucketsOutput Bucket
+use lib.f34nk_aws_0_1_2 PutObjectRequest PutObjectOutput objectCannedACLFromText
+use lib.f34nk_aws_0_1_2 ListObjectsV2Request ListObjectsV2Output Object
+use lib.f34nk_aws_0_1_2 GetObjectRequest GetObjectOutput
+use lib.f34nk_aws_0_1_2 DeleteObjectRequest DeleteObjectOutput
+use lib.f34nk_aws_0_1_2 listBuckets putObject listObjectsV2 getObject deleteObject
 
 -- =============================================================================
 -- Configuration
