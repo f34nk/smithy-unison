@@ -1,6 +1,6 @@
 # AWS S3 Demo
 
-End-to-end test of the generated S3 client against a mock S3 server (Moto).
+End-to-end test of the generated S3 client against a mock S3 server (LocalStack).
 
 ## Prerequisites
 
@@ -10,26 +10,25 @@ End-to-end test of the generated S3 client against a mock S3 server (Moto).
 ## Quick Start
 
 ```bash
-make docker/test
+make test
 ```
 
 This will:
 1. Generate Unison code from Smithy model
 2. Install UCM locally (from GitHub releases, same version as Docker)
 3. Compile all Unison code locally
-4. Build Docker containers
-5. Run the compiled demo
+4. Start LocalStack in docker
+5. Create the stack with terraform against LocalStack endpoint
+6. Run the compiled demo
 
 The demo will execute functions from the generated `s3_client` against a mocked S3 bucket 
 
-Reference: [Moto - Mock AWS Services](https://github.com/getmoto/moto)
-
 ```shell
 ╔══════════════════════════════════════════╗
-║      S3 Client Demo (Moto Backend)       ║
+║      S3 Client Demo (LocalStack Backend) ║
 ╚══════════════════════════════════════════╝
 
-Endpoint: http://moto:5050
+Endpoint: http://localhost:4566
 Region: us-east-1
 Bucket: us-east-1-nonprod-configs
 

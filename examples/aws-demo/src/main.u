@@ -70,7 +70,7 @@ main = do
 runDemo : '{IO, Exception, Threads} ()
 runDemo = do
   printLine "╔══════════════════════════════════════════╗"
-  printLine "║      S3 Client Demo (Moto Backend)       ║"
+  printLine "║      S3 Client Demo (LocalStack Backend) ║"
   printLine "╚══════════════════════════════════════════╝"
   printLine ""
   
