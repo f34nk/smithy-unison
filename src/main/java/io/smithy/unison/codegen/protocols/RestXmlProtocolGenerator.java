@@ -169,7 +169,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("method = \"$L\"", method);
         
         // Build URL with path parameters
-        generateUrlBuilding(uri, httpLabelMembers, useS3Url, inputType, writer);
+        generateUrlBuilding(uri, httpLabelMembers, useS3Url, inputType, clientNamespace, writer);
         
         // Build query string
         generateQueryString(httpQueryMembers, inputType, model, clientNamespace, writer);
@@ -210,10 +210,14 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
      * Generates URL building code with path parameter substitution.
      */
     private void generateUrlBuilding(String uri, List<MemberShape> httpLabelMembers, 
-                                      boolean useS3Url, String inputType, UnisonWriter writer) {
+                                      boolean useS3Url, String inputType, String clientNamespace,
+                                      UnisonWriter writer) {
+        // Use namespaced Config type for accessor functions
+        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        
         if (useS3Url) {
             // S3-specific URL building with bucket routing
-            // Note: Unison uses accessor functions for record fields: Config.endpoint config
+            // Note: Unison uses accessor functions for record fields: Aws.S3.Config.endpoint config
             // Check which label members exist (bucket is required, key is optional for some operations)
             boolean hasBucket = httpLabelMembers.stream()
                     .anyMatch(m -> m.getMemberName().equalsIgnoreCase("bucket"));
@@ -240,12 +244,12 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else {
                 writer.write("key = \"\"");
             }
-            writer.write("endpoint = Config.endpoint config");
-            writer.write("usePathStyle = Config.usePathStyle config");
+            writer.write("endpoint = $L.endpoint config", configType);
+            writer.write("usePathStyle = $L.usePathStyle config", configType);
             writer.write("url = Aws.S3.buildUrl endpoint bucket key usePathStyle");
         } else if (httpLabelMembers.isEmpty()) {
             // No path parameters
-            writer.write("url = (Config.endpoint config) ++ \"$L\"", uri);
+            writer.write("url = ($L.endpoint config) ++ \"$L\"", configType, uri);
         } else {
             // Build URL with path parameter substitution
             writer.write("baseUri = \"$L\"", uri);
@@ -264,7 +268,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 currentUri = nextUri;
             }
             
-            writer.write("url = (Config.endpoint config) ++ $L", currentUri);
+            writer.write("url = ($L.endpoint config) ++ $L", configType, currentUri);
         }
     }
     
