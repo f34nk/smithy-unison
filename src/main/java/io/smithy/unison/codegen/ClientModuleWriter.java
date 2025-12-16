@@ -277,7 +277,7 @@ public final class ClientModuleWriter {
                     writer.writeBlankLine();
                 } else if (enumShape instanceof UnionShape) {
                     // Generate union types as sum types
-                    UnionGenerator generator = new UnionGenerator((UnionShape) enumShape, model);
+                    UnionGenerator generator = new UnionGenerator((UnionShape) enumShape, model, clientNamespace);
                     generator.generate(writer);
                     writer.writeBlankLine();
                 }
@@ -291,7 +291,7 @@ public final class ClientModuleWriter {
             
             for (StructureShape structure : structures) {
                 StructureGenerator generator = new StructureGenerator(
-                    structure, model, context.symbolProvider());
+                    structure, model, context.symbolProvider(), clientNamespace);
                 generator.generate(writer);
                 writer.writeBlankLine();
             }
@@ -307,7 +307,7 @@ public final class ClientModuleWriter {
             
             for (StructureShape error : errors) {
                 StructureGenerator generator = new StructureGenerator(
-                    error, model, context.symbolProvider());
+                    error, model, context.symbolProvider(), clientNamespace);
                 generator.generate(writer);
                 
                 // Generate toFailure function for errors
