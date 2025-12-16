@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    name: Release to Maven Central
+    
+    permissions:
+      contents: write
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Java 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+        cache: 'gradle'
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Releasing version: $VERSION"
+    
+    - name: Update version in build.gradle.kts
+      run: |
+        sed -i "s/version = \".*\"/version = \"${{ steps.version.outputs.version }}\"/" build.gradle.kts
+        cat build.gradle.kts | grep "version ="
+    
+    - name: Make Gradle wrapper executable
+      run: chmod +x gradlew
+    
+    - name: Build
+      run: ./gradlew clean build
+    
+    - name: Import GPG key
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.GPG_PASSPHRASE }}
+    
+    - name: Publish to Maven Central
+      run: ./gradlew publish
+      env:
+        MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+        MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+        GPG_SIGNING_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        GPG_SIGNING_PASSWORD: ${{ secrets.GPG_PASSPHRASE }}
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ steps.version.outputs.version }}
+        draft: false
+        prerelease: false
+        files: |
+          build/libs/smithy-unison-*.jar
+        body: |
+          ## smithy-unison v${{ steps.version.outputs.version }}
+          
+          ### Installation
+          
+          Add to your `smithy-build.json`:
+          ```json
+          {
+            "maven": {
+              "dependencies": [
+                "io.smithy.unison:smithy-unison:${{ steps.version.outputs.version }}"
+              ]
+            }
+          }
+          ```
+          
+          Or add to your build.gradle.kts:
+          ```kotlin
+          dependencies {
+              implementation("io.smithy.unison:smithy-unison:${{ steps.version.outputs.version }}")
+          }
+          ```
