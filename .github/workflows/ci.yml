@@ -2,6 +2,7 @@ name: CI
 
 env:
   SMITHY_VERSION: 1.64.0
+  TERRAFORM_VERSION: 1.10.3
   
 on:
   push:
@@ -47,11 +48,22 @@ jobs:
         cd smithy-cli-linux-x86_64 && ./install --install-dir /usr/local/bin/
         smithy --version
     
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
     
     - name: Run make
       run: make
+    
+    - name: Run demo (generated code against LocalStack)
+      run: make demo
+    
+    - name: Run integration test (Unison Share libs against LocalStack)
+      run: make integration-test
     
     - name: Upload build artifacts
       if: failure()

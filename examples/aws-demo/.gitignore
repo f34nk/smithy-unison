@@ -6,4 +6,4 @@ build/
 model/*.json
 
 .terraform*
-terraform.tfstate
+terraform.tfstate*
