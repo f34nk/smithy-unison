@@ -149,6 +149,48 @@ public final class UnisonSymbolProvider implements SymbolProvider {
     }
     
     /**
+     * Converts a name to a namespaced Unison type name.
+     * 
+     * <p>Prepends the namespace prefix to the type name:
+     * <ul>
+     *   <li>("CreateBucketRequest", "Aws.S3") → "Aws.S3.CreateBucketRequest"</li>
+     *   <li>("Config", "Aws.DynamoDB") → "Aws.DynamoDB.Config"</li>
+     * </ul>
+     *
+     * @param name The base type name
+     * @param namespace The namespace prefix (e.g., "Aws.S3")
+     * @return The fully qualified type name
+     */
+    public static String toNamespacedTypeName(String name, String namespace) {
+        String typeName = toUnisonTypeName(name);
+        if (namespace == null || namespace.isEmpty()) {
+            return typeName;
+        }
+        return namespace + "." + typeName;
+    }
+    
+    /**
+     * Converts a name to a namespaced Unison function name.
+     * 
+     * <p>Prepends the namespace prefix to the function name:
+     * <ul>
+     *   <li>("CreateBucket", "Aws.S3") → "Aws.S3.createBucket"</li>
+     *   <li>("GetItem", "Aws.DynamoDB") → "Aws.DynamoDB.getItem"</li>
+     * </ul>
+     *
+     * @param name The base function name (can be PascalCase or camelCase)
+     * @param namespace The namespace prefix (e.g., "Aws.S3")
+     * @return The fully qualified function name
+     */
+    public static String toNamespacedFunctionName(String name, String namespace) {
+        String funcName = toUnisonFunctionName(name);
+        if (namespace == null || namespace.isEmpty()) {
+            return funcName;
+        }
+        return namespace + "." + funcName;
+    }
+    
+    /**
      * Gets the namespace for symbols.
      */
     private String getNamespace() {
