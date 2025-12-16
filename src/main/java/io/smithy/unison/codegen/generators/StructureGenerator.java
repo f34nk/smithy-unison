@@ -49,6 +49,7 @@ public final class StructureGenerator {
     private final Model model;
     private final StructureShape structure;
     private final SymbolProvider symbolProvider;
+    private final String clientNamespace;
     
     /**
      * Creates a new structure generator.
@@ -61,6 +62,7 @@ public final class StructureGenerator {
         Objects.requireNonNull(context, "context is required");
         this.model = context.model();
         this.symbolProvider = context.symbolProvider();
+        this.clientNamespace = context.settings().getClientNamespace();
     }
     
     /**
@@ -71,9 +73,22 @@ public final class StructureGenerator {
      * @param symbolProvider The symbol provider
      */
     public StructureGenerator(StructureShape structure, Model model, SymbolProvider symbolProvider) {
+        this(structure, model, symbolProvider, "");
+    }
+    
+    /**
+     * Creates a new structure generator with explicit model, symbol provider, and namespace.
+     *
+     * @param structure The structure shape to generate
+     * @param model The Smithy model
+     * @param symbolProvider The symbol provider
+     * @param clientNamespace The client namespace for prefixing types
+     */
+    public StructureGenerator(StructureShape structure, Model model, SymbolProvider symbolProvider, String clientNamespace) {
         this.structure = Objects.requireNonNull(structure, "structure is required");
         this.model = Objects.requireNonNull(model, "model is required");
         this.symbolProvider = Objects.requireNonNull(symbolProvider, "symbolProvider is required");
+        this.clientNamespace = clientNamespace != null ? clientNamespace : "";
     }
     
     /**
@@ -86,12 +101,12 @@ public final class StructureGenerator {
     }
     
     /**
-     * Gets the Unison type name for this structure.
+     * Gets the Unison type name for this structure (namespaced).
      *
-     * @return The type name (PascalCase)
+     * @return The namespaced type name (e.g., "Aws.S3.CreateBucketRequest")
      */
     public String getTypeName() {
-        return UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
+        return UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
     }
     
     /**
@@ -210,12 +225,12 @@ public final class StructureGenerator {
     }
     
     /**
-     * Gets the Unison type for a shape.
+     * Gets the Unison type for a shape (with namespace prefix for complex types).
      */
     private String getUnisonType(Shape shape) {
         if (shape instanceof StringShape) {
             if (shape.hasTrait(EnumTrait.class)) {
-                return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+                return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
             }
             return "Text";
         } else if (shape instanceof IntegerShape || shape instanceof LongShape ||
@@ -249,13 +264,13 @@ public final class StructureGenerator {
             String valueType = getUnisonType(valueShape);
             return "Map " + keyType + " " + valueType;
         } else if (shape instanceof StructureShape) {
-            return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof UnionShape) {
-            return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof EnumShape) {
-            return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof IntEnumShape) {
-            return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         }
         return "a";  // Generic type parameter as fallback
     }

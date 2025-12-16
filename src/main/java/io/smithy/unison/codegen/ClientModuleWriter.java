@@ -41,6 +41,7 @@ public final class ClientModuleWriter {
     private final ServiceShape service;
     private final Model model;
     private final String namespace;
+    private final String clientNamespace;
     private final FileManifest fileManifest;
     private final String outputDir;
     private final UnisonContext context;
@@ -54,9 +55,39 @@ public final class ClientModuleWriter {
         this.service = service;
         this.model = model;
         this.namespace = namespace;
+        this.clientNamespace = context.settings().getClientNamespace();
         this.fileManifest = fileManifest;
         this.outputDir = outputDir;
         this.context = context;
+    }
+    
+    /**
+     * Gets the client namespace for prefixing types and functions.
+     * 
+     * @return The client namespace (e.g., "Aws.S3")
+     */
+    public String getClientNamespace() {
+        return clientNamespace;
+    }
+    
+    /**
+     * Converts a type name to a namespaced type name.
+     * 
+     * @param name The base type name
+     * @return The namespaced type name (e.g., "Aws.S3.Config")
+     */
+    private String getNamespacedTypeName(String name) {
+        return UnisonSymbolProvider.toNamespacedTypeName(name, clientNamespace);
+    }
+    
+    /**
+     * Converts a function name to a namespaced function name.
+     * 
+     * @param name The base function name
+     * @return The namespaced function name (e.g., "Aws.S3.createBucket")
+     */
+    private String getNamespacedFunctionName(String name) {
+        return UnisonSymbolProvider.toNamespacedFunctionName(name, clientNamespace);
     }
     
     /**
@@ -134,7 +165,7 @@ public final class ClientModuleWriter {
         }
         
         // Generate pagination helpers
-        PaginationGenerator paginationGenerator = new PaginationGenerator();
+        PaginationGenerator paginationGenerator = new PaginationGenerator(clientNamespace);
         paginationGenerator.generate(service, model, writer);
         
         // Write to file
@@ -156,18 +187,21 @@ public final class ClientModuleWriter {
      * <p>Used for AWS services that require authentication and S3-style configuration.
      */
     private void generateAwsConfigTypes(UnisonWriter writer) {
+        String configType = getNamespacedTypeName("Config");
+        String credentialsType = getNamespacedTypeName("Credentials");
+        
         writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
-        writer.write("type Config = {");
+        writer.write("type $L = {", configType);
         writer.indent();
         writer.write("endpoint : Text,");
         writer.write("region : Text,");
-        writer.write("credentials : Credentials,");
+        writer.write("credentials : $L,", credentialsType);
         writer.write("usePathStyle : Boolean");
         writer.dedent();
         writer.write("}");
         writer.writeBlankLine();
         
-        writer.write("type Credentials = {");
+        writer.write("type $L = {", credentialsType);
         writer.indent();
         writer.write("accessKeyId : Text,");
         writer.write("secretAccessKey : Text,");
@@ -183,8 +217,10 @@ public final class ClientModuleWriter {
      * <p>Used for services that don't require AWS authentication.
      */
     private void generateGenericConfigType(UnisonWriter writer) {
+        String configType = getNamespacedTypeName("Config");
+        
         writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
-        writer.write("type Config = {");
+        writer.write("type $L = {", configType);
         writer.indent();
         writer.write("endpoint : Text,");
         writer.write("headers : [(Text, Text)]");
@@ -232,7 +268,7 @@ public final class ClientModuleWriter {
             
             for (Shape enumShape : enums) {
                 if (enumShape instanceof EnumShape) {
-                    EnumGenerator generator = new EnumGenerator((EnumShape) enumShape, model);
+                    EnumGenerator generator = new EnumGenerator((EnumShape) enumShape, model, clientNamespace);
                     generator.generate(writer);
                     writer.writeBlankLine();
                 } else if (enumShape instanceof StringShape && enumShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
@@ -241,7 +277,7 @@ public final class ClientModuleWriter {
                     writer.writeBlankLine();
                 } else if (enumShape instanceof UnionShape) {
                     // Generate union types as sum types
-                    UnionGenerator generator = new UnionGenerator((UnionShape) enumShape, model);
+                    UnionGenerator generator = new UnionGenerator((UnionShape) enumShape, model, clientNamespace);
                     generator.generate(writer);
                     writer.writeBlankLine();
                 }
@@ -255,7 +291,7 @@ public final class ClientModuleWriter {
             
             for (StructureShape structure : structures) {
                 StructureGenerator generator = new StructureGenerator(
-                    structure, model, context.symbolProvider());
+                    structure, model, context.symbolProvider(), clientNamespace);
                 generator.generate(writer);
                 writer.writeBlankLine();
             }
@@ -271,7 +307,7 @@ public final class ClientModuleWriter {
             
             for (StructureShape error : errors) {
                 StructureGenerator generator = new StructureGenerator(
-                    error, model, context.symbolProvider());
+                    error, model, context.symbolProvider(), clientNamespace);
                 generator.generate(writer);
                 
                 // Generate toFailure function for errors
@@ -333,7 +369,7 @@ public final class ClientModuleWriter {
      * Generates a toFailure conversion function for an error type.
      */
     private void generateErrorToFailure(StructureShape error, UnisonWriter writer) {
-        String typeName = UnisonSymbolProvider.toUnisonTypeName(error.getId().getName());
+        String typeName = getNamespacedTypeName(error.getId().getName());
         String funcName = typeName + ".toFailure";
         
         writer.writeSignature(funcName, typeName + " -> Failure");
@@ -387,8 +423,9 @@ public final class ClientModuleWriter {
      * Generates an XML parser function for a single structure.
      */
     private void generateXmlParserForStructure(StructureShape structure, UnisonWriter writer) {
-        String typeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
-        String funcName = "parse" + typeName + "FromXml";
+        String typeName = getNamespacedTypeName(structure.getId().getName());
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
+        String funcName = getNamespacedFunctionName("parse" + baseTypeName + "FromXml");
         
         // Write doc comment
         writer.writeDocComment("Parse " + typeName + " from XML text.");
@@ -401,7 +438,8 @@ public final class ClientModuleWriter {
         writer.indent();
         
         // Write constructor call with field extractions
-        writer.write("$L.$L", typeName, typeName);
+        // Use base type name for constructor (Unison namespacing quirk)
+        writer.write("$L", baseTypeName);
         writer.indent();
         
         for (MemberShape member : structure.getAllMembers().values()) {
@@ -428,8 +466,8 @@ public final class ClientModuleWriter {
         
         if (targetShape instanceof StructureShape) {
             // Nested structure - use parser function
-            String nestedTypeName = UnisonSymbolProvider.toUnisonTypeName(targetShape.getId().getName());
-            String parserName = "parse" + nestedTypeName + "FromXml";
+            String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(targetShape.getId().getName());
+            String parserName = getNamespacedFunctionName("parse" + baseTypeName + "FromXml");
             if (isOptional) {
                 return "(Aws.Xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml)";
             } else {
@@ -442,8 +480,8 @@ public final class ClientModuleWriter {
             
             if (memberTarget instanceof StructureShape) {
                 // List of structures
-                String itemTypeName = UnisonSymbolProvider.toUnisonTypeName(memberTarget.getId().getName());
-                String parserName = "parse" + itemTypeName + "FromXml";
+                String baseItemTypeName = UnisonSymbolProvider.toUnisonTypeName(memberTarget.getId().getName());
+                String parserName = getNamespacedFunctionName("parse" + baseItemTypeName + "FromXml");
                 // Get item element name from list member
                 String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
                         + listShape.getMember().getMemberName().substring(1);
@@ -457,7 +495,7 @@ public final class ClientModuleWriter {
                 // List of enums - extract text and convert
                 String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
                         + listShape.getMember().getMemberName().substring(1);
-                String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(memberTarget.getId().getName()) + "FromText";
+                String enumFromText = getNamespacedFunctionName(memberTarget.getId().getName() + "FromText");
                 if (isOptional) {
                     return "(Some (List.filterMap " + enumFromText + " (Aws.Xml.extractAll \"" + itemElementName + "\" xml)))";
                 } else {
@@ -484,7 +522,7 @@ public final class ClientModuleWriter {
         } else if (targetShape instanceof EnumShape || 
                 targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
             // Enum - extract text and convert (check before isStringShape since EnumShape extends StringShape)
-            String enumFromText = UnisonSymbolProvider.toUnisonFunctionName(targetShape.getId().getName()) + "FromText";
+            String enumFromText = getNamespacedFunctionName(targetShape.getId().getName() + "FromText");
             if (isOptional) {
                 return "(Optional.flatMap " + enumFromText + " (Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml))";
             } else {
@@ -540,21 +578,23 @@ public final class ClientModuleWriter {
      * </ul>
      */
     private void generateOperationStub(OperationShape operation, UnisonWriter writer) {
-        String opName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName());
+        String opName = getNamespacedFunctionName(operation.getId().getName());
         
-        // Get input/output type names
+        // Get input/output type names (namespaced)
         String inputType = operation.getInput()
-                .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
+                .map(id -> getNamespacedTypeName(id.getName()))
                 .orElse("()");
         String outputType = operation.getOutput()
-                .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
+                .map(id -> getNamespacedTypeName(id.getName()))
                 .orElse("()");
+        
+        String configType = getNamespacedTypeName("Config");
         
         writer.writeDocComment(operation.getId().getName() + " operation (NOT IMPLEMENTED)\n\n" +
                 "Raises exception on error, returns output directly on success.");
         
         // Exception-based signature: returns output directly, raises on error
-        String signature = String.format("Config -> %s -> '{IO, Exception, Http} %s", inputType, outputType);
+        String signature = String.format("%s -> %s -> '{IO, Exception, Http} %s", configType, inputType, outputType);
         writer.writeSignature(opName, signature);
         
         writer.write("$L config input =", opName);

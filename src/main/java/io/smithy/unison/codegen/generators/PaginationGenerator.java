@@ -62,10 +62,22 @@ public class PaginationGenerator {
     
     private static final Logger LOGGER = Logger.getLogger(PaginationGenerator.class.getName());
     
+    private final String clientNamespace;
+    
     /**
-     * Creates a new PaginationGenerator.
+     * Creates a new PaginationGenerator without namespace.
      */
     public PaginationGenerator() {
+        this("");
+    }
+    
+    /**
+     * Creates a new PaginationGenerator with namespace.
+     *
+     * @param clientNamespace The client namespace for prefixing types
+     */
+    public PaginationGenerator(String clientNamespace) {
+        this.clientNamespace = clientNamespace != null ? clientNamespace : "";
     }
     
     /**
@@ -127,20 +139,24 @@ public class PaginationGenerator {
         }
         
         PaginatedTrait pagination = paginatedTrait.get();
-        String opName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName());
+        String opName = UnisonSymbolProvider.toNamespacedFunctionName(
+                operation.getId().getName(), clientNamespace);
         
         // Get pagination configuration
         String inputToken = pagination.getInputToken().orElse("continuationToken");
         String outputToken = pagination.getOutputToken().orElse("nextContinuationToken");
         String items = pagination.getItems().orElse("contents");
         
-        // Get input/output types
+        // Get input/output types with namespace
         String inputType = operation.getInput()
-                .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
+                .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
         String outputType = operation.getOutput()
-                .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
+                .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
+        
+        // Config type with namespace
+        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
         
         // Get the item type from the output structure
         String itemsField = UnisonSymbolProvider.toUnisonFunctionName(items);
@@ -163,7 +179,8 @@ public class PaginationGenerator {
                 if (itemsShape instanceof ListShape) {
                     ListShape listShape = (ListShape) itemsShape;
                     Shape memberShape = model.expectShape(listShape.getMember().getTarget());
-                    itemType = UnisonSymbolProvider.toUnisonTypeName(memberShape.getId().getName());
+                    itemType = UnisonSymbolProvider.toNamespacedTypeName(
+                            memberShape.getId().getName(), clientNamespace);
                 }
             }
         }
@@ -173,10 +190,10 @@ public class PaginationGenerator {
             "Automatically fetches all pages and collects all items from the '" + items + "' field.\n" +
             "Uses '" + inputToken + "' as input token and '" + outputToken + "' as output token.");
         
-        // Function signature with concrete item type
+        // Function signature with concrete item type and namespaced types
         // Note: HTTP operations use {IO, Exception, Threads} abilities for real HTTP via @unison/http
         String helperName = opName + "All";
-        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception, Threads} [" + itemType + "]");
+        writer.writeSignature(helperName, configType + " -> " + inputType + " -> '{IO, Exception, Threads} [" + itemType + "]");
         
         writer.write("$L config input =", helperName);
         writer.indent();

@@ -19,7 +19,7 @@ build: init
 	# Build AWS SDK models
 	#
 	./generate.py
-	tree -h output/*/src
+	tree -h output/*/generated
 	
 .PHONY: clean
 clean:

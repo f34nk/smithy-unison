@@ -105,6 +105,44 @@ public final class UnisonSettings {
         return Optional.ofNullable(protocol);
     }
     
+    /**
+     * Gets the Unison namespace for client types and operations.
+     * 
+     * <p>Converts the dot-separated namespace to PascalCase segments:
+     * <ul>
+     *   <li>"aws.s3" → "Aws.S3"</li>
+     *   <li>"aws.dynamodb" → "Aws.DynamoDB"</li>
+     *   <li>"aws.lambda" → "Aws.Lambda"</li>
+     * </ul>
+     * 
+     * @return The client namespace prefix, or empty string if no namespace configured
+     */
+    public String getClientNamespace() {
+        if (namespace == null || namespace.isEmpty()) {
+            return "";
+        }
+        
+        // Split by dot and convert each segment to PascalCase
+        String[] parts = namespace.split("\\.");
+        StringBuilder result = new StringBuilder();
+        
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (part.isEmpty()) {
+                continue;
+            }
+            // Capitalize first letter of each segment
+            result.append(Character.toUpperCase(part.charAt(0)));
+            result.append(part.substring(1));
+            
+            if (i < parts.length - 1) {
+                result.append(".");
+            }
+        }
+        
+        return result.toString();
+    }
+    
     public static Builder builder() {
         return new Builder();
     }

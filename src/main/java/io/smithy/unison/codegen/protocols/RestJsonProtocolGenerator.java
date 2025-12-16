@@ -46,7 +46,9 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     @Override
     public void generateOperation(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         // TODO: Implement REST-JSON operation generation
-        String opName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName());
+        String clientNamespace = context.settings().getClientNamespace();
+        String opName = UnisonSymbolProvider.toNamespacedFunctionName(
+                operation.getId().getName(), clientNamespace);
         writer.writeComment("REST-JSON operation: " + opName + " (NOT IMPLEMENTED)");
     }
     

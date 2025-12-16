@@ -49,7 +49,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
     @Override
     public void generateOperation(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         // TODO: Implement AWS JSON operation generation
-        String opName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName());
+        String clientNamespace = context.settings().getClientNamespace();
+        String opName = UnisonSymbolProvider.toNamespacedFunctionName(
+                operation.getId().getName(), clientNamespace);
         writer.writeComment("AWS JSON " + version + " operation: " + opName + " (NOT IMPLEMENTED)");
     }
     

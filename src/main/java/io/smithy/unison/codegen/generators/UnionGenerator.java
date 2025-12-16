@@ -55,6 +55,8 @@ public final class UnionGenerator {
     private static final Logger LOGGER = Logger.getLogger(UnionGenerator.class.getName());
     
     private final String typeName;
+    private final String namespacedTypeName;
+    private final String clientNamespace;
     private final String documentation;
     private final List<UnionVariant> variants;
     
@@ -84,10 +86,24 @@ public final class UnionGenerator {
      * @param model The Smithy model
      */
     public UnionGenerator(UnionShape union, Model model) {
+        this(union, model, "");
+    }
+    
+    /**
+     * Creates a union generator from a Smithy UnionShape with namespace.
+     *
+     * @param union The union shape to generate
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace for prefixing
+     */
+    public UnionGenerator(UnionShape union, Model model, String clientNamespace) {
         Objects.requireNonNull(union, "union is required");
         Objects.requireNonNull(model, "model is required");
         
         this.typeName = UnisonSymbolProvider.toUnisonTypeName(union.getId().getName());
+        this.clientNamespace = clientNamespace != null ? clientNamespace : "";
+        this.namespacedTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                union.getId().getName(), this.clientNamespace);
         this.documentation = union.getTrait(DocumentationTrait.class)
                 .map(DocumentationTrait::getValue)
                 .orElse(null);
@@ -102,18 +118,32 @@ public final class UnionGenerator {
      * @param documentation Optional documentation
      */
     public UnionGenerator(String typeName, List<UnionVariant> variants, String documentation) {
+        this(typeName, variants, documentation, "");
+    }
+    
+    /**
+     * Creates a union generator with explicit values and namespace.
+     *
+     * @param typeName The type name
+     * @param variants The union variants
+     * @param documentation Optional documentation
+     * @param clientNamespace The client namespace for prefixing
+     */
+    public UnionGenerator(String typeName, List<UnionVariant> variants, String documentation, String clientNamespace) {
         this.typeName = Objects.requireNonNull(typeName, "typeName is required");
+        this.clientNamespace = clientNamespace != null ? clientNamespace : "";
+        this.namespacedTypeName = UnisonSymbolProvider.toNamespacedTypeName(typeName, this.clientNamespace);
         this.variants = Objects.requireNonNull(variants, "variants is required");
         this.documentation = documentation;
     }
     
     /**
-     * Gets the Unison type name for this union.
+     * Gets the Unison type name for this union (namespaced).
      *
-     * @return The PascalCase type name
+     * @return The namespaced type name (e.g., "Aws.S3.StorageType")
      */
     public String getTypeName() {
-        return typeName;
+        return namespacedTypeName;
     }
     
     /**
@@ -126,13 +156,13 @@ public final class UnionGenerator {
     }
     
     /**
-     * Gets the full variant name for a member.
+     * Gets the full variant name for a member (using namespaced type).
      *
      * @param memberName The member name
-     * @return The full variant name (TypeName'MemberName)
+     * @return The full variant name (Namespace.TypeName'MemberName)
      */
     public String getVariantName(String memberName) {
-        return UnisonSymbolProvider.toUnisonEnumVariant(typeName, memberName);
+        return UnisonSymbolProvider.toUnisonEnumVariant(namespacedTypeName, memberName);
     }
     
     /**
@@ -147,7 +177,7 @@ public final class UnionGenerator {
     }
     
     /**
-     * Generates the union type definition.
+     * Generates the union type definition with namespaced type name.
      *
      * @param writer The writer to output code to
      */
@@ -164,8 +194,8 @@ public final class UnionGenerator {
             writerVariants.add(new UnisonWriter.Variant(variantName, variant.payloadType()));
         }
         
-        // Write union type
-        writer.writeUnionType(typeName, writerVariants);
+        // Write union type with namespaced name
+        writer.writeUnionType(namespacedTypeName, writerVariants);
     }
     
     /**
@@ -206,11 +236,11 @@ public final class UnionGenerator {
     }
     
     /**
-     * Gets the Unison type for a Smithy shape.
+     * Gets the Unison type for a Smithy shape (with namespace prefix for complex types).
      */
     private String getUnisonType(Shape shape) {
         if (shape.isStructureShape()) {
-            return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape.isStringShape()) {
             return "Text";
         } else if (shape.isIntegerShape() || shape.isLongShape() ||
@@ -229,9 +259,9 @@ public final class UnionGenerator {
         } else if (shape.isMapShape()) {
             return "Map Text a";  // Generic map for now
         } else if (shape.isUnionShape()) {
-            return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         }
-        // Default to the shape's type name
-        return UnisonSymbolProvider.toUnisonTypeName(shape.getId().getName());
+        // Default to the shape's namespaced type name
+        return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
     }
 }
