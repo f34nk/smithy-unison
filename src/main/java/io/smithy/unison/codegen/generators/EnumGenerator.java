@@ -65,6 +65,8 @@ public final class EnumGenerator {
     private static final Logger LOGGER = Logger.getLogger(EnumGenerator.class.getName());
     
     private final String typeName;
+    private final String namespacedTypeName;
+    private final String clientNamespace;
     private final List<EnumValue> enumValues;
     private final String documentation;
     
@@ -91,7 +93,7 @@ public final class EnumGenerator {
      * Creates an enum generator from a StringShape with @enum trait (Smithy 1.0).
      *
      * @param enumShape The string shape with @enum trait
-     * @param context The code generation context (unused but kept for API compatibility)
+     * @param context The code generation context
      * @throws IllegalArgumentException if the shape doesn't have EnumTrait
      */
     public EnumGenerator(StringShape enumShape, UnisonContext context) {
@@ -102,6 +104,9 @@ public final class EnumGenerator {
         }
         
         this.typeName = UnisonSymbolProvider.toUnisonTypeName(enumShape.getId().getName());
+        this.clientNamespace = context.settings().getClientNamespace();
+        this.namespacedTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                enumShape.getId().getName(), clientNamespace);
         this.enumValues = extractEnumTraitValues(enumShape);
         this.documentation = enumShape.getTrait(DocumentationTrait.class)
             .map(DocumentationTrait::getValue)
@@ -115,10 +120,24 @@ public final class EnumGenerator {
      * @param model The Smithy model
      */
     public EnumGenerator(EnumShape enumShape, Model model) {
+        this(enumShape, model, "");
+    }
+    
+    /**
+     * Creates an enum generator from a Smithy 2.0 EnumShape with namespace.
+     *
+     * @param enumShape The Smithy 2.0 enum shape
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace for prefixing
+     */
+    public EnumGenerator(EnumShape enumShape, Model model, String clientNamespace) {
         Objects.requireNonNull(enumShape, "enumShape is required");
         Objects.requireNonNull(model, "model is required");
         
         this.typeName = UnisonSymbolProvider.toUnisonTypeName(enumShape.getId().getName());
+        this.clientNamespace = clientNamespace != null ? clientNamespace : "";
+        this.namespacedTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                enumShape.getId().getName(), this.clientNamespace);
         this.enumValues = extractEnumShapeValues(enumShape);
         this.documentation = enumShape.getTrait(DocumentationTrait.class)
             .map(DocumentationTrait::getValue)
@@ -133,7 +152,21 @@ public final class EnumGenerator {
      * @param documentation Optional documentation
      */
     public EnumGenerator(String typeName, List<EnumValue> values, String documentation) {
+        this(typeName, values, documentation, "");
+    }
+    
+    /**
+     * Creates an enum generator with explicit values and namespace.
+     *
+     * @param typeName The type name
+     * @param values The enum values
+     * @param documentation Optional documentation
+     * @param clientNamespace The client namespace for prefixing
+     */
+    public EnumGenerator(String typeName, List<EnumValue> values, String documentation, String clientNamespace) {
         this.typeName = Objects.requireNonNull(typeName, "typeName is required");
+        this.clientNamespace = clientNamespace != null ? clientNamespace : "";
+        this.namespacedTypeName = UnisonSymbolProvider.toNamespacedTypeName(typeName, this.clientNamespace);
         this.enumValues = Objects.requireNonNull(values, "values is required");
         this.documentation = documentation;
     }
@@ -157,13 +190,22 @@ public final class EnumGenerator {
     }
     
     /**
-     * Gets the full variant name for an enum value.
+     * Gets the full variant name for an enum value (namespaced).
      *
      * @param valueName The value name
-     * @return The full variant name (TypeName'ValueName)
+     * @return The full variant name (Namespace.TypeName'ValueName)
      */
     public String getVariantName(String valueName) {
-        return UnisonSymbolProvider.toUnisonEnumVariant(typeName, valueName);
+        return UnisonSymbolProvider.toUnisonEnumVariant(namespacedTypeName, valueName);
+    }
+    
+    /**
+     * Gets the namespaced type name.
+     *
+     * @return The namespaced type name (e.g., "Aws.S3.BucketLocationConstraint")
+     */
+    public String getNamespacedTypeName() {
+        return namespacedTypeName;
     }
     
     /**
@@ -190,49 +232,47 @@ public final class EnumGenerator {
             writer.writeDocComment(documentation);
         }
         
-        // Build variants list
+        // Build variants list using namespaced type name
         List<UnisonWriter.Variant> variants = new ArrayList<>();
         for (EnumValue value : enumValues) {
             String variantName = getVariantName(value.name());
             variants.add(new UnisonWriter.Variant(variantName, null));  // No payload for enum variants
         }
         
-        // Write union type
-        writer.writeUnionType(typeName, variants);
+        // Write union type with namespaced name
+        writer.writeUnionType(namespacedTypeName, variants);
     }
     
     /**
-     * Generates the toText conversion function.
+     * Generates the toText conversion function with namespaced name.
      *
      * @param writer The writer to output code to
      */
     public void generateToTextFunction(UnisonWriter writer) {
-        String funcName = UnisonSymbolProvider.toUnisonFunctionName(typeName) + "ToText";
-        
         // Build match cases
         List<UnisonWriter.EnumMapping> mappings = new ArrayList<>();
         for (EnumValue value : enumValues) {
             mappings.add(new UnisonWriter.EnumMapping(value.name(), value.wireValue()));
         }
         
-        writer.writeEnumToTextFunction(typeName, mappings);
+        // Use namespaced type name for function generation
+        writer.writeEnumToTextFunction(namespacedTypeName, mappings);
     }
     
     /**
-     * Generates the fromText conversion function.
+     * Generates the fromText conversion function with namespaced name.
      *
      * @param writer The writer to output code to
      */
     public void generateFromTextFunction(UnisonWriter writer) {
-        String funcName = UnisonSymbolProvider.toUnisonFunctionName(typeName) + "FromText";
-        
         // Build match cases
         List<UnisonWriter.EnumMapping> mappings = new ArrayList<>();
         for (EnumValue value : enumValues) {
             mappings.add(new UnisonWriter.EnumMapping(value.name(), value.wireValue()));
         }
         
-        writer.writeEnumFromTextFunction(typeName, mappings);
+        // Use namespaced type name for function generation
+        writer.writeEnumFromTextFunction(namespacedTypeName, mappings);
     }
     
     /**

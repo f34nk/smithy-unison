@@ -268,7 +268,7 @@ public final class ClientModuleWriter {
             
             for (Shape enumShape : enums) {
                 if (enumShape instanceof EnumShape) {
-                    EnumGenerator generator = new EnumGenerator((EnumShape) enumShape, model);
+                    EnumGenerator generator = new EnumGenerator((EnumShape) enumShape, model, clientNamespace);
                     generator.generate(writer);
                     writer.writeBlankLine();
                 } else if (enumShape instanceof StringShape && enumShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
