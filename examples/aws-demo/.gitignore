@@ -4,3 +4,6 @@
 # Build artifacts
 build/
 model/*.json
+
+.terraform*
+terraform.tfstate*
