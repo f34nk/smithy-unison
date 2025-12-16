@@ -568,21 +568,22 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             // Simple payload extraction - use positional arguments
             MemberShape payload = payloadMember.get();
             Shape targetShape = model.expectShape(payload.getTarget());
-            String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(
-                    output.getId().getName(), clientNamespace);
+            // Use base type name for constructor (Unison namespacing quirk)
+            String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
+                    output.getId().getName());
             boolean isOptional = !payload.isRequired();
             
             if (targetShape.isBlobShape()) {
                 if (isOptional) {
-                    writer.write("$L.$L (Some (Response.body response))", outputTypeName, outputTypeName);
+                    writer.write("$L (Some (Response.body response))", outputTypeName);
                 } else {
-                    writer.write("$L.$L (Response.body response)", outputTypeName, outputTypeName);
+                    writer.write("$L (Response.body response)", outputTypeName);
                 }
             } else if (targetShape.isStringShape()) {
                 if (isOptional) {
-                    writer.write("$L.$L (Some (Aws.Http.bytesToText (Response.body response)))", outputTypeName, outputTypeName);
+                    writer.write("$L (Some (Aws.Http.bytesToText (Response.body response)))", outputTypeName);
                 } else {
-                    writer.write("$L.$L (Aws.Http.bytesToText (Response.body response))", outputTypeName, outputTypeName);
+                    writer.write("$L (Aws.Http.bytesToText (Response.body response))", outputTypeName);
                 }
             } else {
                 // Structure payload - generate XML parsing
@@ -590,9 +591,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             }
         } else if (bodyMembers.isEmpty()) {
             // No body content expected - return empty record using constructor
-            // Record constructor is just the type name (e.g., Aws.S3.DeleteObjectOutput)
-            String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(
-                    operation.getOutput().get().getName(), clientNamespace);
+            // Use base type name for constructor (Unison namespacing quirk)
+            String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
+                    operation.getOutput().get().getName());
             writer.write("-- No body content expected");
             writer.write("$L", outputTypeName);
         } else {
@@ -701,8 +702,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                                                    List<MemberShape> bodyMembers,
                                                    String clientNamespace,
                                                    UnisonWriter writer) {
-        String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(
-                output.getId().getName(), clientNamespace);
+        // Use base type name for constructor (Unison namespacing quirk)
+        String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
+                output.getId().getName());
         
         // Build a map of member name to value expression
         // Use 'Val' suffix on local variables to avoid name clash with accessor functions
@@ -881,8 +883,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
      */
     private void generateXmlResponseParsing(StructureShape output, List<MemberShape> bodyMembers, 
             Model model, String clientNamespace, UnisonWriter writer) {
-        String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(
-                output.getId().getName(), clientNamespace);
+        // Use base type name for constructor (Unison namespacing quirk)
+        String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
+                output.getId().getName());
         
         // Convert response body to text
         writer.write("xmlText = fromUtf8 (Response.body response)");

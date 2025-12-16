@@ -438,8 +438,8 @@ public final class ClientModuleWriter {
         writer.indent();
         
         // Write constructor call with field extractions
-        // Record constructor is just the type name (e.g., Aws.S3.DeleteObjectTaggingOutput)
-        writer.write("$L", typeName);
+        // Use base type name for constructor (Unison namespacing quirk)
+        writer.write("$L", baseTypeName);
         writer.indent();
         
         for (MemberShape member : structure.getAllMembers().values()) {
