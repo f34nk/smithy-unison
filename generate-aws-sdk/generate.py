@@ -23,7 +23,7 @@ import time
 INPUT_PATH = "api-models-aws-main/models"
 OUTPUT_PATH = "output"
 MODEL_DIRNAME = "model"
-GENERATED_DIRNAME = "src"
+GENERATED_DIRNAME = "generated"
 BUILD_DIRNAME = "build"
 
 
@@ -74,8 +74,10 @@ def generate(sdk_id: str, index: int = 0, total: int = 0):
         result["model"] = source_path
         result["key"] = key
 
-        model_name = key.split("#")[1]
+        # model_name = key.split("#")[1].split("_")[0]
+        model_name = key.split("#")[0].split(".")[-1]
         module_name = snake_case(model_name)
+        namespace = "aws." + module_name
 
         build_json = {
             "version": "1.0",
@@ -96,7 +98,8 @@ def generate(sdk_id: str, index: int = 0, total: int = 0):
             "plugins": {
                 "unison-codegen": {
                     "service": key,
-                    "module": module_name,
+                    "name": model_name,
+                    "namespace": namespace,
                     "outputDir": GENERATED_DIRNAME,
                 }
             },
