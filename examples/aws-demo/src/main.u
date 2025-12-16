@@ -18,15 +18,28 @@ use lib.f34nk_aws_0_1_2 DeleteObjectRequest DeleteObjectOutput
 use lib.f34nk_aws_0_1_2 listBuckets putObject listObjectsV2 getObject deleteObject
 
 -- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  value = getEnv name
+  if Text.isEmpty value then default else value
+
+-- =============================================================================
 -- Configuration
 -- =============================================================================
 
--- Create S3 client configuration for Moto
--- Use 'moto' hostname as it's the Docker Compose service name
-defaultConfig : Config
-defaultConfig = 
-  creds = Credentials.Credentials "dummy" "dummy" None
-  Config.Config "http://moto:5050" "us-east-1" creds true
+-- Create S3 client configuration for LocalStack
+defaultConfig : '{IO, Exception} Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  Config.Config endpoint region creds true
 
 -- Test bucket name - created by terraform provisioner in docker-compose
 testBucket : Text
@@ -61,7 +74,7 @@ runDemo = do
   printLine "╚══════════════════════════════════════════╝"
   printLine ""
   
-  config = defaultConfig
+  config = !defaultConfig
   printLine ("Endpoint: " ++ Config.endpoint config)
   printLine ("Region: " ++ Config.region config)
   printLine ("Bucket: " ++ testBucket)
