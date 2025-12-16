@@ -590,11 +590,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             }
         } else if (bodyMembers.isEmpty()) {
             // No body content expected - return empty record using constructor
-            // For empty records like "type X = X", we construct with just "X"
+            // Record constructor is just the type name (e.g., Aws.S3.DeleteObjectOutput)
             String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(
                     operation.getOutput().get().getName(), clientNamespace);
             writer.write("-- No body content expected");
-            writer.write("$L.$L", outputTypeName, outputTypeName);
+            writer.write("$L", outputTypeName);
         } else {
             // Has body members - generate XML parsing
             generateXmlResponseParsing(output, bodyMembers, model, clientNamespace, writer);
@@ -748,11 +748,12 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         }
         
         // Write the constructor call with positional arguments
+        // Record constructor is just the type name (e.g., Aws.S3.GetObjectOutput)
         if (args.isEmpty()) {
-            writer.write("$L.$L", outputTypeName, outputTypeName);
+            writer.write("$L", outputTypeName);
         } else {
             StringBuilder sb = new StringBuilder();
-            sb.append(outputTypeName).append(".").append(outputTypeName);
+            sb.append(outputTypeName);
             for (String arg : args) {
                 sb.append(" ").append(arg);
             }
@@ -902,7 +903,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         }
         
         // Construct the output record with extracted values
-        writer.write("$L.$L", outputTypeName, outputTypeName);
+        // Record constructor is just the type name (e.g., Aws.S3.ListObjectsV2Output)
+        writer.write("$L", outputTypeName);
         writer.indent();
         for (int i = 0; i < allMembers.size(); i++) {
             MemberShape member = allMembers.get(i);

@@ -438,7 +438,8 @@ public final class ClientModuleWriter {
         writer.indent();
         
         // Write constructor call with field extractions
-        writer.write("$L.$L", typeName, typeName);
+        // Record constructor is just the type name (e.g., Aws.S3.DeleteObjectTaggingOutput)
+        writer.write("$L", typeName);
         writer.indent();
         
         for (MemberShape member : structure.getAllMembers().values()) {
