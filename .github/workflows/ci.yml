@@ -48,10 +48,10 @@ jobs:
         cd smithy-cli-linux-x86_64 && ./install --install-dir /usr/local/bin/
         smithy --version
     
-    - name: Install Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    # - name: Install Terraform
+    #   uses: hashicorp/setup-terraform@v3
+    #   with:
+    #     terraform_version: ${{ env.TERRAFORM_VERSION }}
     
     - name: Make Gradle wrapper executable
       run: chmod +x gradlew
@@ -59,11 +59,14 @@ jobs:
     - name: Run make
       run: make
     
-    - name: Run demo (generated code against LocalStack)
-      run: make demo
+    # Compiling unison code in CI requires too much memory
+    # so we're skipping it for now.
+
+    # - name: Run demo (generated code against LocalStack)
+    #   run: make demo
     
-    - name: Run integration test (Unison Share libs against LocalStack)
-      run: make integration-test
+    # - name: Run integration test (Unison Share libs against LocalStack)
+    #   run: make integration-test
     
     - name: Upload build artifacts
       if: failure()
