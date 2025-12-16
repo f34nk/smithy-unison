@@ -1,10 +1,12 @@
 {
   "version": "1.0",
-  "sources": ["model"],
+  "sources": ["model/dynamodb-2012-08-10.json"],
   "maven": {
     "dependencies": [
-      "software.amazon.smithy:smithy-model:1.64.0",
       "software.amazon.smithy:smithy-aws-traits:1.64.0",
+      "software.amazon.smithy:smithy-aws-endpoints:1.64.0",
+      "software.amazon.smithy:smithy-aws-smoke-test-model:1.64.0",
+      "software.amazon.smithy:smithy-aws-iam-traits:1.64.0",
       "io.smithy.unison:smithy-unison:0.1.0"
     ],
     "repositories": [
@@ -18,8 +20,8 @@
   },
   "plugins": {
     "unison-codegen": {
-      "service": "com.amazonaws.s3#AmazonS3",
-      "namespace": "aws.s3",
+      "service": "com.amazonaws.dynamodb#DynamoDB_20120810",
+      "module": "dynamo_db_20120810",
       "outputDir": "generated"
     }
   }

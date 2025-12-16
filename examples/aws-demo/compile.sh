@@ -108,6 +108,14 @@ scratch/main> load generated/aws_s3_client.u
 scratch/main> add
 \`\`\`
 
+Load the generated DynamoDB client:
+
+\`\`\`ucm
+scratch/main> load generated/dynamo_db_20120810_client.u
+scratch/main> add
+\`\`\`
+
+
 Create namespace aliases so main.u can use lib.f34nk_aws_0_1_2 imports:
 
 \`\`\`ucm
