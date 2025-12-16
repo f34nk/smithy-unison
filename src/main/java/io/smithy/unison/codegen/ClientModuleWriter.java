@@ -165,7 +165,7 @@ public final class ClientModuleWriter {
         }
         
         // Generate pagination helpers
-        PaginationGenerator paginationGenerator = new PaginationGenerator();
+        PaginationGenerator paginationGenerator = new PaginationGenerator(clientNamespace);
         paginationGenerator.generate(service, model, writer);
         
         // Write to file
