@@ -4,6 +4,17 @@
 
 ### Added
 
+#### AWS JSON Protocol Request Serialization
+- Implemented request serialization for AWS JSON 1.0/1.1 protocols
+- Generate JSON request body serializers for all operation inputs
+- Support for primitive types (string, boolean, integer, float)
+- Support for complex types (lists, maps, nested structures)
+- Support for optional fields with null filtering
+- Support for blob types with Base64 encoding
+- Support for timestamp types with ISO-8601 formatting
+- Support for enum types with text conversion
+- Respect `@jsonName` trait for custom field names
+
 #### Runtime Module Copier Updates
 - Added `AWS_JSON` and `AWS_JSON_BRIDGE` to available runtime modules
 - Automatic copying of JSON modules for JSON-based AWS protocols (AWS JSON 1.0/1.1, REST-JSON)

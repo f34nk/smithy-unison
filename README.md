@@ -26,8 +26,11 @@ Reference: https://smithy.io/2.0/index.html
   - HTTP binding traits: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
   - Request serialization / Response deserialization
   - Error parsing
+- **AWS JSON 1.0/1.1 protocols** (DynamoDB, Lambda, Kinesis) - Partial
+  - Request serialization (JSON encoding)
+  - Response deserialization (planned)
+  - Error parsing (planned)
 - REST-JSON protocol (planned)
-- AWS JSON 1.0/1.1 protocols (planned)
 - AWS Query / EC2 Query protocols (planned)
 
 ### AWS Authentication
