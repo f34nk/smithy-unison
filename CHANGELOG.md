@@ -4,6 +4,14 @@
 
 ### Added
 
+#### JSON Bridge Module
+- `aws_json_bridge.u` runtime module for JSON-HTTP integration
+- Request serialization functions (`serializeJsonRequest`, `jsonToRequestBody`)
+- Response deserialization functions (`deserializeJsonResponse`, `responseBodyToJson`)
+- AWS JSON error parsing (`parseJsonError`, `extractErrorType`, `extractErrorMessage`)
+- DynamoDB-specific helpers (`parseItemFromJson`, `serializeItemToJson`, `parseKeyFromJson`, `parseItemsFromJson`)
+- Comprehensive unit tests for bridge functionality
+
 #### JSON Runtime Module
 - `aws_json.u` runtime module with JSON serialization/deserialization
 - `JsonValue` type for representing JSON data structures

@@ -130,6 +130,7 @@ For AWS services, additional runtime modules are copied:
 - `aws_sigv4.u` - AWS Signature V4 request signing
 - `aws_xml.u` - XML encoding/decoding (REST-XML protocol only)
 - `aws_json.u` - JSON encoding/decoding with DynamoDB AttributeValue support
+- `aws_json_bridge.u` - JSON-HTTP integration for AWS JSON protocols
 - `aws_http.u` - HTTP request/response utilities
 - `aws_http_bridge.u` - Bridge for @unison/http library (enables real HTTP)
 - `aws_s3.u` - S3-specific URL routing (S3 only)
