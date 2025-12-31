@@ -4,6 +4,11 @@
 
 ### Added
 
+#### Runtime Module Copier Updates
+- Added `AWS_JSON` and `AWS_JSON_BRIDGE` to available runtime modules
+- Automatic copying of JSON modules for JSON-based AWS protocols (AWS JSON 1.0/1.1, REST-JSON)
+- Protocol-aware runtime module selection in `copyAwsModulesForProtocol`
+
 #### JSON Bridge Module
 - `aws_json_bridge.u` runtime module for JSON-HTTP integration
 - Request serialization functions (`serializeJsonRequest`, `jsonToRequestBody`)
