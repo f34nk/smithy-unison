@@ -75,6 +75,7 @@ demo: clean build
 	# Run the examples/aws-demo against a mocked S3 bucket
 	#
 	cd examples/aws-demo && \
+	make clean && \
 	make test
 
 .PHONY: integration-test
@@ -84,4 +85,5 @@ integration-test:
 	# run the examples/aws-demo against a mocked S3 bucket
 	#
 	cd examples/aws-demo && \
+	make clean && \
 	make integration-test

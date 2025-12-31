@@ -16,7 +16,7 @@ generate: model/s3-2006-03-01.json
 
 .PHONY: clean
 clean:
-	rm -rf generated/*.u ./build
+	rm -rf generated/*.u ./build .ucm
 	rm -f compiled/main.uc
 	rm -f model/*.json
 	rm -rf terraform/.terraform
