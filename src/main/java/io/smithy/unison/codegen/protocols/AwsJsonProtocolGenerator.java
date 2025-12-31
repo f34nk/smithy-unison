@@ -129,34 +129,75 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("");
         writer.write("-- Serialize request to JSON");
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
+        String bodyVar;
         if (inputShape.isPresent() && !inputShape.get().getAllMembers().isEmpty()) {
             String serializerName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
             writer.write("bodyJson = $L input", serializerName);
-            writer.write("body = Aws.Json.Bridge.jsonToRequestBody bodyJson");
+            writer.write("bodyText = Aws.Json.Bridge.jsonToRequestBody bodyJson");
+            bodyVar = "bodyText";
         } else {
-            writer.write("body = \"{}\"");
+            writer.write("bodyText = \"{}\"");
+            bodyVar = "bodyText";
         }
+        writer.write("bodyBytes = Text.toUtf8 $L", bodyVar);
         
-        // Sign request (placeholder)
-        writer.write("signedHeaders = headers");
+        // Sign request with SigV4
+        writer.write("");
+        writer.write("-- Sign request with AWS Signature Version 4");
+        writer.write("region = $L.region config", configType);
+        writer.write("credentials = $L.credentials config", configType);
+        // Extract service name for signing (lowercase, without version suffix)
+        String signingServiceName = extractSigningServiceName(serviceName);
+        writer.write("signedHeaders = !(Aws.SigV4.signRequest");
+        writer.indent();
+        writer.write("credentials");
+        writer.write("region");
+        writer.write("\"$L\"", signingServiceName);
+        writer.write("method");
+        writer.write("url");
+        writer.write("headers");
+        writer.write("bodyBytes");
+        writer.dedent();
+        writer.write(")");
         
         // Make HTTP request
         writer.write("");
         writer.write("-- Make HTTP request");
-        writer.write("response = !(executeRequest (Http.Request.$L url signedHeaders body))", method.toLowerCase());
+        writer.write("request = Http.Request.post url signedHeaders bodyBytes");
+        writer.write("response = !(executeRequest request)");
         
-        // Handle response
+        // Handle response - check status and parse
         writer.write("");
-        writer.write("-- Check for errors and parse response");
-        writer.write("_ = handleHttpResponse response");
+        writer.write("-- Handle response based on status code");
+        writer.write("statusCode = Http.Response.statusCode response");
+        writer.write("if Nat.lt statusCode 300 then");
+        writer.indent();
         
-        // Parse response
+        // Success - parse response
         if (operation.getOutput().isPresent()) {
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
             writer.write("$L response", parserName);
         } else {
             writer.write("()");
         }
+        
+        writer.dedent();
+        writer.write("else");
+        writer.indent();
+        
+        // Error - parse error and raise exception
+        writer.write("-- Parse error response");
+        writer.write("serviceError = parseError response");
+        // Remove "Service" suffix from service name to avoid "DynamoDBServiceServiceError"
+        String errorServiceName = serviceName.endsWith("Service") 
+                ? serviceName.substring(0, serviceName.length() - 7)
+                : serviceName;
+        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                errorServiceName + "ServiceError", clientNamespace);
+        writer.write("failure = $L.toFailure serviceError", errorTypeName);
+        writer.write("Exception.raise failure");
+        
+        writer.dedent();
         
         writer.dedent();
         writer.writeBlankLine();
@@ -219,6 +260,22 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         return member.getTrait(JsonNameTrait.class)
                 .map(JsonNameTrait::getValue)
                 .orElse(member.getMemberName());
+    }
+    
+    /**
+     * Extracts the service name for SigV4 signing from the full service name.
+     * 
+     * <p>AWS service names in models often include version suffixes (e.g., DynamoDB_20120810),
+     * but SigV4 signing uses the lowercase base service name (e.g., "dynamodb").
+     * 
+     * @param serviceName The full service name (e.g., "DynamoDB_20120810")
+     * @return The signing service name (e.g., "dynamodb")
+     */
+    private String extractSigningServiceName(String serviceName) {
+        // Remove version suffix (e.g., "_20120810")
+        String baseName = serviceName.replaceAll("_\\d+$", "");
+        // Convert to lowercase for signing
+        return baseName.toLowerCase();
     }
     
     /**

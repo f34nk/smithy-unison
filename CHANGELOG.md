@@ -4,6 +4,16 @@
 
 ### Added
 
+#### AWS JSON Protocol Operation Generation
+- Enhanced operation generation for AWS JSON 1.0/1.1 protocols with complete implementation
+- Proper X-Amz-Target header formation using service name and operation name
+- AWS Signature Version 4 (SigV4) request signing integration
+- Explicit status code checking (2xx for success, 4xx/5xx for errors)
+- JSON request body serialization with proper Content-Type headers
+- Service-specific error handling using generated parseError and toFailure functions
+- Dynamic service name extraction for signing (removes version suffixes)
+- Support for operations with and without input/output structures
+
 #### AWS JSON Protocol Error Parsing
 - Implemented error parsing for AWS JSON 1.0/1.1 protocols
 - Generate `parseError` function for each service
