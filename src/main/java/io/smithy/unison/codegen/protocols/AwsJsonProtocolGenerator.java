@@ -7,6 +7,7 @@ import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.*;
 import software.amazon.smithy.model.traits.JsonNameTrait;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -289,7 +290,168 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
     
     @Override
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement AWS JSON response deserialization
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        Optional<StructureShape> outputShape = ProtocolUtils.getOutputShape(operation, model);
+        if (outputShape.isEmpty()) {
+            return; // No response body to parse
+        }
+        
+        StructureShape output = outputShape.get();
+        String outputType = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
+        String functionName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+        
+        writer.writeComment("Parse " + output.getId().getName() + " from AWS JSON response");
+        writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
+        writer.write("$L response =", functionName);
+        writer.indent();
+        
+        // Parse JSON from response body
+        writer.write("-- Parse JSON response body");
+        writer.write("bodyText = Aws.Http.bytesToText (Response.body response)");
+        writer.write("json = !(Aws.Json.parseJson bodyText)");
+        writer.write("");
+        
+        // Extract each field from JSON
+        List<MemberShape> members = output.getAllMembers().values().stream().toList();
+        if (!members.isEmpty()) {
+            writer.write("-- Extract fields from JSON");
+            for (MemberShape member : members) {
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                String varName = memberName + "Val";
+                String jsonName = getJsonName(member);
+                
+                generateFieldExtraction(member, model, clientNamespace, jsonName, varName, writer);
+            }
+            writer.write("");
+        }
+        
+        // Construct output using base type name (Unison constructor resolution)
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
+        writer.write("-- Construct output structure");
+        
+        // Build positional arguments in member order
+        List<String> args = new ArrayList<>();
+        for (MemberShape member : members) {
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            args.add(memberName + "Val");
+        }
+        
+        if (args.isEmpty()) {
+            writer.write("$L", baseTypeName);
+        } else {
+            writer.write("$L $L", baseTypeName, String.join(" ", args));
+        }
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates code to extract a field from JSON and convert to Unison type.
+     */
+    private void generateFieldExtraction(MemberShape member, Model model, String clientNamespace,
+                                          String jsonName, String varName, UnisonWriter writer) {
+        Shape target = model.expectShape(member.getTarget());
+        
+        if (member.isRequired()) {
+            // Required field - extract and convert, raising exception if missing
+            String extraction = generateJsonExtraction(target, "json", jsonName, model, clientNamespace);
+            writer.write("$L = match $L with", varName, extraction);
+            writer.indent();
+            writer.write("Some value -> value");
+            writer.write("None -> Exception.raise (Failure (typeLink Generic) \"Missing required field: $L\" (Any ()))", jsonName);
+            writer.dedent();
+        } else {
+            // Optional field - return Optional value
+            String extraction = generateJsonExtraction(target, "json", jsonName, model, clientNamespace);
+            writer.write("$L = $L", varName, extraction);
+        }
+    }
+    
+    /**
+     * Generates Unison expression to extract and convert a JSON field to a target type.
+     * Returns Optional value for all types.
+     */
+    private String generateJsonExtraction(Shape target, String jsonVar, String fieldName,
+                                           Model model, String clientNamespace) {
+        if (target.isStringShape()) {
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> Some s; _ -> None)",
+                    fieldName, jsonVar);
+        } else if (target.isBooleanShape()) {
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonBoolean b -> Some b; _ -> None)",
+                    fieldName, jsonVar);
+        } else if (target.isIntegerShape() || target.isLongShape() || target.isShortShape() || target.isByteShape()) {
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonNumber n -> Some (Float.truncate n); _ -> None)",
+                    fieldName, jsonVar);
+        } else if (target.isFloatShape() || target.isDoubleShape()) {
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonNumber n -> Some n; _ -> None)",
+                    fieldName, jsonVar);
+        } else if (target.isBlobShape()) {
+            // Base64 decode
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> Bytes.fromBase64 s; _ -> None)",
+                    fieldName, jsonVar);
+        } else if (target.isListShape()) {
+            ListShape listShape = target.asListShape().get();
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            String elemConversion = generateJsonValueConversion(memberTarget, "elem", model, clientNamespace);
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonArray arr -> Some (List.filterMap (elem -> %s) arr); _ -> None)",
+                    fieldName, jsonVar, elemConversion);
+        } else if (target.isMapShape()) {
+            MapShape mapShape = target.asMapShape().get();
+            Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonObject obj -> Some (Map.fromList (List.filterMap (cases (k, v) -> Optional.map (val -> (k, val)) (%s)) obj)); _ -> None)",
+                    fieldName, jsonVar, valueConversion);
+        } else if (target.isStructureShape()) {
+            // Nested structure - need recursive parser
+            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap %s",
+                    fieldName, jsonVar, parserName);
+        } else if (target.isEnumShape()) {
+            // Enum - parse from text
+            String fromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(target.getId().getName() + "FromText", clientNamespace);
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> %s s; _ -> None)",
+                    fieldName, jsonVar, fromTextFn);
+        } else if (target.isTimestampShape()) {
+            // Timestamp from ISO-8601 string
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> Instant.fromText s; _ -> None)",
+                    fieldName, jsonVar);
+        } else {
+            // Fallback: try to parse as string
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> Some s; _ -> None)",
+                    fieldName, jsonVar);
+        }
+    }
+    
+    /**
+     * Generates Unison expression to convert a JsonValue to a target type.
+     * Used for list elements and map values. Returns Optional value.
+     */
+    private String generateJsonValueConversion(Shape target, String varName, Model model, String clientNamespace) {
+        if (target.isStringShape()) {
+            return String.format("(cases Aws.Json.JsonString s -> Some s; _ -> None) %s", varName);
+        } else if (target.isBooleanShape()) {
+            return String.format("(cases Aws.Json.JsonBoolean b -> Some b; _ -> None) %s", varName);
+        } else if (target.isIntegerShape() || target.isLongShape() || target.isShortShape() || target.isByteShape()) {
+            return String.format("(cases Aws.Json.JsonNumber n -> Some (Float.truncate n); _ -> None) %s", varName);
+        } else if (target.isFloatShape() || target.isDoubleShape()) {
+            return String.format("(cases Aws.Json.JsonNumber n -> Some n; _ -> None) %s", varName);
+        } else if (target.isBlobShape()) {
+            return String.format("(cases Aws.Json.JsonString s -> Bytes.fromBase64 s; _ -> None) %s", varName);
+        } else if (target.isStructureShape()) {
+            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            return String.format("%s %s", parserName, varName);
+        } else if (target.isEnumShape()) {
+            String fromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(target.getId().getName() + "FromText", clientNamespace);
+            return String.format("(cases Aws.Json.JsonString s -> %s s; _ -> None) %s", fromTextFn, varName);
+        } else if (target.isTimestampShape()) {
+            return String.format("(cases Aws.Json.JsonString s -> Instant.fromText s; _ -> None) %s", varName);
+        } else {
+            // Fallback
+            return String.format("(cases Aws.Json.JsonString s -> Some s; _ -> None) %s", varName);
+        }
     }
     
     @Override

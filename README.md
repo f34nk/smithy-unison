@@ -28,7 +28,7 @@ Reference: https://smithy.io/2.0/index.html
   - Error parsing
 - **AWS JSON 1.0/1.1 protocols** (DynamoDB, Lambda, Kinesis) - Partial
   - Request serialization (JSON encoding)
-  - Response deserialization (planned)
+  - Response deserialization (JSON decoding)
   - Error parsing (planned)
 - REST-JSON protocol (planned)
 - AWS Query / EC2 Query protocols (planned)

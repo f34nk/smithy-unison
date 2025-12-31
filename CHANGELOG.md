@@ -4,6 +4,18 @@
 
 ### Added
 
+#### AWS JSON Protocol Response Deserialization
+- Implemented response deserialization for AWS JSON 1.0/1.1 protocols
+- Generate JSON response parsers for all operation outputs
+- Support for primitive types (string, boolean, integer, float)
+- Support for complex types (lists, maps, nested structures)
+- Support for optional fields with missing value handling
+- Support for blob types with Base64 decoding
+- Support for timestamp types with ISO-8601 parsing
+- Support for enum types with fromText conversion
+- Required field validation with exception raising
+- Respect `@jsonName` trait for custom field names
+
 #### AWS JSON Protocol Request Serialization
 - Implemented request serialization for AWS JSON 1.0/1.1 protocols
 - Generate JSON request body serializers for all operation inputs
