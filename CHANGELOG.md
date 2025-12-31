@@ -4,6 +4,13 @@
 
 ### Added
 
+#### JSON Runtime Module
+- `aws_json.u` runtime module with JSON serialization/deserialization
+- `JsonValue` type for representing JSON data structures
+- DynamoDB `AttributeValue` type with tagged union format support
+- JSON object builders and accessors for field extraction
+- Comprehensive unit tests for JSON parsing and AttributeValue conversion
+
 #### Library Publishing Support
 - `compile-with-lib.sh` script for compiling using published `@f34nk/aws` library
 - Namespace aliases in `compile.sh` for portable demo code
