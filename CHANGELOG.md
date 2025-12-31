@@ -4,6 +4,16 @@
 
 ### Added
 
+#### AWS JSON Protocol Error Parsing
+- Implemented error parsing for AWS JSON 1.0/1.1 protocols
+- Generate `parseError` function for each service
+- Parse `__type` field from JSON error responses
+- Extract error message from `message` or `Message` fields
+- Handle both full format (`com.amazon.coral#ErrorName`) and short format (`ErrorName`)
+- Map error types to service error variants using `fromCodeAndMessage`
+- Fallback to `UnknownError` for unrecognized error types
+- Leverage runtime helpers: `extractErrorType` and `extractErrorMessage`
+
 #### AWS JSON Protocol Response Deserialization
 - Implemented response deserialization for AWS JSON 1.0/1.1 protocols
 - Generate JSON response parsers for all operation outputs

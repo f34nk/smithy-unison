@@ -29,7 +29,7 @@ Reference: https://smithy.io/2.0/index.html
 - **AWS JSON 1.0/1.1 protocols** (DynamoDB, Lambda, Kinesis) - Partial
   - Request serialization (JSON encoding)
   - Response deserialization (JSON decoding)
-  - Error parsing (planned)
+  - Error parsing (JSON error responses with `__type` field)
 - REST-JSON protocol (planned)
 - AWS Query / EC2 Query protocols (planned)
 

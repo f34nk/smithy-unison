@@ -456,7 +456,46 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
     
     @Override
     public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement AWS JSON error parsing
-        writer.writeComment("AWS JSON error parsing (NOT IMPLEMENTED)");
+        ServiceShape service = context.serviceShape();
+        String clientNamespace = context.settings().getClientNamespace();
+        String serviceName = service.getId().getName();
+        
+        // Remove "Service" suffix if present to avoid "DynamoDBServiceServiceError"
+        if (serviceName.endsWith("Service")) {
+            serviceName = serviceName.substring(0, serviceName.length() - 7);
+        }
+        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                serviceName + "ServiceError", clientNamespace);
+        
+        writer.writeDocComment("Parse AWS JSON error response\n\n" +
+                "Extracts __type and message fields from JSON error response.\n" +
+                "Handles both full format (com.amazon.coral#ErrorName) and short format (ErrorName).");
+        writer.writeSignature("parseError", "Http.Response -> " + errorTypeName);
+        writer.write("parseError response =");
+        writer.indent();
+        
+        // Parse error body
+        writer.write("errorBody = Aws.Http.bytesToText (Response.body response)");
+        writer.write("json = match Aws.Json.parseJson errorBody with");
+        writer.indent();
+        writer.write("Right j -> j");
+        writer.write("Left _ -> Aws.Json.JsonObject []");
+        writer.dedent();
+        writer.write("");
+        
+        // Extract error type and message using runtime helpers
+        writer.write("-- Extract error type (handles both full and short formats)");
+        writer.write("errorType = Aws.Json.Bridge.extractErrorType json");
+        writer.write("errorMessage = Aws.Json.Bridge.extractErrorMessage json");
+        writer.write("");
+        
+        // Convert to service error type using fromCodeAndMessage
+        writer.write("-- Map to service error type");
+        writer.write("code = Optional.getOrElse \"UnknownError\" errorType");
+        writer.write("message = Optional.getOrElse \"\" errorMessage");
+        writer.write("$L.fromCodeAndMessage code message", errorTypeName);
+        
+        writer.dedent();
+        writer.writeBlankLine();
     }
 }
