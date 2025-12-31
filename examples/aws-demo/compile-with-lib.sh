@@ -1,5 +1,11 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+UCM_INSTALL_DIR="$SCRIPT_DIR/.ucm"
+UCM_BIN="$UCM_INSTALL_DIR/ucm"
+
 CODEBASE=$(mktemp -d)
 OUTPUT_FILE="$(pwd)/compiled/main"
 
@@ -18,7 +24,8 @@ EOF
 # Replace placeholder with actual path
 sed -i '' "s|OUTPUT_FILE|$OUTPUT_FILE|" /tmp/compile.md
 
-ucm -C "$CODEBASE" transcript /tmp/compile.md
+$UCM_BIN -C "$CODEBASE" transcript /tmp/compile.md
+
 EXIT_CODE=$?
 rm -rf "$CODEBASE"
 exit $EXIT_CODE

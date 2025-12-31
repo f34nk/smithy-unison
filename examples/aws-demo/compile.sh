@@ -9,7 +9,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# UCM version (must match docker-compose.yaml)
 UCM_INSTALL_DIR="$SCRIPT_DIR/.ucm"
 UCM_BIN="$UCM_INSTALL_DIR/ucm"
 

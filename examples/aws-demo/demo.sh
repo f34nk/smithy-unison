@@ -1,19 +1,23 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+UCM_INSTALL_DIR="$SCRIPT_DIR/.ucm"
+UCM_BIN="$UCM_INSTALL_DIR/ucm"
+
 export AWS_ACCESS_KEY_ID=dummy
 export AWS_SECRET_ACCESS_KEY=dummy
 export AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT=http://localhost:4566
 
-# Docker entrypoint script
-# Runs pre-compiled Unison code against Moto mock S3
 
 echo "=== Starting Unison S3 Demo ==="
 echo ""
 
 # Show UCM version
-echo "UCM version: $(ucm version 2>&1)"
+echo "UCM version: $($UCM_BIN version 2>&1)"
 echo ""
 
 # Verify compiled code exists
@@ -39,7 +43,7 @@ echo ""
 echo "=== Running S3 Demo ==="
 echo ""
 
-ucm run.compiled compiled/main.uc
+$UCM_BIN run.compiled compiled/main.uc
 
 echo ""
 echo "=== Demo Complete ==="
