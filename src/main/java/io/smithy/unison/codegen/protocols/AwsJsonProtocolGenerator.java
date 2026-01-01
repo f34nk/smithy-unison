@@ -341,8 +341,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             // Base64 encode bytes
             return "Aws.Json.JsonValue.JsonString (Bytes.toBase64 " + varName + ")";
         } else if (shape.isTimestampShape()) {
-            // Timestamp as ISO-8601 string (AWS JSON default)
-            return "Aws.Json.JsonValue.JsonString (Instant.toText " + varName + ")";
+            // Timestamp is generated as Text in structures, just wrap in JSON string
+            return "Aws.Json.JsonValue.JsonString " + varName;
         } else if (shape.isListShape()) {
             ListShape listShape = shape.asListShape().get();
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
@@ -489,8 +489,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("Aws.Json.getFieldAsString \"%s\" %s |> Optional.flatMap Bytes.fromBase64",
                     fieldName, jsonVar);
         } else if (target.isTimestampShape()) {
-            // Timestamp from ISO-8601 string
-            return String.format("Aws.Json.getFieldAsString \"%s\" %s |> Optional.flatMap Instant.fromText",
+            // Timestamp is generated as Text in structures, just extract string
+            return String.format("Aws.Json.getFieldAsString \"%s\" %s",
                     fieldName, jsonVar);
         } else if (target.isListShape()) {
             ListShape listShape = target.asListShape().get();
@@ -551,7 +551,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else if (target.isBlobShape()) {
             return String.format("Aws.Json.jsonValueToString %s |> Optional.flatMap Bytes.fromBase64", varName);
         } else if (target.isTimestampShape()) {
-            return String.format("Aws.Json.jsonValueToString %s |> Optional.flatMap Instant.fromText", varName);
+            // Timestamp is generated as Text in structures, just extract string
+            return String.format("Aws.Json.jsonValueToString %s", varName);
         } else if (target.isListShape()) {
             // List - convert array elements recursively
             ListShape listShape = target.asListShape().get();
