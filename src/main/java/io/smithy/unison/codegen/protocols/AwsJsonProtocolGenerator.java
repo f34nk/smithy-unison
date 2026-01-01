@@ -5,6 +5,7 @@ import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.*;
+import software.amazon.smithy.model.traits.DefaultTrait;
 import software.amazon.smithy.model.traits.JsonNameTrait;
 
 import java.util.ArrayList;
@@ -310,7 +311,10 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         Shape target = model.expectShape(member.getTarget());
         
-        if (member.isRequired()) {
+        // Check if field is non-optional (required or has default) - matches StructureGenerator logic
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
             return generateJsonValue(target, accessor, model, clientNamespace);
         } else {
             // Optional field - map to JsonValue, defaulting to JsonNull
@@ -445,7 +449,10 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                                           String jsonName, String varName, UnisonWriter writer) {
         Shape target = model.expectShape(member.getTarget());
         
-        if (member.isRequired()) {
+        // Check if field is non-optional (required or has default) - matches StructureGenerator logic
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
             // Required field - extract and convert, raising exception if missing
             String extraction = generateJsonExtraction(target, "json", jsonName, model, clientNamespace);
             writer.write("$L = match $L with", varName, extraction);
