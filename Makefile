@@ -33,8 +33,7 @@ test/runtime:
 	# Run runtime tests
 	#
 	cd runtime-tests && \
-	make && \
-	make test
+	make
 
 .PHONY: clean
 clean:

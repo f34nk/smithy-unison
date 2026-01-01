@@ -3,7 +3,7 @@
 UCM_VERSION ?= 1.0.0
 
 .PHONY: all
-all: clean copy install
+all: clean copy test
 
 .PHONY: copy
 copy:
@@ -16,17 +16,10 @@ copy:
 
 .PHONY: clean
 clean:
-	rm -rf src/*.u ./build .ucm *.output.md
-
-.PHONY: install
-install:
-	#
-	# Install UCM $(UCM_VERSION) from GitHub if needed
-	#
-	UCM_VERSION=$(UCM_VERSION) ./install.sh
+	rm -rf src/*.u ./build *.output.md
 
 .PHONY: test
-test: copy
+test:
 	#
 	# Run runtime tests
 	#
