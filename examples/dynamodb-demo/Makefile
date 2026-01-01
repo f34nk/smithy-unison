@@ -19,10 +19,10 @@ clean:
 	rm -rf generated/*.u ./build .ucm
 	rm -f compiled/main.uc
 	rm -f model/*.json
-	# rm -rf terraform/.terraform
-	# rm -f terraform/.terraform.lock.hcl
-	# rm -f terraform/terraform.tfstate
-	# rm -f terraform/terraform.tfstate.backup
+	rm -rf terraform/.terraform
+	rm -f terraform/.terraform.lock.hcl
+	rm -f terraform/terraform.tfstate
+	rm -f terraform/terraform.tfstate.backup
 
 .PHONY: install
 install:
