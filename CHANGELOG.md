@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+#### Namespace Naming Convention
+- Migrated all Unison namespaces from PascalCase to lowercase per Unison conventions
+- Namespace format: `aws.json`, `aws.xml`, `aws.http`, `aws.sigv4`, `aws.config`, `aws.credentials`, `aws.s3`
+- Type names remain PascalCase within lowercase namespaces (e.g., `aws.sigv4.Credentials`, `aws.sigv4.SigningConfig`)
+- Updated all runtime modules, test files, and code generators to use new naming convention
+
 ### Added
 
 #### AWS JSON Protocol Full Implementation
