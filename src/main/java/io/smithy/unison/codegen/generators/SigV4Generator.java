@@ -19,9 +19,9 @@ import io.smithy.unison.codegen.UnisonWriter;
  * 
  * <h2>Generated Types</h2>
  * <ul>
- *   <li>{@code aws.credentials} - AWS access credentials</li>
- *   <li>{@code aws.signingconfig} - Signing configuration</li>
- *   <li>{@code aws.credentialscope} - Credential scope for signing</li>
+ *   <li>{@code aws.sigv4.Credentials} - AWS access credentials</li>
+ *   <li>{@code aws.sigv4.SigningConfig} - Signing configuration</li>
+ *   <li>{@code aws.sigv4.CredentialScope} - Credential scope for signing</li>
  * </ul>
  * 
  * <h2>Generated Functions</h2>
@@ -85,7 +85,7 @@ public class SigV4Generator {
             "Contains the access key ID, secret access key, and optional session token\n" +
             "for temporary credentials (e.g., from STS AssumeRole).");
         
-        writer.write("type aws.credentials = {");
+        writer.write("type aws.sigv4.Credentials = {");
         writer.indent();
         writer.write("accessKeyId : Text,");
         writer.write("secretAccessKey : Text,");
@@ -96,19 +96,19 @@ public class SigV4Generator {
         
         // Constructor helper
         writer.writeDocComment("Create credentials without a session token.");
-        writer.writeSignature("aws.credentials.basic", "Text -> Text -> aws.credentials");
-        writer.write("aws.credentials.basic accessKey secretKey =");
+        writer.writeSignature("aws.sigv4.Credentials.basic", "Text -> Text -> aws.sigv4.Credentials");
+        writer.write("aws.sigv4.Credentials.basic accessKey secretKey =");
         writer.indent();
-        writer.write("aws.credentials accessKey secretKey None");
+        writer.write("aws.sigv4.Credentials.Credentials accessKey secretKey None");
         writer.dedent();
         writer.writeBlankLine();
         
         // Constructor with session token
         writer.writeDocComment("Create credentials with a session token (for temporary credentials).");
-        writer.writeSignature("aws.credentials.withSessionToken", "Text -> Text -> Text -> aws.credentials");
-        writer.write("aws.credentials.withSessionToken accessKey secretKey token =");
+        writer.writeSignature("aws.sigv4.Credentials.withSessionToken", "Text -> Text -> Text -> aws.sigv4.Credentials");
+        writer.write("aws.sigv4.Credentials.withSessionToken accessKey secretKey token =");
         writer.indent();
-        writer.write("aws.credentials accessKey secretKey (Some token)");
+        writer.write("aws.sigv4.Credentials.Credentials accessKey secretKey (Some token)");
         writer.dedent();
         writer.writeBlankLine();
     }
@@ -121,11 +121,11 @@ public class SigV4Generator {
             "Configuration for signing AWS requests.\n\n" +
             "Contains the region, service name, and credentials needed for signing.");
         
-        writer.write("type aws.signingconfig = {");
+        writer.write("type aws.sigv4.SigningConfig = {");
         writer.indent();
         writer.write("region : Text,");
         writer.write("service : Text,");
-        writer.write("credentials : aws.credentials");
+        writer.write("credentials : aws.sigv4.Credentials");
         writer.dedent();
         writer.write("}");
         writer.writeBlankLine();
@@ -139,7 +139,7 @@ public class SigV4Generator {
             "Credential scope for AWS SigV4 signing.\n\n" +
             "Format: YYYYMMDD/region/service/aws4_request");
         
-        writer.write("type aws.credentialscope = {");
+        writer.write("type aws.sigv4.CredentialScope = {");
         writer.indent();
         writer.write("date : Text,");
         writer.write("region : Text,");
@@ -150,8 +150,8 @@ public class SigV4Generator {
         
         // toText function
         writer.writeDocComment("Convert credential scope to string format: YYYYMMDD/region/service/aws4_request");
-        writer.writeSignature("aws.credentialscope.toText", "aws.credentialscope -> Text");
-        writer.write("aws.credentialscope.toText scope =");
+        writer.writeSignature("aws.sigv4.CredentialScope.toText", "aws.sigv4.CredentialScope -> Text");
+        writer.write("aws.sigv4.CredentialScope.toText scope =");
         writer.indent();
         writer.write("scope.date ++ \"/\" ++ scope.region ++ \"/\" ++ scope.service ++ \"/aws4_request\"");
         writer.dedent();
@@ -303,13 +303,13 @@ public class SigV4Generator {
             "  CredentialScope\\n\n" +
             "  HashedCanonicalRequest");
         
-        writer.writeSignature("aws.sigv4.stringToSign", "Text -> aws.credentialscope -> Text -> Text");
+        writer.writeSignature("aws.sigv4.stringToSign", "Text -> aws.sigv4.CredentialScope -> Text -> Text");
         writer.write("aws.sigv4.stringToSign timestamp scope canonicalRequest =");
         writer.indent();
         writer.write("let");
         writer.indent();
         writer.write("hashedCanonicalRequest = hashBytes Sha2_256 (Text.toUtf8 canonicalRequest) |> Bytes.toHex");
-        writer.write("credentialScope = aws.credentialscope.toText scope");
+        writer.write("credentialScope = aws.sigv4.CredentialScope.toText scope");
         writer.dedent();
         writer.writeWithNoFormatting("Text.join \"\\n\" [");
         writer.indent();
@@ -377,12 +377,12 @@ public class SigV4Generator {
             "Format:\n" +
             "  AWS4-HMAC-SHA256 Credential=accessKey/scope,SignedHeaders=headers,Signature=sig");
         
-        writer.writeSignature("aws.sigv4.authorizationHeader", "Text -> aws.credentialscope -> Text -> Text -> Text");
+        writer.writeSignature("aws.sigv4.authorizationHeader", "Text -> aws.sigv4.CredentialScope -> Text -> Text -> Text");
         writer.write("aws.sigv4.authorizationHeader accessKeyId scope signedHeaders signature =");
         writer.indent();
         writer.write("let");
         writer.indent();
-        writer.write("credential = accessKeyId ++ \"/\" ++ aws.credentialscope.toText scope");
+        writer.write("credential = accessKeyId ++ \"/\" ++ aws.sigv4.CredentialScope.toText scope");
         writer.dedent();
         writer.writeWithNoFormatting("\"AWS4-HMAC-SHA256 Credential=\" ++ credential ++ \",SignedHeaders=\" ++ signedHeaders ++ \",Signature=\" ++ signature");
         writer.dedent();
@@ -409,7 +409,7 @@ public class SigV4Generator {
             "- headers: Request headers as name-value pairs\n" +
             "- body: Request body bytes");
         
-        writer.writeSignature("aws.sigv4.signRequest", "aws.signingconfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]");
+        writer.writeSignature("aws.sigv4.signRequest", "aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]");
         writer.write("aws.sigv4.signRequest config method path queryString headers body _ =");
         writer.indent();
         writer.write("let");
@@ -419,7 +419,7 @@ public class SigV4Generator {
         writer.write("dateStamp = aws.sigv4.getDateStamp timestamp");
         writer.writeBlankLine();
         writer.write("-- Build credential scope");
-        writer.write("scope = aws.credentialscope dateStamp config.region config.service");
+        writer.write("scope = aws.sigv4.CredentialScope dateStamp config.region config.service");
         writer.writeBlankLine();
         writer.write("-- Hash payload");
         writer.write("payloadHash = aws.sigv4.hashPayload body");
@@ -474,7 +474,7 @@ public class SigV4Generator {
             "Convenience function that signs the request and merges the signing\n" +
             "headers with the original headers.");
         
-        writer.writeSignature("aws.sigv4.addSigningHeaders", "aws.signingconfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]");
+        writer.writeSignature("aws.sigv4.addSigningHeaders", "aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]");
         writer.write("aws.sigv4.addSigningHeaders config method path queryString headers body _ =");
         writer.indent();
         writer.write("let");

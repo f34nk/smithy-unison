@@ -134,7 +134,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         if (inputShape.isPresent() && !inputShape.get().getAllMembers().isEmpty()) {
             String serializerName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
             writer.write("bodyJson = $L input", serializerName);
-            writer.write("bodyText = aws.json.Bridge.jsonToRequestBody bodyJson");
+            writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
             bodyVar = "bodyText";
         } else {
             writer.write("bodyText = \"{}\"");
@@ -147,14 +147,14 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("-- Sign request with AWS Signature Version 4");
         writer.write("region = $L.region config", configType);
         writer.write("creds = $L.credentials config", configType);
-        writer.write("-- Convert to Aws.Credentials for signing");
+        writer.write("-- Convert to aws.sigv4.Credentials for signing");
         String credsType = UnisonSymbolProvider.toNamespacedTypeName("Credentials", clientNamespace);
-        writer.write("awsCreds = Aws.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
+        writer.write("awsCreds = aws.sigv4.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
             credsType, credsType, credsType);
         // Extract service name for signing (lowercase, without version suffix)
         String signingServiceName = extractSigningServiceName(serviceName);
-        writer.write("signingConfig = Aws.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
-        writer.write("allHeaders = !(Aws.SigV4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
+        writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
         
         // Make HTTP request
         writer.write("");
@@ -552,7 +552,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         // Parse JSON from response body
         writer.write("-- Parse JSON response body");
-        writer.write("bodyText = Aws.Http.bytesToText (Response.body response)");
+        writer.write("bodyText = aws.http.bytesToText (Response.body response)");
         writer.write("json = !(aws.json.parseJson bodyText)");
         writer.write("");
         
@@ -764,7 +764,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.indent();
         
         // Parse error body
-        writer.write("errorBody = Aws.Http.bytesToText (Response.body response)");
+        writer.write("errorBody = aws.http.bytesToText (Response.body response)");
         writer.write("json = match catch do !(aws.json.parseJson errorBody) with");
         writer.indent();
         writer.write("Right j -> j");
@@ -774,8 +774,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         // Extract error type and message using runtime helpers
         writer.write("-- Extract error type (handles both full and short formats)");
-        writer.write("errorType = aws.json.Bridge.extractErrorType json");
-        writer.write("errorMessage = aws.json.Bridge.extractErrorMessage json");
+        writer.write("errorType = aws.json.bridge.extractErrorType json");
+        writer.write("errorMessage = aws.json.bridge.extractErrorMessage json");
         writer.write("");
         
         // Convert to service error type using fromCodeAndMessage

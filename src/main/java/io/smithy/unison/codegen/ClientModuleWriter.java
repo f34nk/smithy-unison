@@ -312,7 +312,7 @@ public final class ClientModuleWriter {
                         generator.generate(writer);
                         writer.writeBlankLine();
                     } else {
-                        LOGGER.fine("Skipping AttributeValue union generation - using runtime type Aws.Json.AttributeValue");
+                        LOGGER.fine("Skipping AttributeValue union generation - using runtime type aws.json.AttributeValue");
                     }
                 }
             }
@@ -573,8 +573,8 @@ public final class ClientModuleWriter {
      * parseBucketFromXml : Text -> Bucket
      * parseBucketFromXml xml =
      *   Bucket.Bucket
-     *     (Aws.Xml.extractElementOpt "BucketArn" xml)
-     *     (Aws.Xml.extractElementOpt "BucketRegion" xml)
+     *     (aws.xml.extractElementOpt "BucketArn" xml)
+     *     (aws.xml.extractElementOpt "BucketRegion" xml)
      *     ...
      * </pre>
      */
@@ -671,10 +671,10 @@ public final class ClientModuleWriter {
             String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(targetShape.getId().getName());
             String parserName = getNamespacedFunctionName("parse" + baseTypeName + "FromXml");
             if (isOptional) {
-                return "(Aws.Xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml)";
+                return "(aws.xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml)";
             } else {
                 // Required nested structure - parse and extract, bug if missing
-                return "(Optional.getOrElse (bug \"Required nested field '" + xmlElementName + "' not found\") (Aws.Xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml))";
+                return "(Optional.getOrElse (bug \"Required nested field '" + xmlElementName + "' not found\") (aws.xml.parseNestedFromXml \"" + xmlElementName + "\" " + parserName + " xml))";
             }
         } else if (targetShape instanceof ListShape) {
             ListShape listShape = (ListShape) targetShape;
@@ -688,9 +688,9 @@ public final class ClientModuleWriter {
                 String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
                         + listShape.getMember().getMemberName().substring(1);
                 if (isOptional) {
-                    return "(Aws.Xml.parseOptionalWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
+                    return "(aws.xml.parseOptionalWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
                 } else {
-                    return "(Aws.Xml.parseWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
+                    return "(aws.xml.parseWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
                 }
             } else if (memberTarget instanceof EnumShape || 
                     memberTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
@@ -699,9 +699,9 @@ public final class ClientModuleWriter {
                         + listShape.getMember().getMemberName().substring(1);
                 String enumFromText = getNamespacedFunctionName(memberTarget.getId().getName() + "FromText");
                 if (isOptional) {
-                    return "(Some (List.filterMap " + enumFromText + " (Aws.Xml.extractAll \"" + itemElementName + "\" xml)))";
+                    return "(Some (List.filterMap " + enumFromText + " (aws.xml.extractAll \"" + itemElementName + "\" xml)))";
                 } else {
-                    return "(List.filterMap " + enumFromText + " (Aws.Xml.extractAll \"" + itemElementName + "\" xml))";
+                    return "(List.filterMap " + enumFromText + " (aws.xml.extractAll \"" + itemElementName + "\" xml))";
                 }
             } else if (memberTarget.isStringShape()) {
                 // List of strings (plain, not enums)
@@ -709,9 +709,9 @@ public final class ClientModuleWriter {
                         + listShape.getMember().getMemberName().substring(1);
                 if (isOptional) {
                     // Use Optional.some with list - if empty we still return Some []
-                    return "(Some (Aws.Xml.extractAll \"" + itemElementName + "\" xml))";
+                    return "(Some (aws.xml.extractAll \"" + itemElementName + "\" xml))";
                 } else {
-                    return "(Aws.Xml.extractAll \"" + itemElementName + "\" xml)";
+                    return "(aws.xml.extractAll \"" + itemElementName + "\" xml)";
                 }
             } else {
                 // Fallback for other list types
@@ -726,37 +726,37 @@ public final class ClientModuleWriter {
             // Enum - extract text and convert (check before isStringShape since EnumShape extends StringShape)
             String enumFromText = getNamespacedFunctionName(targetShape.getId().getName() + "FromText");
             if (isOptional) {
-                return "(Optional.flatMap " + enumFromText + " (Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml))";
+                return "(Optional.flatMap " + enumFromText + " (aws.xml.extractElementOpt \"" + xmlElementName + "\" xml))";
             } else {
                 // Required enum - extract text and convert, crash if missing or invalid
-                return "(Optional.getOrElse (bug \"Required enum field '" + xmlElementName + "' not found or invalid\") (" + enumFromText + " (Aws.Xml.extractElement \"" + xmlElementName + "\" xml)))";
+                return "(Optional.getOrElse (bug \"Required enum field '" + xmlElementName + "' not found or invalid\") (" + enumFromText + " (aws.xml.extractElement \"" + xmlElementName + "\" xml)))";
             }
         } else if (targetShape.isStringShape()) {
             // Plain string (not enum)
             if (isOptional) {
-                return "(Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml)";
+                return "(aws.xml.extractElementOpt \"" + xmlElementName + "\" xml)";
             } else {
-                return "(Aws.Xml.extractElement \"" + xmlElementName + "\" xml)";
+                return "(aws.xml.extractElement \"" + xmlElementName + "\" xml)";
             }
         } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
             if (isOptional) {
-                return "(Aws.Xml.extractInt \"" + xmlElementName + "\" xml)";
+                return "(aws.xml.extractInt \"" + xmlElementName + "\" xml)";
             } else {
-                return "(Optional.getOrElse +0 (Aws.Xml.extractInt \"" + xmlElementName + "\" xml))";
+                return "(Optional.getOrElse +0 (aws.xml.extractInt \"" + xmlElementName + "\" xml))";
             }
         } else if (targetShape.isBooleanShape()) {
             if (isOptional) {
-                return "(Aws.Xml.extractBool \"" + xmlElementName + "\" xml)";
+                return "(aws.xml.extractBool \"" + xmlElementName + "\" xml)";
             } else {
-                return "(Optional.getOrElse false (Aws.Xml.extractBool \"" + xmlElementName + "\" xml))";
+                return "(Optional.getOrElse false (aws.xml.extractBool \"" + xmlElementName + "\" xml))";
             }
         } else if (targetShape.isBlobShape()) {
             // Blob fields in XML are typically base64 encoded text
             // Convert to bytes using toUtf8 for now (proper base64 decode would need fromBase64)
             if (isOptional) {
-                return "(Optional.map toUtf8 (Aws.Xml.extractElementOpt \"" + xmlElementName + "\" xml))";
+                return "(Optional.map toUtf8 (aws.xml.extractElementOpt \"" + xmlElementName + "\" xml))";
             } else {
-                return "(toUtf8 (Aws.Xml.extractElement \"" + xmlElementName + "\" xml))";
+                return "(toUtf8 (aws.xml.extractElement \"" + xmlElementName + "\" xml))";
             }
         } else {
             // Fallback
@@ -849,7 +849,7 @@ public final class ClientModuleWriter {
      * Checks if a union shape is the DynamoDB AttributeValue type.
      * 
      * <p>DynamoDB's AttributeValue is a special union that should use the runtime
-     * type Aws.Json.AttributeValue instead of generating a new type.
+     * type aws.json.AttributeValue instead of generating a new type.
      * 
      * @param union The union shape to check
      * @return true if this is DynamoDB's AttributeValue union

@@ -44,12 +44,12 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("aws.credentials"),
-            "Module should define aws.credentials type");
-        assertTrue(content.contains("aws.signingconfig"),
-            "Module should define aws.signingconfig type");
-        assertTrue(content.contains("aws.credentialscope"),
-            "Module should define aws.credentialscope type");
+        assertTrue(content.contains("aws.sigv4.Credentials"),
+            "Module should define aws.sigv4.Credentials type");
+        assertTrue(content.contains("aws.sigv4.SigningConfig"),
+            "Module should define aws.sigv4.SigningConfig type");
+        assertTrue(content.contains("aws.sigv4.CredentialScope"),
+            "Module should define aws.sigv4.CredentialScope type");
         assertTrue(content.contains("aws.sigv4.signRequest"),
             "Module should define aws.sigv4.signRequest function");
         assertTrue(content.contains("aws.sigv4.deriveSigningKey"),
@@ -148,13 +148,13 @@ class RuntimeModuleCopierTest {
         String content = copier.getModuleContent(RuntimeModule.AWS_SIGV4);
         
         // Types
-        assertTrue(content.contains("type aws.credentials"));
-        assertTrue(content.contains("type aws.signingconfig"));
-        assertTrue(content.contains("type aws.credentialscope"));
+        assertTrue(content.contains("type aws.sigv4.Credentials"));
+        assertTrue(content.contains("type aws.sigv4.SigningConfig"));
+        assertTrue(content.contains("type aws.sigv4.CredentialScope"));
         
         // Credential helpers
-        assertTrue(content.contains("aws.credentials.basic"));
-        assertTrue(content.contains("aws.credentials.withSessionToken"));
+        assertTrue(content.contains("aws.sigv4.Credentials.basic"));
+        assertTrue(content.contains("aws.sigv4.Credentials.withSessionToken"));
         
         // Timestamp functions
         assertTrue(content.contains("aws.sigv4.getTimestamp"));

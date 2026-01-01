@@ -13,31 +13,31 @@ AWS credentials for signing requests.
 Contains the access key ID, secret access key, and optional session token
 for temporary credentials (e.g., from STS AssumeRole).
 }}
-type aws.credentials = {
+type aws.sigv4.Credentials = {
   accessKeyId : Text,
   secretAccessKey : Text,
   sessionToken : Optional Text
 }
 
 {{ Create credentials without a session token. }}
-aws.credentials.basic : Text -> Text -> aws.credentials
-aws.credentials.basic accessKey secretKey =
-  aws.credentials.Credentials accessKey secretKey None
+aws.sigv4.Credentials.basic : Text -> Text -> aws.sigv4.Credentials
+aws.sigv4.Credentials.basic accessKey secretKey =
+  aws.sigv4.Credentials.Credentials accessKey secretKey None
 
 {{ Create credentials with a session token (for temporary credentials). }}
-aws.credentials.withSessionToken : Text -> Text -> Text -> aws.credentials
-aws.credentials.withSessionToken accessKey secretKey token =
-  aws.credentials.Credentials accessKey secretKey (Some token)
+aws.sigv4.Credentials.withSessionToken : Text -> Text -> Text -> aws.sigv4.Credentials
+aws.sigv4.Credentials.withSessionToken accessKey secretKey token =
+  aws.sigv4.Credentials.Credentials accessKey secretKey (Some token)
 
 {{
 Configuration for signing AWS requests.
 
 Contains the region, service name, and credentials needed for signing.
 }}
-type aws.signingconfig = {
+type aws.sigv4.SigningConfig = {
   region : Text,
   service : Text,
-  credentials : aws.credentials
+  credentials : aws.sigv4.Credentials
 }
 
 {{
@@ -45,16 +45,16 @@ Credential scope for AWS SigV4 signing.
 
 Format: YYYYMMDD/region/service/aws4_request
 }}
-type aws.credentialscope = {
+type aws.sigv4.CredentialScope = {
   date : Text,
   region : Text,
   service : Text
 }
 
 {{ Convert credential scope to string format: YYYYMMDD/region/service/aws4_request }}
-aws.credentialscope.toText : aws.credentialscope -> Text
-aws.credentialscope.toText credScope =
-  (aws.credentialscope.date credScope) ++ "/" ++ (aws.credentialscope.region credScope) ++ "/" ++ (aws.credentialscope.service credScope) ++ "/aws4_request"
+aws.sigv4.CredentialScope.toText : aws.sigv4.CredentialScope -> Text
+aws.sigv4.CredentialScope.toText credScope =
+  (aws.sigv4.CredentialScope.date credScope) ++ "/" ++ (aws.sigv4.CredentialScope.region credScope) ++ "/" ++ (aws.sigv4.CredentialScope.service credScope) ++ "/aws4_request"
 
 -- =============================================================================
 -- Timestamp Functions
@@ -170,11 +170,11 @@ and hashed canonical request. Format:
   CredentialScope\n
   HashedCanonicalRequest
 }}
-aws.sigv4.stringToSign : Text -> aws.credentialscope -> Text -> Text
+aws.sigv4.stringToSign : Text -> aws.sigv4.CredentialScope -> Text -> Text
 aws.sigv4.stringToSign timestamp scope canonicalRequest =
   let
     hashedCanonicalRequest = hashBytes Sha2_256 (Text.toUtf8 canonicalRequest) |> Bytes.toHex
-    credentialScope = aws.credentialscope.toText scope
+    credentialScope = aws.sigv4.CredentialScope.toText scope
     Text.join "\n" [
       "AWS4-HMAC-SHA256",
       timestamp,
@@ -217,10 +217,10 @@ Build the Authorization header value.
 Format:
   AWS4-HMAC-SHA256 Credential=accessKey/scope,SignedHeaders=headers,Signature=sig
 }}
-aws.sigv4.authorizationHeader : Text -> aws.credentialscope -> Text -> Text -> Text
+aws.sigv4.authorizationHeader : Text -> aws.sigv4.CredentialScope -> Text -> Text -> Text
 aws.sigv4.authorizationHeader accessKeyId scope signedHeaders signature =
   let
-    credential = accessKeyId ++ "/" ++ aws.credentialscope.toText scope
+    credential = accessKeyId ++ "/" ++ aws.sigv4.CredentialScope.toText scope
     "AWS4-HMAC-SHA256 Credential=" ++ credential ++ ",SignedHeaders=" ++ signedHeaders ++ ",Signature=" ++ signature
 
 -- =============================================================================
@@ -245,13 +245,13 @@ Parameters:
 - headers: Request headers as name-value pairs
 - body: Request body bytes
 }}
-aws.sigv4.signRequest : aws.signingconfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+aws.sigv4.signRequest : aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
 aws.sigv4.signRequest config method path queryString headers body _ =
   -- Get timestamp
   timestamp = !aws.sigv4.getTimestamp
   dateStamp = aws.sigv4.getDateStamp timestamp
   -- Build credential scope
-  scope = aws.credentialscope.CredentialScope dateStamp (aws.signingconfig.region config) (aws.signingconfig.service config)
+  scope = aws.sigv4.CredentialScope.CredentialScope dateStamp (aws.sigv4.SigningConfig.region config) (aws.sigv4.SigningConfig.service config)
   -- Hash payload
   payloadHash = aws.sigv4.hashPayload body
   -- Add required headers for signing
@@ -261,17 +261,17 @@ aws.sigv4.signRequest config method path queryString headers body _ =
   -- Build string to sign
   strToSign = aws.sigv4.stringToSign timestamp scope canonicalReq
   -- Get credentials from config
-  creds = aws.signingconfig.credentials config
+  creds = aws.sigv4.SigningConfig.credentials config
   -- Derive signing key and calculate signature
-  signingKey = aws.sigv4.deriveSigningKey (aws.credentials.secretAccessKey creds) dateStamp (aws.signingconfig.region config) (aws.signingconfig.service config)
+  signingKey = aws.sigv4.deriveSigningKey (aws.sigv4.Credentials.secretAccessKey creds) dateStamp (aws.sigv4.SigningConfig.region config) (aws.sigv4.SigningConfig.service config)
   sig = aws.sigv4.signature signingKey strToSign
   -- Build authorization header
   signedHdrs = aws.sigv4.signedHeaders headersWithAmz
-  authHeader = aws.sigv4.authorizationHeader (aws.credentials.accessKeyId creds) scope signedHdrs sig
+  authHeader = aws.sigv4.authorizationHeader (aws.sigv4.Credentials.accessKeyId creds) scope signedHdrs sig
   -- Build final headers list
   baseHeaders = [("Authorization", authHeader), ("X-Amz-Date", timestamp), ("X-Amz-Content-Sha256", payloadHash)]
   -- Add session token header if present
-  match aws.credentials.sessionToken creds with
+  match aws.sigv4.Credentials.sessionToken creds with
     Some token -> List.cons ("X-Amz-Security-Token", token) baseHeaders
     None -> baseHeaders
 
@@ -281,7 +281,7 @@ Add SigV4 signing headers to an existing header list.
 Convenience function that signs the request and merges the signing
 headers with the original headers.
 }}
-aws.sigv4.addSigningHeaders : aws.signingconfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+aws.sigv4.addSigningHeaders : aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
 aws.sigv4.addSigningHeaders config method path queryString headers body _ =
   signingHeaders = !(aws.sigv4.signRequest config method path queryString headers body)
   headers ++ signingHeaders

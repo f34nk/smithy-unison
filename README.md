@@ -36,7 +36,7 @@ Reference: https://smithy.io/2.0/index.html
 
 ### AWS Authentication
 - **AWS SigV4 request signing** - Complete implementation of Signature Version 4
-  - Credential types (`aws.credentials`, `aws.signingconfig`)
+  - Credential types (`aws.sigv4.Credentials`, `aws.sigv4.SigningConfig`)
   - Canonical request building
   - Signing key derivation (HMAC-SHA256 chain)
   - Authorization header generation
