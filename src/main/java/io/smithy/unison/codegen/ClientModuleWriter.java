@@ -67,7 +67,7 @@ public final class ClientModuleWriter {
     /**
      * Gets the client namespace for prefixing types and functions.
      * 
-     * @return The client namespace (e.g., "Aws.S3")
+     * @return The client namespace (e.g., "aws.s3")
      */
     public String getClientNamespace() {
         return clientNamespace;
@@ -77,7 +77,7 @@ public final class ClientModuleWriter {
      * Converts a type name to a namespaced type name.
      * 
      * @param name The base type name
-     * @return The namespaced type name (e.g., "Aws.S3.Config")
+     * @return The namespaced type name (e.g., "aws.s3.Config")
      */
     private String getNamespacedTypeName(String name) {
         return UnisonSymbolProvider.toNamespacedTypeName(name, clientNamespace);
@@ -87,7 +87,7 @@ public final class ClientModuleWriter {
      * Converts a function name to a namespaced function name.
      * 
      * @param name The base function name
-     * @return The namespaced function name (e.g., "Aws.S3.createBucket")
+     * @return The namespaced function name (e.g., "aws.s3.createBucket")
      */
     private String getNamespacedFunctionName(String name) {
         return UnisonSymbolProvider.toNamespacedFunctionName(name, clientNamespace);
