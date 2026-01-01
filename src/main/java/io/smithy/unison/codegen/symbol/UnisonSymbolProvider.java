@@ -153,12 +153,12 @@ public final class UnisonSymbolProvider implements SymbolProvider {
      * 
      * <p>Prepends the namespace prefix to the type name:
      * <ul>
-     *   <li>("CreateBucketRequest", "Aws.S3") → "Aws.S3.CreateBucketRequest"</li>
-     *   <li>("Config", "Aws.DynamoDB") → "Aws.DynamoDB.Config"</li>
+     *   <li>("CreateBucketRequest", "aws.s3") → "aws.s3.CreateBucketRequest"</li>
+     *   <li>("Config", "aws.dynamodb") → "aws.dynamodb.Config"</li>
      * </ul>
      *
      * @param name The base type name
-     * @param namespace The namespace prefix (e.g., "Aws.S3")
+     * @param namespace The namespace prefix (e.g., "aws.s3")
      * @return The fully qualified type name
      */
     public static String toNamespacedTypeName(String name, String namespace) {
@@ -174,12 +174,12 @@ public final class UnisonSymbolProvider implements SymbolProvider {
      * 
      * <p>Prepends the namespace prefix to the function name:
      * <ul>
-     *   <li>("CreateBucket", "Aws.S3") → "Aws.S3.createBucket"</li>
-     *   <li>("GetItem", "Aws.DynamoDB") → "Aws.DynamoDB.getItem"</li>
+     *   <li>("CreateBucket", "aws.s3") → "aws.s3.createBucket"</li>
+     *   <li>("GetItem", "aws.dynamodb") → "aws.dynamodb.getItem"</li>
      * </ul>
      *
      * @param name The base function name (can be PascalCase or camelCase)
-     * @param namespace The namespace prefix (e.g., "Aws.S3")
+     * @param namespace The namespace prefix (e.g., "aws.s3")
      * @return The fully qualified function name
      */
     public static String toNamespacedFunctionName(String name, String namespace) {

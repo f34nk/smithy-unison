@@ -2,9 +2,9 @@
 -- Bridge between Unison JSON types and HTTP request/response bodies
 -- Provides integration between aws_json.u and aws_http.u
 
-namespace Aws.Json.Bridge
+namespace aws.json.bridge
 
-use Aws.Json
+use aws.json
 use Bytes
 
 -- =============================================================================

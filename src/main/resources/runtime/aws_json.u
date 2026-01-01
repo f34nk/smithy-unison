@@ -2,7 +2,7 @@
 -- Provides JSON serialization/deserialization for AWS services
 -- Focused on DynamoDB and AWS JSON protocol support
 
-namespace Aws.Json
+namespace aws.json
 
 use Bytes
 use Nat >= <

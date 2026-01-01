@@ -134,7 +134,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         if (inputShape.isPresent() && !inputShape.get().getAllMembers().isEmpty()) {
             String serializerName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
             writer.write("bodyJson = $L input", serializerName);
-            writer.write("bodyText = Aws.Json.Bridge.jsonToRequestBody bodyJson");
+            writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
             bodyVar = "bodyText";
         } else {
             writer.write("bodyText = \"{}\"");
@@ -147,14 +147,14 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("-- Sign request with AWS Signature Version 4");
         writer.write("region = $L.region config", configType);
         writer.write("creds = $L.credentials config", configType);
-        writer.write("-- Convert to Aws.Credentials for signing");
+        writer.write("-- Convert to aws.sigv4.Credentials for signing");
         String credsType = UnisonSymbolProvider.toNamespacedTypeName("Credentials", clientNamespace);
-        writer.write("awsCreds = Aws.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
+        writer.write("awsCreds = aws.sigv4.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
             credsType, credsType, credsType);
         // Extract service name for signing (lowercase, without version suffix)
         String signingServiceName = extractSigningServiceName(serviceName);
-        writer.write("signingConfig = Aws.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
-        writer.write("allHeaders = !(Aws.SigV4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
+        writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
         
         // Make HTTP request
         writer.write("");
@@ -247,10 +247,10 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "FromJson");
         
         writer.writeComment("Parse " + structure.getId().getName() + " from JSON");
-        writer.writeSignature(functionName, "Aws.Json.JsonValue -> Optional " + structType);
+        writer.writeSignature(functionName, "aws.json.JsonValue -> Optional " + structType);
         writer.write("$L json =", functionName);
         writer.indent();
-        writer.write("use Aws.Json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
+        writer.write("use aws.json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
         
         // Extract each field from JSON - all extractions return Optional
         List<MemberShape> members = structure.getAllMembers().values().stream().toList();
@@ -364,7 +364,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                                                       String inputType, Model model, String clientNamespace,
                                                       UnisonWriter writer) {
         writer.writeComment("Serialize " + structure.getId().getName() + " to JSON");
-        writer.writeSignature(functionName, inputType + " -> Aws.Json.JsonValue");
+        writer.writeSignature(functionName, inputType + " -> aws.json.JsonValue");
         writer.write("$L input =", functionName);
         writer.indent();
         writer.write("let");
@@ -394,13 +394,13 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         // Define predicate as a local function to avoid parsing issues with inline cases
         writer.write("isNotNull = cases");
         writer.indent();
-        writer.write("(_, Aws.Json.JsonValue.JsonNull) -> false");
+        writer.write("(_, aws.json.JsonValue.JsonNull) -> false");
         writer.write("_ -> true");
         writer.dedent();
         writer.write("filteredFields = List.filter isNotNull fields");
         
         // Create JSON object
-        writer.write("Aws.Json.jsonObject filteredFields");
+        writer.write("aws.json.jsonObject filteredFields");
         
         writer.dedent();
         writer.dedent();
@@ -436,7 +436,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
      * Checks if a union shape is the DynamoDB AttributeValue type.
      * 
      * <p>DynamoDB's AttributeValue is a special union that should use the runtime
-     * type Aws.Json.AttributeValue with its special serialization/deserialization.
+     * type aws.json.AttributeValue with its special serialization/deserialization.
      * 
      * @param union The union shape to check
      * @return true if this is DynamoDB's AttributeValue union
@@ -468,7 +468,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else {
             // Optional field - map to JsonValue, defaulting to JsonNull
             String conversion = generateJsonValue(target, "x", model, clientNamespace);
-            return String.format("Optional.map (x -> %s) %s |> Optional.getOrElse Aws.Json.JsonValue.JsonNull",
+            return String.format("Optional.map (x -> %s) %s |> Optional.getOrElse aws.json.JsonValue.JsonNull",
                     conversion, accessor);
         }
     }
@@ -481,31 +481,31 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
             // Enum - convert to text
             String toTextFn = UnisonSymbolProvider.toNamespacedFunctionName(shape.getId().getName() + "ToText", clientNamespace);
-            return "Aws.Json.JsonValue.JsonString (" + toTextFn + " " + varName + ")";
+            return "aws.json.JsonValue.JsonString (" + toTextFn + " " + varName + ")";
         } else if (shape.isStringShape()) {
-            return "Aws.Json.JsonValue.JsonString " + varName;
+            return "aws.json.JsonValue.JsonString " + varName;
         } else if (shape.isBooleanShape()) {
-            return "Aws.Json.JsonValue.JsonBoolean " + varName;
+            return "aws.json.JsonValue.JsonBoolean " + varName;
         } else if (shape.isIntegerShape() || shape.isLongShape() || shape.isShortShape() || shape.isByteShape()) {
-            return "Aws.Json.JsonValue.JsonNumber (Float.fromInt " + varName + ")";
+            return "aws.json.JsonValue.JsonNumber (Float.fromInt " + varName + ")";
         } else if (shape.isFloatShape() || shape.isDoubleShape()) {
-            return "Aws.Json.JsonValue.JsonNumber " + varName;
+            return "aws.json.JsonValue.JsonNumber " + varName;
         } else if (shape.isBlobShape()) {
             // Base64 encode bytes
-            return "Aws.Json.JsonValue.JsonString (Bytes.toBase64 " + varName + ")";
+            return "aws.json.JsonValue.JsonString (Bytes.toBase64 " + varName + ")";
         } else if (shape.isTimestampShape()) {
             // Timestamp is generated as Text in structures, just wrap in JSON string
-            return "Aws.Json.JsonValue.JsonString " + varName;
+            return "aws.json.JsonValue.JsonString " + varName;
         } else if (shape.isListShape()) {
             ListShape listShape = shape.asListShape().get();
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
             String elemConversion = generateJsonValue(memberTarget, "elem", model, clientNamespace);
-            return String.format("Aws.Json.JsonValue.JsonArray (List.map (elem -> %s) %s)", elemConversion, varName);
+            return String.format("aws.json.JsonValue.JsonArray (List.map (elem -> %s) %s)", elemConversion, varName);
         } else if (shape.isMapShape()) {
             MapShape mapShape = shape.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValue(valueTarget, "v", model, clientNamespace);
-            return String.format("Aws.Json.jsonObject (List.map (cases (k, v) -> (k, %s)) (Map.toList %s))",
+            return String.format("aws.json.jsonObject (List.map (cases (k, v) -> (k, %s)) (Map.toList %s))",
                     valueConversion, varName);
         } else if (shape.isStructureShape()) {
             // Nested structure - need recursive serialization
@@ -516,7 +516,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             UnionShape unionShape = shape.asUnionShape().get();
             if (isDynamoDBAttributeValue(unionShape)) {
                 // Use runtime AttributeValue converter
-                return "Aws.Json.attributeValueToJson " + varName;
+                return "aws.json.attributeValueToJson " + varName;
             }
             // Generic union - need serializer
             String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
@@ -526,7 +526,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return varName;
         } else {
             // Fallback: convert to string
-            return "Aws.Json.JsonValue.JsonString (Any.toText " + varName + ")";
+            return "aws.json.JsonValue.JsonString (Any.toText " + varName + ")";
         }
     }
     
@@ -548,12 +548,12 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
         writer.write("$L response = do", functionName);
         writer.indent();
-        writer.write("use Aws.Json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
+        writer.write("use aws.json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
         
         // Parse JSON from response body
         writer.write("-- Parse JSON response body");
-        writer.write("bodyText = Aws.Http.bytesToText (Response.body response)");
-        writer.write("json = !(Aws.Json.parseJson bodyText)");
+        writer.write("bodyText = aws.http.bytesToText (Response.body response)");
+        writer.write("json = !(aws.json.parseJson bodyText)");
         writer.write("");
         
         // Extract each field from JSON
@@ -626,63 +626,63 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         if (target.isEnumShape() || (target.isStringShape() && target.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
             // Enum - parse from text
             String fromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(target.getId().getName() + "FromText", clientNamespace);
-            return String.format("Aws.Json.getFieldAsString \"%s\" %s |> Optional.flatMap %s",
+            return String.format("aws.json.getFieldAsString \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, fromTextFn);
         } else if (target.isStringShape()) {
-            return String.format("Aws.Json.getFieldAsString \"%s\" %s",
+            return String.format("aws.json.getFieldAsString \"%s\" %s",
                     fieldName, jsonVar);
         } else if (target.isBooleanShape()) {
-            return String.format("Aws.Json.getFieldAsBoolean \"%s\" %s",
+            return String.format("aws.json.getFieldAsBoolean \"%s\" %s",
                     fieldName, jsonVar);
         } else if (target.isIntegerShape() || target.isLongShape() || target.isShortShape() || target.isByteShape()) {
-            return String.format("Aws.Json.getFieldAsNumber \"%s\" %s |> Optional.map Float.truncate",
+            return String.format("aws.json.getFieldAsNumber \"%s\" %s |> Optional.map Float.truncate",
                     fieldName, jsonVar);
         } else if (target.isFloatShape() || target.isDoubleShape()) {
-            return String.format("Aws.Json.getFieldAsNumber \"%s\" %s",
+            return String.format("aws.json.getFieldAsNumber \"%s\" %s",
                     fieldName, jsonVar);
         } else if (target.isBlobShape()) {
             // Base64 decode
-            return String.format("Aws.Json.getFieldAsString \"%s\" %s |> Optional.flatMap Bytes.fromBase64",
+            return String.format("aws.json.getFieldAsString \"%s\" %s |> Optional.flatMap Bytes.fromBase64",
                     fieldName, jsonVar);
         } else if (target.isTimestampShape()) {
             // Timestamp is generated as Text in structures, just extract string
-            return String.format("Aws.Json.getFieldAsString \"%s\" %s",
+            return String.format("aws.json.getFieldAsString \"%s\" %s",
                     fieldName, jsonVar);
         } else if (target.isListShape()) {
             ListShape listShape = target.asListShape().get();
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
             String elemConversion = generateJsonValueConversion(memberTarget, "elem", model, clientNamespace);
-            return String.format("Aws.Json.getFieldAsArray \"%s\" %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)",
+            return String.format("aws.json.getFieldAsArray \"%s\" %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)",
                     fieldName, jsonVar, elemConversion);
         } else if (target.isMapShape()) {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("Aws.Json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
+            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
                     fieldName, jsonVar, valueConversion);
         } else if (target.isStructureShape()) {
             // Nested structure - need recursive parser
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
-            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap %s",
+            return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
         } else if (target.isUnionShape()) {
             // Union - check if it's DynamoDB AttributeValue
             UnionShape unionShape = target.asUnionShape().get();
             if (isDynamoDBAttributeValue(unionShape)) {
                 // Use runtime AttributeValue converter
-                return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap Aws.Json.jsonToAttributeValue",
+                return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap aws.json.jsonToAttributeValue",
                         fieldName, jsonVar);
             }
             // Generic union - need parser
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
-            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap %s",
+            return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
         } else if (target.isDocumentShape()) {
             // Document type - pass through as JsonValue
-            return String.format("Aws.Json.getField \"%s\" %s", fieldName, jsonVar);
+            return String.format("aws.json.getField \"%s\" %s", fieldName, jsonVar);
         } else {
             // Fallback: try to parse as string
-            return String.format("Aws.Json.getFieldAsString \"%s\" %s",
+            return String.format("aws.json.getFieldAsString \"%s\" %s",
                     fieldName, jsonVar);
         }
     }
@@ -695,32 +695,32 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         // Check enum FIRST (before string check, since enums may be string-based)
         if (target.isEnumShape() || (target.isStringShape() && target.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
             String fromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(target.getId().getName() + "FromText", clientNamespace);
-            return String.format("Aws.Json.jsonValueToString %s |> Optional.flatMap %s", varName, fromTextFn);
+            return String.format("aws.json.jsonValueToString %s |> Optional.flatMap %s", varName, fromTextFn);
         } else if (target.isStringShape()) {
-            return String.format("Aws.Json.jsonValueToString %s", varName);
+            return String.format("aws.json.jsonValueToString %s", varName);
         } else if (target.isBooleanShape()) {
-            return String.format("Aws.Json.jsonValueToBoolean %s", varName);
+            return String.format("aws.json.jsonValueToBoolean %s", varName);
         } else if (target.isIntegerShape() || target.isLongShape() || target.isShortShape() || target.isByteShape()) {
-            return String.format("Aws.Json.jsonValueToInt %s", varName);
+            return String.format("aws.json.jsonValueToInt %s", varName);
         } else if (target.isFloatShape() || target.isDoubleShape()) {
-            return String.format("Aws.Json.jsonValueToNumber %s", varName);
+            return String.format("aws.json.jsonValueToNumber %s", varName);
         } else if (target.isBlobShape()) {
-            return String.format("Aws.Json.jsonValueToString %s |> Optional.flatMap Bytes.fromBase64", varName);
+            return String.format("aws.json.jsonValueToString %s |> Optional.flatMap Bytes.fromBase64", varName);
         } else if (target.isTimestampShape()) {
             // Timestamp is generated as Text in structures, just extract string
-            return String.format("Aws.Json.jsonValueToString %s", varName);
+            return String.format("aws.json.jsonValueToString %s", varName);
         } else if (target.isListShape()) {
             // List - convert array elements recursively
             ListShape listShape = target.asListShape().get();
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
             String elemConversion = generateJsonValueConversion(memberTarget, "elem", model, clientNamespace);
-            return String.format("Aws.Json.jsonValueToArray %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)", varName, elemConversion);
+            return String.format("aws.json.jsonValueToArray %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)", varName, elemConversion);
         } else if (target.isMapShape()) {
             // Map - convert object fields recursively
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("Aws.Json.jsonValueToObjectList %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
+            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
         } else if (target.isStructureShape()) {
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
@@ -729,7 +729,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             UnionShape unionShape = target.asUnionShape().get();
             if (isDynamoDBAttributeValue(unionShape)) {
                 // Use runtime AttributeValue converter
-                return String.format("Aws.Json.jsonToAttributeValue %s", varName);
+                return String.format("aws.json.jsonToAttributeValue %s", varName);
             }
             // Generic union - need parser
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
@@ -739,7 +739,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("Some %s", varName);
         } else {
             // Fallback
-            return String.format("Aws.Json.jsonValueToString %s", varName);
+            return String.format("aws.json.jsonValueToString %s", varName);
         }
     }
     
@@ -764,18 +764,18 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.indent();
         
         // Parse error body
-        writer.write("errorBody = Aws.Http.bytesToText (Response.body response)");
-        writer.write("json = match catch do !(Aws.Json.parseJson errorBody) with");
+        writer.write("errorBody = aws.http.bytesToText (Response.body response)");
+        writer.write("json = match catch do !(aws.json.parseJson errorBody) with");
         writer.indent();
         writer.write("Right j -> j");
-        writer.write("Left _ -> Aws.Json.jsonObject []");
+        writer.write("Left _ -> aws.json.jsonObject []");
         writer.dedent();
         writer.write("");
         
         // Extract error type and message using runtime helpers
         writer.write("-- Extract error type (handles both full and short formats)");
-        writer.write("errorType = Aws.Json.Bridge.extractErrorType json");
-        writer.write("errorMessage = Aws.Json.Bridge.extractErrorMessage json");
+        writer.write("errorType = aws.json.bridge.extractErrorType json");
+        writer.write("errorMessage = aws.json.bridge.extractErrorMessage json");
         writer.write("");
         
         // Convert to service error type using fromCodeAndMessage

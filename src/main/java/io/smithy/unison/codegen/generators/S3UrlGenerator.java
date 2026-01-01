@@ -20,9 +20,9 @@ import io.smithy.unison.codegen.UnisonWriter;
  * 
  * <h2>Generated Functions</h2>
  * <ul>
- *   <li>{@code Aws.S3.buildUrl} - Build S3 URL with bucket routing</li>
- *   <li>{@code Aws.urlEncode} - URL encode a string</li>
- *   <li>{@code Aws.buildQueryString} - Build query string from parameters</li>
+ *   <li>{@code aws.s3.buildUrl} - Build S3 URL with bucket routing</li>
+ *   <li>{@code aws.urlEncode} - URL encode a string</li>
+ *   <li>{@code aws.buildQueryString} - Build query string from parameters</li>
  * </ul>
  * 
  * <h2>Usage</h2>
@@ -55,8 +55,8 @@ public class S3UrlGenerator {
      * 
      * <p>Generates:
      * <pre>
-     * Aws.urlEncode : Text -> Text
-     * Aws.urlEncode text =
+     * aws.urlEncode : Text -> Text
+     * aws.urlEncode text =
      *   -- URL encode special characters
      *   ...
      * </pre>
@@ -67,8 +67,8 @@ public class S3UrlGenerator {
             "Encodes special characters according to RFC 3986.\n" +
             "Spaces become %20, slashes are preserved for S3 keys.");
         
-        writer.writeSignature("Aws.urlEncode", "Text -> Text");
-        writer.write("Aws.urlEncode text =");
+        writer.writeSignature("aws.urlEncode", "Text -> Text");
+        writer.write("aws.urlEncode text =");
         writer.indent();
         writer.write("-- Replace special characters with percent-encoded values");
         writer.write("text");
@@ -106,10 +106,10 @@ public class S3UrlGenerator {
             "URL encode a path segment, including slashes.\n\n" +
             "Use this for individual path segments, not full paths.");
         
-        writer.writeSignature("Aws.urlEncodePathSegment", "Text -> Text");
-        writer.write("Aws.urlEncodePathSegment text =");
+        writer.writeSignature("aws.urlEncodePathSegment", "Text -> Text");
+        writer.write("aws.urlEncodePathSegment text =");
         writer.indent();
-        writer.write("Aws.urlEncode text |> Text.replace \"/\" \"%2F\"");
+        writer.write("aws.urlEncode text |> Text.replace \"/\" \"%2F\"");
         writer.dedent();
         writer.writeBlankLine();
     }
@@ -119,8 +119,8 @@ public class S3UrlGenerator {
      * 
      * <p>Generates:
      * <pre>
-     * Aws.buildQueryString : [(Text, Optional Text)] -> Text
-     * Aws.buildQueryString params =
+     * aws.buildQueryString : [(Text, Optional Text)] -> Text
+     * aws.buildQueryString params =
      *   ...
      * </pre>
      */
@@ -130,8 +130,8 @@ public class S3UrlGenerator {
             "Filters out None values and URL encodes both names and values.\n" +
             "Returns empty string if no parameters, otherwise returns \"?param1=value1&param2=value2\".");
         
-        writer.writeSignature("Aws.buildQueryString", "[(Text, Optional Text)] -> Text");
-        writer.write("Aws.buildQueryString params =");
+        writer.writeSignature("aws.buildQueryString", "[(Text, Optional Text)] -> Text");
+        writer.write("aws.buildQueryString params =");
         writer.indent();
         writer.write("let");
         writer.indent();
@@ -140,7 +140,7 @@ public class S3UrlGenerator {
         writer.indent();
         writer.write("|> List.filterMap (cases");
         writer.indent();
-        writer.write("(name, Some value) -> Some (Aws.urlEncode name ++ \"=\" ++ Aws.urlEncode value)");
+        writer.write("(name, Some value) -> Some (aws.urlEncode name ++ \"=\" ++ aws.urlEncode value)");
         writer.write("(_, None) -> None)");
         writer.dedent();
         writer.dedent();
@@ -171,12 +171,12 @@ public class S3UrlGenerator {
             "- Path style: https://endpoint/bucket/key\n\n" +
             "The style is determined by config.usePathStyle.");
         
-        writer.writeSignature("Aws.S3.buildUrl", "Config -> Text -> Text -> Text");
-        writer.write("Aws.S3.buildUrl config bucket key =");
+        writer.writeSignature("aws.s3.buildUrl", "Config -> Text -> Text -> Text");
+        writer.write("aws.s3.buildUrl config bucket key =");
         writer.indent();
         writer.write("let");
         writer.indent();
-        writer.write("encodedKey = Aws.urlEncode key");
+        writer.write("encodedKey = aws.urlEncode key");
         writer.write("endpoint = config.endpoint");
         writer.dedent();
         writer.write("if config.usePathStyle then");
@@ -201,13 +201,13 @@ public class S3UrlGenerator {
             "Build an S3 URL with bucket routing and query string.\n\n" +
             "Combines bucket routing with query parameters.");
         
-        writer.writeSignature("Aws.S3.buildUrlWithQuery", "Config -> Text -> Text -> [(Text, Optional Text)] -> Text");
-        writer.write("Aws.S3.buildUrlWithQuery config bucket key queryParams =");
+        writer.writeSignature("aws.s3.buildUrlWithQuery", "Config -> Text -> Text -> [(Text, Optional Text)] -> Text");
+        writer.write("aws.s3.buildUrlWithQuery config bucket key queryParams =");
         writer.indent();
         writer.write("let");
         writer.indent();
-        writer.write("baseUrl = Aws.S3.buildUrl config bucket key");
-        writer.write("queryString = Aws.buildQueryString queryParams");
+        writer.write("baseUrl = aws.s3.buildUrl config bucket key");
+        writer.write("queryString = aws.buildQueryString queryParams");
         writer.dedent();
         writer.write("baseUrl ++ queryString");
         writer.dedent();

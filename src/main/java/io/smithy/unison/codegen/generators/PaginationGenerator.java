@@ -363,7 +363,7 @@ public class PaginationGenerator {
         } else if (shape instanceof TimestampShape) {
             return "Text";
         } else if (shape instanceof DocumentShape) {
-            return "Aws.Json.JsonValue";
+            return "aws.json.JsonValue";
         } else if (shape instanceof ListShape) {
             ListShape list = (ListShape) shape;
             Shape memberShape = model.expectShape(list.getMember().getTarget());
@@ -387,7 +387,7 @@ public class PaginationGenerator {
             // Check if this is DynamoDB AttributeValue - use runtime type
             UnionShape unionShape = (UnionShape) shape;
             if (isDynamoDBAttributeValue(unionShape)) {
-                return "Aws.Json.AttributeValue";
+                return "aws.json.AttributeValue";
             }
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof EnumShape) {

@@ -3,9 +3,9 @@
 -- Note: These tests focus on text-based parsing functions to avoid
 -- {Throw XMLError} ability complexities in test code.
 
-namespace Aws.Xml.Bridge.Test
+namespace aws.xml.bridge.test
 
-use Aws.Xml
+use aws.xml
 use Text ++
 
 -- === Text-based Parsing Tests ===
@@ -13,29 +13,29 @@ use Text ++
 testParseListFromText : '{Exception} Boolean
 testParseListFromText = 'let
   xml = "<Root><Item>a</Item><Item>b</Item></Root>"
-  parser text = Aws.Xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
-  result = Aws.Xml.parseListFromText "Item" parser xml
+  parser text = aws.xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
+  result = aws.xml.parseListFromText "Item" parser xml
   List.size result === 2
 
 testParseWrappedListFromText : '{Exception} Boolean
 testParseWrappedListFromText = 'let
   xml = "<Root><Container><Item>x</Item><Item>y</Item></Container></Root>"
-  parser text = Aws.Xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
-  result = Aws.Xml.parseWrappedListFromText "Container" "Item" parser xml
+  parser text = aws.xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
+  result = aws.xml.parseWrappedListFromText "Container" "Item" parser xml
   List.size result === 2
 
 testParseNestedFromText : '{Exception} Boolean
 testParseNestedFromText = 'let
   xml = "<Root><Nested><Value>test</Value></Nested></Root>"
-  parser text = Aws.Xml.extractElement "Value" text
-  result = Aws.Xml.parseNestedFromText "Nested" parser xml
+  parser text = aws.xml.extractElement "Value" text
+  result = aws.xml.parseNestedFromText "Nested" parser xml
   result === Some "test"
 
 testParseNestedFromTextNotFound : '{Exception} Boolean
 testParseNestedFromTextNotFound = 'let
   xml = "<Root></Root>"
-  parser text = Aws.Xml.extractElement "Value" text
-  result = Aws.Xml.parseNestedFromText "Missing" parser xml
+  parser text = aws.xml.extractElement "Value" text
+  result = aws.xml.parseNestedFromText "Missing" parser xml
   result === None
 
 -- === Integration Tests ===
@@ -44,13 +44,13 @@ testComplexStructure : '{Exception} Boolean
 testComplexStructure = 'let
   xml = "<Response><User><Name>Alice</Name><Age>30</Age></User><User><Name>Bob</Name><Age>25</Age></User></Response>"
   parseUser text =
-    name = Aws.Xml.extractElement "Name" text
-    ageText = Aws.Xml.extractElement "Age" text
+    name = aws.xml.extractElement "Name" text
+    ageText = aws.xml.extractElement "Age" text
     age = match Int.fromText ageText with
       Some a -> a
       None -> +0
     (name, age)
-  users = Aws.Xml.parseListFromText "User" parseUser xml
+  users = aws.xml.parseListFromText "User" parseUser xml
   (List.size users === 2) && match List.at 0 users with
     Some (name, age) -> name === "Alice" && age === +30
     None -> false
@@ -64,19 +64,19 @@ testNestedStructureWithAttributes = 'let
 testErrorResponse : '{Exception} Boolean
 testErrorResponse = 'let
   xml = "<Error><Code>NoSuchKey</Code><Message>Not found</Message><RequestId>req123</RequestId></Error>"
-  code = Aws.Xml.extractElement "Code" xml
-  message = Aws.Xml.extractElement "Message" xml
-  requestId = Aws.Xml.extractElement "RequestId" xml
+  code = aws.xml.extractElement "Code" xml
+  message = aws.xml.extractElement "Message" xml
+  requestId = aws.xml.extractElement "RequestId" xml
   (code === "NoSuchKey") && (message === "Not found") && (requestId === "req123")
 
 testS3ListBucketsResponse : '{Exception} Boolean
 testS3ListBucketsResponse = 'let
   xml = "<ListAllMyBucketsResult><Buckets><Bucket><Name>bucket1</Name><CreationDate>2023-01-01</CreationDate></Bucket><Bucket><Name>bucket2</Name><CreationDate>2023-02-01</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>"
   parseBucket text =
-    name = Aws.Xml.extractElement "Name" text
-    date = Aws.Xml.extractElement "CreationDate" text
+    name = aws.xml.extractElement "Name" text
+    date = aws.xml.extractElement "CreationDate" text
     (name, date)
-  buckets = Aws.Xml.parseWrappedListFromText "Buckets" "Bucket" parseBucket xml
+  buckets = aws.xml.parseWrappedListFromText "Buckets" "Bucket" parseBucket xml
   (List.size buckets === 2) && match List.at 0 buckets with
     Some (name, _) -> name === "bucket1"
     None -> false
@@ -85,9 +85,9 @@ testOptionalWrappedList : '{Exception} Boolean
 testOptionalWrappedList = 'let
   xmlWithItems = "<Root><Items><Item>a</Item><Item>b</Item></Items></Root>"
   xmlEmpty = "<Root></Root>"
-  parser text = Aws.Xml.extractElement "Item" ("<W>" ++ text ++ "</W>")
-  result1 = Aws.Xml.parseOptionalWrappedListFromXml "Items" "Item" parser xmlWithItems
-  result2 = Aws.Xml.parseOptionalWrappedListFromXml "Missing" "Item" parser xmlEmpty
+  parser text = aws.xml.extractElement "Item" ("<W>" ++ text ++ "</W>")
+  result1 = aws.xml.parseOptionalWrappedListFromXml "Items" "Item" parser xmlWithItems
+  result2 = aws.xml.parseOptionalWrappedListFromXml "Missing" "Item" parser xmlEmpty
   match (result1, result2) with
     (Some items, None) -> List.size items === 2
     _ -> false
@@ -95,8 +95,8 @@ testOptionalWrappedList = 'let
 testFlatList : '{Exception} Boolean
 testFlatList = 'let
   xml = "<Root><Contents><Key>file1.txt</Key></Contents><Contents><Key>file2.txt</Key></Contents></Root>"
-  parseContents text = Aws.Xml.extractElement "Key" text
-  result = Aws.Xml.parseOptionalWrappedListFromXml "Contents" "Member" parseContents xml
+  parseContents text = aws.xml.extractElement "Key" text
+  result = aws.xml.parseOptionalWrappedListFromXml "Contents" "Member" parseContents xml
   match result with
     Some items -> List.size items === 2
     None -> false

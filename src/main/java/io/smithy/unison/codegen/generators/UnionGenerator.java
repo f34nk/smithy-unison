@@ -140,7 +140,7 @@ public final class UnionGenerator {
     /**
      * Gets the Unison type name for this union (namespaced).
      *
-     * @return The namespaced type name (e.g., "Aws.S3.StorageType")
+     * @return The namespaced type name (e.g., "aws.s3.StorageType")
      */
     public String getTypeName() {
         return namespacedTypeName;

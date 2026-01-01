@@ -12,32 +12,32 @@
 Check if an HTTP status code indicates success (2xx).
 Returns true for status codes 200-299.
 }}
-Aws.Http.isSuccess : Nat -> Boolean
-Aws.Http.isSuccess statusCode =
+aws.http.isSuccess : Nat -> Boolean
+aws.http.isSuccess statusCode =
   Nat.gteq statusCode 200 && Nat.lt statusCode 300
 
 {{
 Check if an HTTP status code indicates a client error (4xx).
 Returns true for status codes 400-499.
 }}
-Aws.Http.isClientError : Nat -> Boolean
-Aws.Http.isClientError statusCode =
+aws.http.isClientError : Nat -> Boolean
+aws.http.isClientError statusCode =
   Nat.gteq statusCode 400 && Nat.lt statusCode 500
 
 {{
 Check if an HTTP status code indicates a server error (5xx).
 Returns true for status codes 500-599.
 }}
-Aws.Http.isServerError : Nat -> Boolean
-Aws.Http.isServerError statusCode =
+aws.http.isServerError : Nat -> Boolean
+aws.http.isServerError statusCode =
   Nat.gteq statusCode 500 && Nat.lt statusCode 600
 
 {{
 Check if an HTTP status code indicates an error (4xx or 5xx).
 Returns true for status codes 400 and above.
 }}
-Aws.Http.isError : Nat -> Boolean
-Aws.Http.isError statusCode =
+aws.http.isError : Nat -> Boolean
+aws.http.isError statusCode =
   Nat.gteq statusCode 400
 
 {{
@@ -50,8 +50,8 @@ Retryable status codes:
 - 503 Service Unavailable
 - 504 Gateway Timeout
 }}
-Aws.Http.isRetryable : Nat -> Boolean
-Aws.Http.isRetryable statusCode =
+aws.http.isRetryable : Nat -> Boolean
+aws.http.isRetryable statusCode =
   match statusCode with
     429 -> true  -- Too Many Requests
     500 -> true  -- Internal Server Error
@@ -68,8 +68,8 @@ Aws.Http.isRetryable statusCode =
 Get a header value from a list of headers (case-insensitive).
 Returns None if header not found.
 }}
-Aws.Http.getHeader : Text -> [(Text, Text)] -> Optional Text
-Aws.Http.getHeader name headers =
+aws.http.getHeader : Text -> [(Text, Text)] -> Optional Text
+aws.http.getHeader name headers =
   let
     lowerName = Text.toLowercase name
     find : [(Text, Text)] -> Optional Text
@@ -84,18 +84,18 @@ Aws.Http.getHeader name headers =
 {{
 Get a header value with a default if not found.
 }}
-Aws.Http.getHeaderOrDefault : Text -> Text -> [(Text, Text)] -> Text
-Aws.Http.getHeaderOrDefault name defaultValue headers =
-  match Aws.Http.getHeader name headers with
+aws.http.getHeaderOrDefault : Text -> Text -> [(Text, Text)] -> Text
+aws.http.getHeaderOrDefault name defaultValue headers =
+  match aws.http.getHeader name headers with
     Some value -> value
     None -> defaultValue
 
 {{
 Check if a header exists (case-insensitive).
 }}
-Aws.Http.hasHeader : Text -> [(Text, Text)] -> Boolean
-Aws.Http.hasHeader name headers =
-  match Aws.Http.getHeader name headers with
+aws.http.hasHeader : Text -> [(Text, Text)] -> Boolean
+aws.http.hasHeader name headers =
+  match aws.http.getHeader name headers with
     Some _ -> true
     None -> false
 
@@ -104,8 +104,8 @@ Add a header to a header list (does not check for duplicates).
 
 Example: addHeader "X-Custom" "value" headers
 }}
-Aws.Http.addHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
-Aws.Http.addHeader name value headers =
+aws.http.addHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
+aws.http.addHeader name value headers =
   (name, value) +: headers
 
 {{
@@ -113,8 +113,8 @@ Set a header, replacing any existing header with the same name.
 
 Example: setHeader "Content-Type" "application/json" headers
 }}
-Aws.Http.setHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
-Aws.Http.setHeader name value headers =
+aws.http.setHeader : Text -> Text -> [(Text, Text)] -> [(Text, Text)]
+aws.http.setHeader name value headers =
   let
     lowerName = Text.toLowercase name
     filtered = List.filter (cases (k, _) -> not (Text.eq (Text.toLowercase k) lowerName)) headers
@@ -125,8 +125,8 @@ Remove a header by name (case-insensitive).
 
 Example: removeHeader "X-Custom" headers
 }}
-Aws.Http.removeHeader : Text -> [(Text, Text)] -> [(Text, Text)]
-Aws.Http.removeHeader name headers =
+aws.http.removeHeader : Text -> [(Text, Text)] -> [(Text, Text)]
+aws.http.removeHeader name headers =
   List.filter (cases (k, _) -> not (Text.eq (Text.toLowercase k) (Text.toLowercase name))) headers
 
 {{
@@ -134,8 +134,8 @@ Merge two header lists, with the second list taking precedence.
 
 Example: mergeHeaders baseHeaders customHeaders
 }}
-Aws.Http.mergeHeaders : [(Text, Text)] -> [(Text, Text)] -> [(Text, Text)]
-Aws.Http.mergeHeaders base override =
+aws.http.mergeHeaders : [(Text, Text)] -> [(Text, Text)] -> [(Text, Text)]
+aws.http.mergeHeaders base override =
   let
     overrideNames = List.map (cases (k, _) -> Text.toLowercase k) override
     filtered = List.filter (cases (k, _) -> not (List.contains (Text.toLowercase k) overrideNames)) base
@@ -149,19 +149,19 @@ Aws.Http.mergeHeaders base override =
 Build a query string from key-value pairs.
 Values are URL-encoded. Empty values are filtered out.
 }}
-Aws.Http.buildQueryString : [(Text, Text)] -> Text
-Aws.Http.buildQueryString params =
+aws.http.buildQueryString : [(Text, Text)] -> Text
+aws.http.buildQueryString params =
   params
     |> List.filter (cases (_, v) -> not (Text.isEmpty v))
-    |> List.map (cases (k, v) -> k ++ "=" ++ Aws.Http.urlEncode v)
+    |> List.map (cases (k, v) -> k ++ "=" ++ aws.http.urlEncode v)
     |> Text.join "&"
 
 {{
 Append a query string to a URL.
 If URL already has a query string, appends with &.
 }}
-Aws.Http.appendQueryString : Text -> Text -> Text
-Aws.Http.appendQueryString url queryString =
+aws.http.appendQueryString : Text -> Text -> Text
+aws.http.appendQueryString url queryString =
   if Text.isEmpty queryString then url
   else if Text.contains "?" url then url ++ "&" ++ queryString
   else url ++ "?" ++ queryString
@@ -171,8 +171,8 @@ URL-encode a string for use in query parameters.
 
 Encodes special characters as percent-encoded values.
 }}
-Aws.Http.urlEncode : Text -> Text
-Aws.Http.urlEncode text =
+aws.http.urlEncode : Text -> Text
+aws.http.urlEncode text =
   text
     |> Text.replaceAll "%" "%25"
     |> Text.replaceAll " " "%20"
@@ -198,8 +198,8 @@ Aws.Http.urlEncode text =
 {{
 URL-decode a percent-encoded string.
 }}
-Aws.Http.urlDecode : Text -> Text
-Aws.Http.urlDecode text =
+aws.http.urlDecode : Text -> Text
+aws.http.urlDecode text =
   text
     |> Text.replaceAll "%5D" "]"
     |> Text.replaceAll "%5B" "["
@@ -229,15 +229,15 @@ Aws.Http.urlDecode text =
 {{
 Build a full URL from scheme, host, path, and query string.
 }}
-Aws.Http.buildUrl : Text -> Text -> Text -> Text -> Text
-Aws.Http.buildUrl scheme host path queryString =
-  Aws.Http.appendQueryString (scheme ++ "://" ++ host ++ path) queryString
+aws.http.buildUrl : Text -> Text -> Text -> Text -> Text
+aws.http.buildUrl scheme host path queryString =
+  aws.http.appendQueryString (scheme ++ "://" ++ host ++ path) queryString
 
 {{
 Extract the host from a URL.
 }}
-Aws.Http.extractHost : Text -> Text
-Aws.Http.extractHost url =
+aws.http.extractHost : Text -> Text
+aws.http.extractHost url =
   let
     -- Remove scheme
     withoutScheme = 
@@ -253,8 +253,8 @@ Aws.Http.extractHost url =
 {{
 Extract the path from a URL (without query string).
 }}
-Aws.Http.extractPath : Text -> Text
-Aws.Http.extractPath url =
+aws.http.extractPath : Text -> Text
+aws.http.extractPath url =
   let
     -- Remove scheme
     withoutScheme = 
@@ -280,39 +280,39 @@ Aws.Http.extractPath url =
 {{
 Common content type for XML.
 }}
-Aws.Http.contentTypeXml : Text
-Aws.Http.contentTypeXml = "application/xml"
+aws.http.contentTypeXml : Text
+aws.http.contentTypeXml = "application/xml"
 
 {{
 Common content type for JSON.
 }}
-Aws.Http.contentTypeJson : Text
-Aws.Http.contentTypeJson = "application/json"
+aws.http.contentTypeJson : Text
+aws.http.contentTypeJson = "application/json"
 
 {{
 Common content type for form data.
 }}
-Aws.Http.contentTypeForm : Text
-Aws.Http.contentTypeForm = "application/x-www-form-urlencoded"
+aws.http.contentTypeForm : Text
+aws.http.contentTypeForm = "application/x-www-form-urlencoded"
 
 {{
 Common content type for binary data.
 }}
-Aws.Http.contentTypeOctetStream : Text
-Aws.Http.contentTypeOctetStream = "application/octet-stream"
+aws.http.contentTypeOctetStream : Text
+aws.http.contentTypeOctetStream = "application/octet-stream"
 
 {{
 Check if a content type is XML.
 }}
-Aws.Http.isXmlContentType : Text -> Boolean
-Aws.Http.isXmlContentType contentType =
+aws.http.isXmlContentType : Text -> Boolean
+aws.http.isXmlContentType contentType =
   Text.contains "xml" (Text.toLowercase contentType)
 
 {{
 Check if a content type is JSON.
 }}
-Aws.Http.isJsonContentType : Text -> Boolean
-Aws.Http.isJsonContentType contentType =
+aws.http.isJsonContentType : Text -> Boolean
+aws.http.isJsonContentType contentType =
   Text.contains "json" (Text.toLowercase contentType)
 
 -- =============================================================================
@@ -322,46 +322,46 @@ Aws.Http.isJsonContentType contentType =
 {{
 Standard AWS request ID header name.
 }}
-Aws.Http.requestIdHeader : Text
-Aws.Http.requestIdHeader = "x-amz-request-id"
+aws.http.requestIdHeader : Text
+aws.http.requestIdHeader = "x-amz-request-id"
 
 {{
 AWS extended request ID header name (S3).
 }}
-Aws.Http.extendedRequestIdHeader : Text
-Aws.Http.extendedRequestIdHeader = "x-amz-id-2"
+aws.http.extendedRequestIdHeader : Text
+aws.http.extendedRequestIdHeader = "x-amz-id-2"
 
 {{
 AWS date header name.
 }}
-Aws.Http.dateHeader : Text
-Aws.Http.dateHeader = "x-amz-date"
+aws.http.dateHeader : Text
+aws.http.dateHeader = "x-amz-date"
 
 {{
 AWS security token header name.
 }}
-Aws.Http.securityTokenHeader : Text
-Aws.Http.securityTokenHeader = "x-amz-security-token"
+aws.http.securityTokenHeader : Text
+aws.http.securityTokenHeader = "x-amz-security-token"
 
 {{
 AWS content SHA256 header name.
 }}
-Aws.Http.contentSha256Header : Text
-Aws.Http.contentSha256Header = "x-amz-content-sha256"
+aws.http.contentSha256Header : Text
+aws.http.contentSha256Header = "x-amz-content-sha256"
 
 {{
 Extract the AWS request ID from response headers.
 }}
-Aws.Http.getRequestId : [(Text, Text)] -> Optional Text
-Aws.Http.getRequestId headers =
-  Aws.Http.getHeader Aws.Http.requestIdHeader headers
+aws.http.getRequestId : [(Text, Text)] -> Optional Text
+aws.http.getRequestId headers =
+  aws.http.getHeader aws.http.requestIdHeader headers
 
 {{
 Extract the AWS extended request ID from response headers.
 }}
-Aws.Http.getExtendedRequestId : [(Text, Text)] -> Optional Text
-Aws.Http.getExtendedRequestId headers =
-  Aws.Http.getHeader Aws.Http.extendedRequestIdHeader headers
+aws.http.getExtendedRequestId : [(Text, Text)] -> Optional Text
+aws.http.getExtendedRequestId headers =
+  aws.http.getHeader aws.http.extendedRequestIdHeader headers
 
 -- =============================================================================
 -- HTTP Request/Response Types (AWS Client Types)
@@ -373,7 +373,7 @@ HTTP Request type for building AWS requests.
 This type is used internally by the AWS client. It uses simple types
 (Text for method, URL; list for headers) for easy construction.
 
-To execute requests, use Aws.Http.execute which bridges to @unison/http.
+To execute requests, use aws.http.execute which bridges to @unison/http.
 }}
 type Http.Request = {
   method : Text,
@@ -484,8 +484,8 @@ Installation:
 
 The bridge module will override executeRequest with real HTTP calls.
 }}
-Aws.Http.requestPlaceholder : Http.Request -> '{IO, Exception} Http.Response
-Aws.Http.requestPlaceholder req _ =
+aws.http.requestPlaceholder : Http.Request -> '{IO, Exception} Http.Response
+aws.http.requestPlaceholder req _ =
   -- Placeholder: Return empty response
   Http.Response.Response 200 [] Bytes.empty
 
@@ -505,7 +505,7 @@ Usage in generated code:
 }}
 executeRequest : Http.Request -> '{IO, Exception} Http.Response
 executeRequest req =
-  Aws.Http.requestPlaceholder req
+  aws.http.requestPlaceholder req
 
 -- =============================================================================
 -- Response Helpers
@@ -516,35 +516,35 @@ Get a response header value by name.
 }}
 Http.Response.getHeader : Text -> Http.Response -> Optional Text
 Http.Response.getHeader name resp =
-  Aws.Http.getHeader name (Http.Response.headers resp)
+  aws.http.getHeader name (Http.Response.headers resp)
 
 {{
 Decode bytes to UTF-8 text.
 Requires Exception ability as the decode can fail.
 }}
-Aws.Http.bytesToText : Bytes ->{Exception} Text
-Aws.Http.bytesToText bytes = fromUtf8 bytes
+aws.http.bytesToText : Bytes ->{Exception} Text
+aws.http.bytesToText bytes = fromUtf8 bytes
 
 {{
 Decode response body bytes to UTF-8 text.
 Requires Exception ability as the decode can fail.
 }}
 Http.Response.bodyText : Http.Response ->{Exception} Text
-Http.Response.bodyText resp = Aws.Http.bytesToText (Http.Response.body resp)
+Http.Response.bodyText resp = aws.http.bytesToText (Http.Response.body resp)
 
 {{
 Check if response indicates success (2xx status).
 }}
 Http.Response.isSuccess : Http.Response -> Boolean
 Http.Response.isSuccess resp =
-  Aws.Http.isSuccess (Http.Response.statusCode resp)
+  aws.http.isSuccess (Http.Response.statusCode resp)
 
 {{
 Check if response indicates an error (4xx or 5xx status).
 }}
 Http.Response.isError : Http.Response -> Boolean
 Http.Response.isError resp =
-  Aws.Http.isError (Http.Response.statusCode resp)
+  aws.http.isError (Http.Response.statusCode resp)
 
 {{
 Ensure response is successful, raising exception if not.
@@ -552,7 +552,7 @@ Ensure response is successful, raising exception if not.
 Returns the response if successful (2xx), raises Failure otherwise.
 
 Example:
-  response = !Aws.Http.execute request
+  response = !aws.http.execute request
   !Http.Response.ensureSuccess response
   -- Now safe to process response body
 }}
@@ -561,7 +561,7 @@ Http.Response.ensureSuccess resp =
   if Http.Response.isSuccess resp then resp
   else
     statusCode = Http.Response.statusCode resp
-    bodyText = match catch do Aws.Http.bytesToText (Http.Response.body resp) with
+    bodyText = match catch do aws.http.bytesToText (Http.Response.body resp) with
       Left _ -> "(binary body)"
       Right t -> t
     Exception.raise (Failure (typeLink HttpError) ("HTTP error " ++ Nat.toText statusCode ++ ": " ++ bodyText) (Any resp))
@@ -585,7 +585,7 @@ Example AWS error XML:
     <HostId>...</HostId>
   </Error>
 }}
-structural type Aws.Http.Error = { 
+structural type aws.http.Error = { 
   statusCode : Nat,    -- HTTP status code (e.g., 404, 403, 500)
   code : Text,         -- AWS error code (e.g., "NoSuchBucket", "AccessDenied")
   message : Text,      -- Human-readable error message
@@ -594,34 +594,34 @@ structural type Aws.Http.Error = {
 }
 
 {{
-Convert an Aws.Http.Error to a Failure for exception handling.
+Convert an aws.http.Error to a Failure for exception handling.
 
 The error message includes the AWS error code for easy identification.
 }}
-Aws.Http.Error.toFailure : Aws.Http.Error -> Failure
-Aws.Http.Error.toFailure err =
-  errorMessage = (Aws.Http.Error.code err) ++ ": " ++ (Aws.Http.Error.message err)
-  Failure (typeLink Aws.Http.Error) errorMessage (Any err)
+aws.http.Error.toFailure : aws.http.Error -> Failure
+aws.http.Error.toFailure err =
+  errorMessage = (aws.http.Error.code err) ++ ": " ++ (aws.http.Error.message err)
+  Failure (typeLink aws.http.Error) errorMessage (Any err)
 
 {{
-Format an Aws.Http.Error as a detailed string for logging/display.
+Format an aws.http.Error as a detailed string for logging/display.
 
 Includes all error fields in a readable format.
 }}
-Aws.Http.Error.toText : Aws.Http.Error -> Text
-Aws.Http.Error.toText err =
-  "AWS Error [" ++ Nat.toText (Aws.Http.Error.statusCode err) ++ "]\n" ++
-  "  Code: " ++ (Aws.Http.Error.code err) ++ "\n" ++
-  "  Message: " ++ (Aws.Http.Error.message err) ++ "\n" ++
-  "  RequestId: " ++ (Aws.Http.Error.requestId err) ++ "\n" ++
-  "  HostId: " ++ (Aws.Http.Error.hostId err)
+aws.http.Error.toText : aws.http.Error -> Text
+aws.http.Error.toText err =
+  "AWS Error [" ++ Nat.toText (aws.http.Error.statusCode err) ++ "]\n" ++
+  "  Code: " ++ (aws.http.Error.code err) ++ "\n" ++
+  "  Message: " ++ (aws.http.Error.message err) ++ "\n" ++
+  "  RequestId: " ++ (aws.http.Error.requestId err) ++ "\n" ++
+  "  HostId: " ++ (aws.http.Error.hostId err)
 
 {{
 Extract text content between XML tags using simple text matching.
 Used for parsing AWS error responses without depending on aws_xml.u.
 }}
-Aws.Http.extractXmlTag : Text -> Text -> Text
-Aws.Http.extractXmlTag tagName xml =
+aws.http.extractXmlTag : Text -> Text -> Text
+aws.http.extractXmlTag tagName xml =
   openTag = "<" ++ tagName ++ ">"
   closeTag = "</" ++ tagName ++ ">"
   match Text.indexOf openTag xml with
@@ -636,8 +636,8 @@ Aws.Http.extractXmlTag tagName xml =
 {{
 Check if XML text contains an Error element.
 }}
-Aws.Http.isErrorXml : Text -> Boolean
-Aws.Http.isErrorXml xml =
+aws.http.isErrorXml : Text -> Boolean
+aws.http.isErrorXml xml =
   match Text.indexOf "<Error>" xml with
     None -> false
     Some _ -> true
@@ -646,15 +646,15 @@ Aws.Http.isErrorXml xml =
 Parse an AWS error from XML text.
 
 Extracts all standard AWS error fields from XML error responses.
-Returns an Aws.Http.Error record with parsed fields.
+Returns an aws.http.Error record with parsed fields.
 }}
-Aws.Http.parseErrorXml : Nat -> Text -> Aws.Http.Error
-Aws.Http.parseErrorXml statusCode xml =
-  code = Aws.Http.extractXmlTag "Code" xml
-  msg = Aws.Http.extractXmlTag "Message" xml
-  reqId = Aws.Http.extractXmlTag "RequestId" xml
-  hostId = Aws.Http.extractXmlTag "HostId" xml
-  Aws.Http.Error.Error statusCode code msg reqId hostId
+aws.http.parseErrorXml : Nat -> Text -> aws.http.Error
+aws.http.parseErrorXml statusCode xml =
+  code = aws.http.extractXmlTag "Code" xml
+  msg = aws.http.extractXmlTag "Message" xml
+  reqId = aws.http.extractXmlTag "RequestId" xml
+  hostId = aws.http.extractXmlTag "HostId" xml
+  aws.http.Error.Error statusCode code msg reqId hostId
 
 {{
 Parse an AWS error from an HTTP response.
@@ -662,14 +662,14 @@ Parse an AWS error from an HTTP response.
 Attempts to parse the response body as AWS XML error format.
 If not XML, creates a generic error with the HTTP status.
 }}
-Aws.Http.parseError : Http.Response -> Aws.Http.Error
-Aws.Http.parseError resp =
+aws.http.parseError : Http.Response -> aws.http.Error
+aws.http.parseError resp =
   status = Http.Response.statusCode resp
   bodyText = fromUtf8 (Response.body resp)
-  if Aws.Http.isErrorXml bodyText then
-    Aws.Http.parseErrorXml status bodyText
+  if aws.http.isErrorXml bodyText then
+    aws.http.parseErrorXml status bodyText
   else
-    Aws.Http.Error.Error status ("HTTP" ++ Nat.toText status) ("HTTP error: status " ++ Nat.toText status) "" ""
+    aws.http.Error.Error status ("HTTP" ++ Nat.toText status) ("HTTP error: status " ++ Nat.toText status) "" ""
 
 {{
 Handle HTTP response errors.
@@ -689,8 +689,8 @@ handleHttpResponse resp =
   if Nat.lt status 300 then ()
   else
     -- Error response - parse and raise exception
-    errorInfo = Aws.Http.parseError resp
-    Exception.raise (Aws.Http.Error.toFailure errorInfo)
+    errorInfo = aws.http.parseError resp
+    Exception.raise (aws.http.Error.toFailure errorInfo)
 
 -- =============================================================================
 -- Error Code Checking
@@ -700,20 +700,20 @@ handleHttpResponse resp =
 Check if an error matches a specific AWS error code.
 
 Example:
-  if Aws.Http.Error.isCode "NoSuchBucket" err then ...
+  if aws.http.Error.isCode "NoSuchBucket" err then ...
 }}
-Aws.Http.Error.isCode : Text -> Aws.Http.Error -> Boolean
-Aws.Http.Error.isCode expectedCode err =
-  Text.eq (Aws.Http.Error.code err) expectedCode
+aws.http.Error.isCode : Text -> aws.http.Error -> Boolean
+aws.http.Error.isCode expectedCode err =
+  Text.eq (aws.http.Error.code err) expectedCode
 
 {{
 Check if the error indicates the resource was not found.
 
 Matches common AWS "not found" error codes.
 }}
-Aws.Http.Error.isNotFound : Aws.Http.Error -> Boolean
-Aws.Http.Error.isNotFound err =
-  code = Aws.Http.Error.code err
+aws.http.Error.isNotFound : aws.http.Error -> Boolean
+aws.http.Error.isNotFound err =
+  code = aws.http.Error.code err
   isNoSuchBucket = Text.eq code "NoSuchBucket"
   isNoSuchKey = Text.eq code "NoSuchKey"
   isNotFound = Text.eq code "NotFound"
@@ -725,9 +725,9 @@ Check if the error indicates access was denied.
 
 Matches common AWS access/permission error codes.
 }}
-Aws.Http.Error.isAccessDenied : Aws.Http.Error -> Boolean
-Aws.Http.Error.isAccessDenied err =
-  code = Aws.Http.Error.code err
+aws.http.Error.isAccessDenied : aws.http.Error -> Boolean
+aws.http.Error.isAccessDenied err =
+  code = aws.http.Error.code err
   isAccessDenied = Text.eq code "AccessDenied"
   isForbidden = Text.eq code "Forbidden"
   is403 = Text.eq code "403"
@@ -738,10 +738,10 @@ Check if the error indicates the request was throttled.
 
 Matches AWS throttling error codes.
 }}
-Aws.Http.Error.isThrottled : Aws.Http.Error -> Boolean
-Aws.Http.Error.isThrottled err =
-  code = Aws.Http.Error.code err
-  status = Aws.Http.Error.statusCode err
+aws.http.Error.isThrottled : aws.http.Error -> Boolean
+aws.http.Error.isThrottled err =
+  code = aws.http.Error.code err
+  status = aws.http.Error.statusCode err
   isThrottling = Text.eq code "Throttling"
   isThrottlingException = Text.eq code "ThrottlingException"
   isSlowDown = Text.eq code "SlowDown"
@@ -756,10 +756,10 @@ Retryable errors include:
 - 429 Too Many Requests (throttling)
 - Specific AWS error codes like "ServiceUnavailable"
 }}
-Aws.Http.Error.isRetryable : Aws.Http.Error -> Boolean
-Aws.Http.Error.isRetryable err =
-  status = Aws.Http.Error.statusCode err
-  code = Aws.Http.Error.code err
+aws.http.Error.isRetryable : aws.http.Error -> Boolean
+aws.http.Error.isRetryable err =
+  status = aws.http.Error.statusCode err
+  code = aws.http.Error.code err
   -- 5xx errors are generally retryable
   is5xx = Nat.gteq status 500 && Nat.lt status 600
   -- 429 is throttling
@@ -779,11 +779,11 @@ Aws.Http.Error.isRetryable err =
 {{
 Try an operation and catch AWS errors, returning Either.
 
-Left contains the Aws.Http.Error on failure.
+Left contains the aws.http.Error on failure.
 Right contains the result on success.
 }}
-Aws.Http.try : '{IO, Exception} a -> '{IO} (Either Aws.Http.Error a)
-Aws.Http.try action = do
+aws.http.try : '{IO, Exception} a -> '{IO} (Either aws.http.Error a)
+aws.http.try action = do
   match Exception.catch action with
     Left failure -> 
       match Any.unsafeExtract (Failure.payload failure) with
@@ -793,25 +793,25 @@ Aws.Http.try action = do
 {{
 Try an operation and return Optional, discarding error details.
 }}
-Aws.Http.tryOptional : '{IO, Exception} a -> '{IO} (Optional a)
-Aws.Http.tryOptional action = do
-  match !(Aws.Http.try action) with
+aws.http.tryOptional : '{IO, Exception} a -> '{IO} (Optional a)
+aws.http.tryOptional action = do
+  match !(aws.http.try action) with
     Left _ -> None
     Right result -> Some result
 
 {{
 Check if a response indicates success (2xx status code).
 }}
-Aws.Http.isSuccessResponse : Http.Response -> Boolean
-Aws.Http.isSuccessResponse resp =
+aws.http.isSuccessResponse : Http.Response -> Boolean
+aws.http.isSuccessResponse resp =
   status = Http.Response.statusCode resp
   Nat.gteq status 200 && Nat.lt status 300
 
 {{
 Check if a response is empty (204 No Content or empty body).
 }}
-Aws.Http.isEmptyResponse : Http.Response -> Boolean
-Aws.Http.isEmptyResponse resp =
+aws.http.isEmptyResponse : Http.Response -> Boolean
+aws.http.isEmptyResponse resp =
   status = Http.Response.statusCode resp
   Nat.eq status 204 || Bytes.isEmpty (Response.body resp)
 
@@ -827,7 +827,7 @@ Retry configuration for AWS HTTP requests.
 - maxDelayMs: Maximum delay cap in milliseconds (default: 20000)
 - jitterFactor: Randomization factor 0.0-1.0 (default: 0.2)
 }}
-structural type Aws.Http.RetryConfig = {
+structural type aws.http.RetryConfig = {
   maxRetries : Nat,
   baseDelayMs : Nat,
   maxDelayMs : Nat
@@ -841,22 +841,22 @@ Uses AWS SDK defaults:
 - 100ms base delay
 - 20 second max delay
 }}
-Aws.Http.RetryConfig.default : Aws.Http.RetryConfig
-Aws.Http.RetryConfig.default =
-  Aws.Http.RetryConfig.RetryConfig 3 100 20000
+aws.http.RetryConfig.default : aws.http.RetryConfig
+aws.http.RetryConfig.default =
+  aws.http.RetryConfig.RetryConfig 3 100 20000
 
 {{
 Create a retry config with custom max retries.
 }}
-Aws.Http.RetryConfig.withMaxRetries : Nat -> Aws.Http.RetryConfig
-Aws.Http.RetryConfig.withMaxRetries n =
-  Aws.Http.RetryConfig.RetryConfig n 100 20000
+aws.http.RetryConfig.withMaxRetries : Nat -> aws.http.RetryConfig
+aws.http.RetryConfig.withMaxRetries n =
+  aws.http.RetryConfig.RetryConfig n 100 20000
 
 {{
 Retry result type tracking attempts and final outcome.
 }}
-structural type Aws.Http.RetryResult a = {
-  result : Either Aws.Http.Error a,
+structural type aws.http.RetryResult a = {
+  result : Either aws.http.Error a,
   attempts : Nat,
   totalDelayMs : Nat
 }
@@ -867,10 +867,10 @@ Calculate exponential backoff delay for a given attempt.
 Uses formula: min(maxDelay, baseDelay * 2^attempt)
 Returns delay in milliseconds.
 }}
-Aws.Http.calculateBackoff : Aws.Http.RetryConfig -> Nat -> Nat
-Aws.Http.calculateBackoff config attempt =
-  base = Aws.Http.RetryConfig.baseDelayMs config
-  maxDelay = Aws.Http.RetryConfig.maxDelayMs config
+aws.http.calculateBackoff : aws.http.RetryConfig -> Nat -> Nat
+aws.http.calculateBackoff config attempt =
+  base = aws.http.RetryConfig.baseDelayMs config
+  maxDelay = aws.http.RetryConfig.maxDelayMs config
   -- Calculate 2^attempt using repeated multiplication
   multiplier = Nat.pow 2 attempt
   delay = (Nat.*) base multiplier
@@ -886,8 +886,8 @@ AWS may return Retry-After as:
 
 Returns delay in milliseconds, or None if not parseable.
 }}
-Aws.Http.parseRetryAfter : Text -> Optional Nat
-Aws.Http.parseRetryAfter headerValue =
+aws.http.parseRetryAfter : Text -> Optional Nat
+aws.http.parseRetryAfter headerValue =
   match Nat.fromText headerValue with
     Some seconds -> Some ((Nat.*) seconds 1000)
     None -> None
@@ -897,15 +897,15 @@ Get retry delay from an HTTP response.
 
 Checks Retry-After header first, falls back to calculated backoff.
 }}
-Aws.Http.getRetryDelay : Aws.Http.RetryConfig -> Http.Response -> Nat -> Nat
-Aws.Http.getRetryDelay config resp attempt =
+aws.http.getRetryDelay : aws.http.RetryConfig -> Http.Response -> Nat -> Nat
+aws.http.getRetryDelay config resp attempt =
   retryAfterHeader = Response.getHeader "Retry-After" resp
   match retryAfterHeader with
     Some value -> 
-      match Aws.Http.parseRetryAfter value with
+      match aws.http.parseRetryAfter value with
         Some delayMs -> delayMs
-        None -> Aws.Http.calculateBackoff config attempt
-    None -> Aws.Http.calculateBackoff config attempt
+        None -> aws.http.calculateBackoff config attempt
+    None -> aws.http.calculateBackoff config attempt
 
 {{
 Sleep for the specified number of milliseconds.
@@ -914,8 +914,8 @@ Note: This is a placeholder that returns immediately.
 Real delay requires @unison/io or similar library with Threads ability.
 The delay parameter is tracked for retry logic even without actual sleeping.
 }}
-Aws.Http.sleepMs : Nat -> '{IO} ()
-Aws.Http.sleepMs ms = do
+aws.http.sleepMs : Nat -> '{IO} ()
+aws.http.sleepMs ms = do
   -- Placeholder - actual sleep requires additional IO primitives
   -- The ms parameter is intentionally unused until proper sleep is available
   _ = ms
@@ -931,29 +931,29 @@ Returns RetryResult containing:
 - Number of attempts made
 - Total delay time in milliseconds
 }}
-Aws.Http.withRetry : Aws.Http.RetryConfig -> '{IO, Exception} a -> '{IO} (Aws.Http.RetryResult a)
-Aws.Http.withRetry config action =
+aws.http.withRetry : aws.http.RetryConfig -> '{IO, Exception} a -> '{IO} (aws.http.RetryResult a)
+aws.http.withRetry config action =
   retryLoop attempt totalDelay =
     match Exception.catch action with
       Right result -> 
-        Aws.Http.RetryResult.RetryResult (Right result) (attempt + 1) totalDelay
+        aws.http.RetryResult.RetryResult (Right result) (attempt + 1) totalDelay
       Left failure ->
-        -- Try to extract Aws.Http.Error from failure
+        -- Try to extract aws.http.Error from failure
         err = match Any.unsafeExtract (Failure.payload failure) with
           e -> e
         -- Check if we should retry
-        shouldRetry = Aws.Http.Error.isRetryable err
-        hasRetriesLeft = Nat.lt attempt (Aws.Http.RetryConfig.maxRetries config)
+        shouldRetry = aws.http.Error.isRetryable err
+        hasRetriesLeft = Nat.lt attempt (aws.http.RetryConfig.maxRetries config)
         canRetry = shouldRetry && hasRetriesLeft
         if canRetry then
           -- Calculate delay
-          delayMs = Aws.Http.calculateBackoff config attempt
+          delayMs = aws.http.calculateBackoff config attempt
           -- Sleep then retry
-          _ = !(Aws.Http.sleepMs delayMs)
+          _ = !(aws.http.sleepMs delayMs)
           retryLoop (attempt + 1) (totalDelay + delayMs)
         else
           -- Return error result
-          Aws.Http.RetryResult.RetryResult (Left err) (attempt + 1) totalDelay
+          aws.http.RetryResult.RetryResult (Left err) (attempt + 1) totalDelay
   do retryLoop 0 0
 
 {{
@@ -961,27 +961,27 @@ Execute an action with default retry configuration.
 
 Convenience function using default retry settings.
 }}
-Aws.Http.withDefaultRetry : '{IO, Exception} a -> '{IO} (Aws.Http.RetryResult a)
-Aws.Http.withDefaultRetry action =
-  Aws.Http.withRetry Aws.Http.RetryConfig.default action
+aws.http.withDefaultRetry : '{IO, Exception} a -> '{IO} (aws.http.RetryResult a)
+aws.http.withDefaultRetry action =
+  aws.http.withRetry aws.http.RetryConfig.default action
 
 {{
 Execute an action with retry, returning just the result.
 
 Raises exception on final failure after all retries exhausted.
 }}
-Aws.Http.retryOrFail : Aws.Http.RetryConfig -> '{IO, Exception} a -> '{IO, Exception} a
-Aws.Http.retryOrFail config action = do
-  retryResult = !(Aws.Http.withRetry config action)
-  match Aws.Http.RetryResult.result retryResult with
+aws.http.retryOrFail : aws.http.RetryConfig -> '{IO, Exception} a -> '{IO, Exception} a
+aws.http.retryOrFail config action = do
+  retryResult = !(aws.http.withRetry config action)
+  match aws.http.RetryResult.result retryResult with
     Right a -> a
-    Left err -> Exception.raise (Aws.Http.Error.toFailure err)
+    Left err -> Exception.raise (aws.http.Error.toFailure err)
 
 {{
 Execute an action with default retry, returning just the result.
 
 Convenience function that raises exception on final failure.
 }}
-Aws.Http.retryOrFailDefault : '{IO, Exception} a -> '{IO, Exception} a
-Aws.Http.retryOrFailDefault action =
-  Aws.Http.retryOrFail Aws.Http.RetryConfig.default action
+aws.http.retryOrFailDefault : '{IO, Exception} a -> '{IO, Exception} a
+aws.http.retryOrFailDefault action =
+  aws.http.retryOrFail aws.http.RetryConfig.default action

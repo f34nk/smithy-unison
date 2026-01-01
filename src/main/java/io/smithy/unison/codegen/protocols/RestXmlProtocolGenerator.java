@@ -217,7 +217,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         
         if (useS3Url) {
             // S3-specific URL building with bucket routing
-            // Note: Unison uses accessor functions for record fields: Aws.S3.Config.endpoint config
+            // Note: Unison uses accessor functions for record fields: aws.s3.Config.endpoint config
             // Check which label members exist (bucket is required, key is optional for some operations)
             boolean hasBucket = httpLabelMembers.stream()
                     .anyMatch(m -> m.getMemberName().equalsIgnoreCase("bucket"));
@@ -246,7 +246,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             }
             writer.write("endpoint = $L.endpoint config", configType);
             writer.write("usePathStyle = $L.usePathStyle config", configType);
-            writer.write("url = Aws.S3.buildUrl endpoint bucket key usePathStyle");
+            writer.write("url = aws.s3.buildUrl endpoint bucket key usePathStyle");
         } else if (httpLabelMembers.isEmpty()) {
             // No path parameters
             writer.write("url = ($L.endpoint config) ++ \"$L\"", configType, uri);
@@ -263,7 +263,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 String nextUri = "uri" + (i + 1);
                 
                 writer.write("$LValue = $L.$L input", memberName, inputType, memberName);
-                writer.write("$L = Text.replaceAll \"$L\" (Aws.urlEncode $LValue) $L", 
+                writer.write("$L = Text.replaceAll \"$L\" (aws.urlEncode $LValue) $L", 
                         nextUri, placeholder, memberName, currentUri);
                 currentUri = nextUri;
             }
@@ -312,11 +312,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             if (isRequired) {
                 // Required field: convert value directly and wrap in Some
-                writer.write("Some (\"$L=\" ++ Aws.Http.urlEncode ($L ($L.$L input)))$L", 
+                writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L ($L.$L input)))$L", 
                         queryName, toTextFunc, inputType, memberName, comma);
             } else {
                 // Optional field: map over the Optional
-                writer.write("Optional.map (v -> \"$L=\" ++ Aws.Http.urlEncode ($L v)) ($L.$L input)$L", 
+                writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L", 
                         queryName, toTextFunc, inputType, memberName, comma);
             }
         }
@@ -340,13 +340,13 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     private String getToTextFunction(Shape shape, String clientNamespace) {
         // Check for Smithy 2.0 enums first
         if (shape instanceof EnumShape) {
-            // Enums use a namespaced function like: Aws.S3.requestPayerToText
+            // Enums use a namespaced function like: aws.s3.requestPayerToText
             return UnisonSymbolProvider.toNamespacedFunctionName(
                     shape.getId().getName() + "ToText", clientNamespace);
         }
         // Check for Smithy 1.0 style enums (strings with @enum trait)
         if (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
-            // Enums use a namespaced function like: Aws.S3.requestPayerToText
+            // Enums use a namespaced function like: aws.s3.requestPayerToText
             return UnisonSymbolProvider.toNamespacedFunctionName(
                     shape.getId().getName() + "ToText", clientNamespace);
         }
@@ -492,7 +492,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 writer.write("body = Text.toUtf8 ($L.$L input)", inputType, memberName);
             } else {
                 // Structure payload - serialize as XML
-                writer.write("body = Aws.Xml.encode ($L.$L input)", inputType, memberName);
+                writer.write("body = aws.xml.encode ($L.$L input)", inputType, memberName);
             }
         } else if (bodyMembers.isEmpty()) {
             // No body members - empty body
@@ -500,7 +500,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         } else {
             // Serialize body members as XML - pass input directly
             writer.write("-- Serialize body members as XML");
-            writer.write("body = Aws.Xml.encode input");
+            writer.write("body = aws.xml.encode input");
         }
     }
     
@@ -585,9 +585,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 }
             } else if (targetShape.isStringShape()) {
                 if (isOptional) {
-                    writer.write("$L (Some (Aws.Http.bytesToText (Response.body response)))", outputTypeName);
+                    writer.write("$L (Some (aws.http.bytesToText (Response.body response)))", outputTypeName);
                 } else {
-                    writer.write("$L (Aws.Http.bytesToText (Response.body response))", outputTypeName);
+                    writer.write("$L (aws.http.bytesToText (Response.body response))", outputTypeName);
                 }
             } else {
                 // Structure payload - generate XML parsing
@@ -683,9 +683,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         if (targetShape.isBlobShape()) {
             writer.write("$L = Response.body response", memberName);
         } else if (targetShape.isStringShape()) {
-            writer.write("$L = Aws.Http.bytesToText (Response.body response)", memberName);
+            writer.write("$L = aws.http.bytesToText (Response.body response)", memberName);
         } else {
-            writer.write("$L = Aws.Xml.decode (Response.body response)", memberName);
+            writer.write("$L = aws.xml.decode (Response.body response)", memberName);
         }
     }
     
@@ -754,7 +754,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         }
         
         // Write the constructor call with positional arguments
-        // Record constructor is just the type name (e.g., Aws.S3.GetObjectOutput)
+        // Record constructor is just the type name (e.g., aws.s3.GetObjectOutput)
         if (args.isEmpty()) {
             writer.write("$L", outputTypeName);
         } else {
@@ -791,7 +791,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else if (targetShape.isStringShape()) {
                 writer.write("body = Text.toUtf8 input.$L", memberName);
             } else {
-                writer.write("body = Aws.Xml.encode input.$L", memberName);
+                writer.write("body = aws.xml.encode input.$L", memberName);
             }
         } else {
             List<MemberShape> bodyMembers = ProtocolUtils.getBodyMembers(inputShape.get());
@@ -801,7 +801,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 writer.write("body = Bytes.empty");
             } else {
                 writer.writeComment("Encode body members as XML");
-                writer.write("body = Aws.Xml.encode input");
+                writer.write("body = aws.xml.encode input");
             }
         }
     }
@@ -829,7 +829,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             if (targetShape.isBlobShape()) {
                 writer.write("{ $L = Response.body response }", memberName);
             } else if (targetShape.isStringShape()) {
-                writer.write("{ $L = Aws.Http.bytesToText (Response.body response) }", memberName);
+                writer.write("{ $L = aws.http.bytesToText (Response.body response) }", memberName);
             } else {
                 // Structure payload - generate inline XML parsing
                 writer.writeComment("Structure payload - parse XML");
@@ -876,10 +876,10 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("parseError : Response -> $L", errorTypeName);
         writer.write("parseError response =");
         writer.indent();
-        writer.write("errorBody = Aws.Http.bytesToText (Response.body response)");
+        writer.write("errorBody = aws.http.bytesToText (Response.body response)");
         writer.write("-- Parse XML error: <Error><Code>...</Code><Message>...</Message></Error>");
-        writer.write("code = Aws.Xml.extractElement \"Code\" errorBody");
-        writer.write("message = Aws.Xml.extractElement \"Message\" errorBody");
+        writer.write("code = aws.xml.extractElement \"Code\" errorBody");
+        writer.write("message = aws.xml.extractElement \"Message\" errorBody");
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);
         writer.dedent();
         writer.writeBlankLine();
@@ -892,8 +892,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
      * <p>This generates code like:
      * <pre>
      * xmlText = fromUtf8 (Response.body response)
-     * field1Val = Aws.Xml.extractElementOpt "Field1" xmlText
-     * field2Val = Aws.Xml.extractInt "Field2" xmlText
+     * field1Val = aws.xml.extractElementOpt "Field1" xmlText
+     * field2Val = aws.xml.extractInt "Field2" xmlText
      * OutputType.OutputType field1Val field2Val ...
      * </pre>
      */
@@ -922,7 +922,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         }
         
         // Construct the output record with extracted values
-        // Record constructor is just the type name (e.g., Aws.S3.ListObjectsV2Output)
+        // Record constructor is just the type name (e.g., aws.s3.ListObjectsV2Output)
         writer.write("$L", outputTypeName);
         writer.indent();
         for (int i = 0; i < allMembers.size(); i++) {
@@ -948,29 +948,29 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             String enumFromText = UnisonSymbolProvider.toNamespacedFunctionName(
                     targetShape.getId().getName() + "FromText", clientNamespace);
             String textVarName = varName + "Text";
-            writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", textVarName, xmlElementName);
+            writer.write("$L = aws.xml.extractElementOpt \"$L\" xmlText", textVarName, xmlElementName);
             writer.write("$L = Optional.flatMap $L $L", varName, enumFromText, textVarName);
         } else if (targetShape.isStringShape()) {
             // Regular string type
             if (isOptional) {
-                writer.write("$L = Aws.Xml.extractElementOpt \"$L\" xmlText", varName, xmlElementName);
+                writer.write("$L = aws.xml.extractElementOpt \"$L\" xmlText", varName, xmlElementName);
             } else {
-                writer.write("$L = Aws.Xml.extractElement \"$L\" xmlText", varName, xmlElementName);
+                writer.write("$L = aws.xml.extractElement \"$L\" xmlText", varName, xmlElementName);
             }
         } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
             // Int extraction returns Optional Int
-            writer.write("$L = Aws.Xml.extractInt \"$L\" xmlText", varName, xmlElementName);
+            writer.write("$L = aws.xml.extractInt \"$L\" xmlText", varName, xmlElementName);
         } else if (targetShape.isBooleanShape()) {
             // Bool extraction returns Optional Boolean
-            writer.write("$L = Aws.Xml.extractBool \"$L\" xmlText", varName, xmlElementName);
+            writer.write("$L = aws.xml.extractBool \"$L\" xmlText", varName, xmlElementName);
         } else if (targetShape.isBlobShape()) {
             // Blob from base64 encoded text
             if (isOptional) {
-                writer.write("$L = Optional.map base64.decode (Aws.Xml.extractElementOpt \"$L\" xmlText)", 
+                writer.write("$L = Optional.map base64.decode (aws.xml.extractElementOpt \"$L\" xmlText)", 
                         varName, xmlElementName);
             } else {
                 String textVar = varName + "Text";
-                writer.write("$L = Aws.Xml.extractElement \"$L\" xmlText", textVar, xmlElementName);
+                writer.write("$L = aws.xml.extractElement \"$L\" xmlText", textVar, xmlElementName);
                 writer.write("$L = base64.decode $L", varName, textVar);
             }
         } else if (targetShape instanceof ListShape) {
@@ -982,7 +982,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             if (memberTarget.isStringShape()) {
                 // List of strings
-                writer.write("$L = Aws.Xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
+                writer.write("$L = aws.xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
                 if (isOptional) {
                     writer.write("$L = if List.isEmpty $L then None else Some $L", 
                             varName, itemsVarName, itemsVarName);
@@ -998,10 +998,10 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 
                 // Generate inline parsing that uses the structure parser
                 if (isOptional) {
-                    writer.write("$L = Aws.Xml.parseOptionalWrappedListFromXml \"$L\" \"$L\" $L xmlText",
+                    writer.write("$L = aws.xml.parseOptionalWrappedListFromXml \"$L\" \"$L\" $L xmlText",
                             varName, xmlElementName, itemElementName, parserName);
                 } else {
-                    writer.write("$L = Aws.Xml.parseListFromXml \"$L\" $L xmlText",
+                    writer.write("$L = aws.xml.parseListFromXml \"$L\" $L xmlText",
                             varName, itemElementName, parserName);
                 }
             } else if (memberTarget instanceof EnumShape || 
@@ -1009,7 +1009,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 // List of enums - extract text and map using fromText function
                 String enumFromText = UnisonSymbolProvider.toNamespacedFunctionName(
                         memberTarget.getId().getName() + "FromText", clientNamespace);
-                writer.write("$L = Aws.Xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
+                writer.write("$L = aws.xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
                 writer.write("$L = List.filterMap $L $L", varName + "Parsed", enumFromText, itemsVarName);
                 if (isOptional) {
                     writer.write("$L = if List.isEmpty $L then None else Some $L", 
@@ -1020,7 +1020,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else {
                 // Fallback for other list types (integers, etc.)
                 if (memberTarget.isIntegerShape() || memberTarget.isLongShape()) {
-                    writer.write("$L = Aws.Xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
+                    writer.write("$L = aws.xml.extractAll \"$L\" xmlText", itemsVarName, itemElementName);
                     writer.write("$L = List.filterMap Int.fromText $L", varName + "Parsed", itemsVarName);
                     if (isOptional) {
                         writer.write("$L = if List.isEmpty $L then None else Some $L", 
@@ -1045,11 +1045,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     "parse" + baseTypeName + "FromXml", clientNamespace);
             
             if (isOptional) {
-                writer.write("$L = Aws.Xml.parseNestedFromXml \"$L\" $L xmlText", varName, xmlElementName, parserName);
+                writer.write("$L = aws.xml.parseNestedFromXml \"$L\" $L xmlText", varName, xmlElementName, parserName);
             } else {
                 // Required nested structure - parse and extract, bug if missing
                 String optVarName = varName + "Opt";
-                writer.write("$L = Aws.Xml.parseNestedFromXml \"$L\" $L xmlText", optVarName, xmlElementName, parserName);
+                writer.write("$L = aws.xml.parseNestedFromXml \"$L\" $L xmlText", optVarName, xmlElementName, parserName);
                 writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
                         varName, xmlElementName, optVarName);
             }

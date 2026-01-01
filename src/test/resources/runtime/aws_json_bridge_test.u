@@ -1,8 +1,8 @@
 -- Unit tests for AWS JSON Bridge Module
 
-namespace Aws.Json.Bridge.Test
+namespace aws.json.bridge.test
 
-use Aws.Json
+use aws.json
 use Bytes
 use Text ++
 use Nat >

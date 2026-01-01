@@ -27,10 +27,10 @@ Example (path-style): buildUrl "s3.us-east-1.amazonaws.com" "mybucket" "path/to/
 Example (full URL endpoint): buildUrl "http://moto:5050" "mybucket" "path/to/file.txt" true
   -> "http://moto:5050/mybucket/path/to/file.txt"
 }}
-Aws.S3.buildUrl : Text -> Text -> Text -> Boolean -> Text
-Aws.S3.buildUrl endpoint bucket key usePathStyle =
+aws.s3.buildUrl : Text -> Text -> Text -> Boolean -> Text
+aws.s3.buildUrl endpoint bucket key usePathStyle =
   let
-    encodedKey = Aws.S3.urlEncodeKey key
+    encodedKey = aws.s3.urlEncodeKey key
     -- Check if endpoint already has a scheme (http:// or https://)
     hasScheme = Text.startsWith "http://" endpoint || Text.startsWith "https://" endpoint
     if hasScheme then
@@ -52,10 +52,10 @@ Build an S3 URL with query string.
 
 Combines bucket routing with query parameters.
 }}
-Aws.S3.buildUrlWithQuery : Text -> Text -> Text -> Boolean -> Text -> Text
-Aws.S3.buildUrlWithQuery endpoint bucket key usePathStyle queryString =
+aws.s3.buildUrlWithQuery : Text -> Text -> Text -> Boolean -> Text -> Text
+aws.s3.buildUrlWithQuery endpoint bucket key usePathStyle queryString =
   let
-    baseUrl = Aws.S3.buildUrl endpoint bucket key usePathStyle
+    baseUrl = aws.s3.buildUrl endpoint bucket key usePathStyle
     if Text.isEmpty queryString then baseUrl
     else baseUrl ++ "?" ++ queryString
 
@@ -70,8 +70,8 @@ Example: buildBucketUrl "s3.us-east-1.amazonaws.com" "mybucket" false
 Example (full URL): buildBucketUrl "http://moto:5050" "mybucket" true
   -> "http://moto:5050/mybucket"
 }}
-Aws.S3.buildBucketUrl : Text -> Text -> Boolean -> Text
-Aws.S3.buildBucketUrl endpoint bucket usePathStyle =
+aws.s3.buildBucketUrl : Text -> Text -> Boolean -> Text
+aws.s3.buildBucketUrl endpoint bucket usePathStyle =
   -- Check if endpoint already has a scheme
   hasScheme = Text.startsWith "http://" endpoint || Text.startsWith "https://" endpoint
   if hasScheme then
@@ -97,8 +97,8 @@ This function encodes special characters but preserves slashes.
 Example: urlEncodeKey "path/to/my file.txt"
   -> "path/to/my%20file.txt"
 }}
-Aws.S3.urlEncodeKey : Text -> Text
-Aws.S3.urlEncodeKey key =
+aws.s3.urlEncodeKey : Text -> Text
+aws.s3.urlEncodeKey key =
   key
     |> Text.replaceAll " " "%20"
     |> Text.replaceAll "!" "%21"
@@ -127,9 +127,9 @@ Use this for bucket names or when you need to encode slashes.
 Example: urlEncodeSegment "my/bucket"
   -> "my%2Fbucket"
 }}
-Aws.S3.urlEncodeSegment : Text -> Text
-Aws.S3.urlEncodeSegment text =
-  Aws.S3.urlEncodeKey text |> Text.replaceAll "/" "%2F"
+aws.s3.urlEncodeSegment : Text -> Text
+aws.s3.urlEncodeSegment text =
+  aws.s3.urlEncodeKey text |> Text.replaceAll "/" "%2F"
 
 -- =============================================================================
 -- Bucket Name Validation
@@ -147,18 +147,18 @@ S3 bucket naming rules:
 - Must not be formatted as an IP address
 
 }}
-Aws.S3.isValidBucketName : Text -> Boolean
-Aws.S3.isValidBucketName name =
+aws.s3.isValidBucketName : Text -> Boolean
+aws.s3.isValidBucketName name =
   len = Text.size name
   firstChar = Text.take 1 name
   lastChar = Text.drop (Nat.decrement len) name
-  startsWithValid = Aws.S3.isLowercaseLetter firstChar || Aws.S3.isDigit firstChar
-  endsWithValid = Aws.S3.isLowercaseLetter lastChar || Aws.S3.isDigit lastChar
+  startsWithValid = aws.s3.isLowercaseLetter firstChar || aws.s3.isDigit firstChar
+  endsWithValid = aws.s3.isLowercaseLetter lastChar || aws.s3.isDigit lastChar
   chars = Text.toCharList name
-  allCharsValid = List.all Aws.S3.isValidBucketChar chars
+  allCharsValid = List.all aws.s3.isValidBucketChar chars
   notXnPrefix = not (Text.startsWith "xn--" name)
   notS3AliasSuffix = not (Text.endsWith "-s3alias" name)
-  notIpAddress = not (Aws.S3.looksLikeIpAddress name)
+  notIpAddress = not (aws.s3.looksLikeIpAddress name)
   Nat.gteq len 3 
     && Nat.lteq len 63 
     && startsWithValid 
@@ -173,33 +173,33 @@ Check if a character is valid in an S3 bucket name.
 
 Valid characters: lowercase letters (a-z), digits (0-9), hyphen (-)
 }}
-Aws.S3.isValidBucketChar : Char -> Boolean
-Aws.S3.isValidBucketChar c =
-  Aws.S3.isLowercaseLetter (Char.toText c) 
-    || Aws.S3.isDigit (Char.toText c)
+aws.s3.isValidBucketChar : Char -> Boolean
+aws.s3.isValidBucketChar c =
+  aws.s3.isLowercaseLetter (Char.toText c) 
+    || aws.s3.isDigit (Char.toText c)
     || Char.eq c ?-
 
 {{
 Check if a single character (as Text) is a lowercase letter.
 }}
-Aws.S3.isLowercaseLetter : Text -> Boolean
-Aws.S3.isLowercaseLetter c =
+aws.s3.isLowercaseLetter : Text -> Boolean
+aws.s3.isLowercaseLetter c =
   List.contains c ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
 
 {{
 Check if a single character (as Text) is a digit.
 }}
-Aws.S3.isDigit : Text -> Boolean
-Aws.S3.isDigit c =
+aws.s3.isDigit : Text -> Boolean
+aws.s3.isDigit c =
   List.contains c ["0","1","2","3","4","5","6","7","8","9"]
 
 {{
 Check if a string looks like an IP address (very basic check).
 }}
-Aws.S3.looksLikeIpAddress : Text -> Boolean
-Aws.S3.looksLikeIpAddress name =
+aws.s3.looksLikeIpAddress : Text -> Boolean
+aws.s3.looksLikeIpAddress name =
   -- Very basic check: if all characters are digits and dots
-  isIpChar c = Char.eq c ?. || Aws.S3.isDigit (Char.toText c)
+  isIpChar c = Char.eq c ?. || aws.s3.isDigit (Char.toText c)
   chars = Text.toCharList name
   List.all isIpChar chars && Text.contains "." name
 
@@ -211,8 +211,8 @@ Aws.S3.looksLikeIpAddress name =
 Build the default S3 endpoint for a region.
 
 }}
-Aws.S3.defaultEndpoint : Text -> Text
-Aws.S3.defaultEndpoint region =
+aws.s3.defaultEndpoint : Text -> Text
+aws.s3.defaultEndpoint region =
   "s3." ++ region ++ ".amazonaws.com"
 
 {{
@@ -220,24 +220,24 @@ Build the S3 accelerate endpoint.
 S3 Transfer Acceleration uses a special endpoint for faster uploads.
 
 }}
-Aws.S3.accelerateEndpoint : Text
-Aws.S3.accelerateEndpoint = "s3-accelerate.amazonaws.com"
+aws.s3.accelerateEndpoint : Text
+aws.s3.accelerateEndpoint = "s3-accelerate.amazonaws.com"
 
 {{
 Build the S3 dual-stack endpoint for a region.
 Dual-stack endpoints support both IPv4 and IPv6.
 
 }}
-Aws.S3.dualStackEndpoint : Text -> Text
-Aws.S3.dualStackEndpoint region =
+aws.s3.dualStackEndpoint : Text -> Text
+aws.s3.dualStackEndpoint region =
   "s3.dualstack." ++ region ++ ".amazonaws.com"
 
 {{
 Build a LocalStack S3 endpoint for testing.
 
 }}
-Aws.S3.localStackEndpoint : Nat -> Text
-Aws.S3.localStackEndpoint port =
+aws.s3.localStackEndpoint : Nat -> Text
+aws.s3.localStackEndpoint port =
   "localhost:" ++ Nat.toText port
 
 -- =============================================================================
@@ -249,8 +249,8 @@ Get the file name from an S3 object key.
 
 Returns everything after the last slash.
 }}
-Aws.S3.getFileName : Text -> Text
-Aws.S3.getFileName key =
+aws.s3.getFileName : Text -> Text
+aws.s3.getFileName key =
   parts = lib.unison_base_3_18_0.Text.split ?/ key
   match List.last parts with
     Some name -> name
@@ -261,8 +261,8 @@ Get the directory path from an S3 object key.
 
 Returns everything up to and including the last slash.
 }}
-Aws.S3.getDirectory : Text -> Text
-Aws.S3.getDirectory key =
+aws.s3.getDirectory : Text -> Text
+aws.s3.getDirectory key =
   -- Simple approach: split by slash and rejoin all but last
   parts = lib.unison_base_3_18_0.Text.split ?/ key
   len = List.size parts
@@ -275,9 +275,9 @@ Get the file extension from an S3 object key.
 
 Returns extension without the dot, or empty if none.
 }}
-Aws.S3.getExtension : Text -> Text
-Aws.S3.getExtension key =
-  fileName = Aws.S3.getFileName key
+aws.s3.getExtension : Text -> Text
+aws.s3.getExtension key =
+  fileName = aws.s3.getFileName key
   parts = lib.unison_base_3_18_0.Text.split ?. fileName
   if List.size parts Nat.<= 1 
     then ""
@@ -290,8 +290,8 @@ Join path segments into an S3 key.
 Handles leading/trailing slashes appropriately.
 
 }}
-Aws.S3.joinKey : [Text] -> Text
-Aws.S3.joinKey segments =
+aws.s3.joinKey : [Text] -> Text
+aws.s3.joinKey segments =
   trimSlash : Text -> Text
   trimSlash s =
     trimStart = if Text.startsWith "/" s then Text.drop 1 s else s

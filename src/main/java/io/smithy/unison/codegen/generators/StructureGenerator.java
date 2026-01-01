@@ -103,7 +103,7 @@ public final class StructureGenerator {
     /**
      * Gets the Unison type name for this structure (namespaced).
      *
-     * @return The namespaced type name (e.g., "Aws.S3.CreateBucketRequest")
+     * @return The namespaced type name (e.g., "aws.s3.CreateBucketRequest")
      */
     public String getTypeName() {
         return UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
@@ -248,7 +248,7 @@ public final class StructureGenerator {
             return "Text";
         } else if (shape instanceof DocumentShape) {
             // Document type for schema-less JSON - map to JsonValue
-            return "Aws.Json.JsonValue";
+            return "aws.json.JsonValue";
         } else if (shape instanceof ListShape) {
             ListShape list = (ListShape) shape;
             Shape memberShape = model.expectShape(list.getMember().getTarget());
@@ -272,7 +272,7 @@ public final class StructureGenerator {
             // Check if this is DynamoDB AttributeValue - use runtime type
             UnionShape unionShape = (UnionShape) shape;
             if (isDynamoDBAttributeValue(unionShape)) {
-                return "Aws.Json.AttributeValue";
+                return "aws.json.AttributeValue";
             }
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof EnumShape) {
@@ -287,7 +287,7 @@ public final class StructureGenerator {
      * Checks if a union shape is the DynamoDB AttributeValue type.
      * 
      * <p>DynamoDB's AttributeValue is a special union that should use the runtime
-     * type Aws.Json.AttributeValue instead of generating a new type.
+     * type aws.json.AttributeValue instead of generating a new type.
      * 
      * @param union The union shape to check
      * @return true if this is DynamoDB's AttributeValue union

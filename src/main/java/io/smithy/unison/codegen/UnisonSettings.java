@@ -110,9 +110,9 @@ public final class UnisonSettings {
      * 
      * <p>Converts the dot-separated namespace to PascalCase segments:
      * <ul>
-     *   <li>"aws.s3" → "Aws.S3"</li>
-     *   <li>"aws.dynamodb" → "Aws.DynamoDB"</li>
-     *   <li>"aws.lambda" → "Aws.Lambda"</li>
+     *   <li>"aws.s3" → "aws.s3"</li>
+     *   <li>"aws.dynamodb" → "aws.dynamodb"</li>
+     *   <li>"aws.lambda" → "aws.lambda"</li>
      * </ul>
      * 
      * @return The client namespace prefix, or empty string if no namespace configured

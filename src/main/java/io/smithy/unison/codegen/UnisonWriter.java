@@ -645,13 +645,13 @@ public final class UnisonWriter extends SymbolWriter<UnisonWriter, UnisonImportC
     /**
      * Converts a PascalCase string to lowerCamelCase.
      * 
-     * <p>For namespaced names like "Aws.S3.RequestPayer", only the last
-     * component is converted to lowerCamelCase, resulting in "Aws.S3.requestPayer".
+     * <p>For namespaced names like "aws.s3.RequestPayer", only the last
+     * component is converted to lowerCamelCase, resulting in "aws.s3.requestPayer".
      */
     private String toLowerCamelCase(String s) {
         if (s == null || s.isEmpty()) return s;
         
-        // Handle namespaced names (e.g., "Aws.S3.RequestPayer" -> "Aws.S3.requestPayer")
+        // Handle namespaced names (e.g., "aws.s3.RequestPayer" -> "aws.s3.requestPayer")
         int lastDot = s.lastIndexOf('.');
         if (lastDot >= 0) {
             String namespace = s.substring(0, lastDot + 1);

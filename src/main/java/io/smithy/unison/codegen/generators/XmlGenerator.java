@@ -10,10 +10,10 @@ import io.smithy.unison.codegen.UnisonWriter;
  * 
  * <h2>Generated Functions</h2>
  * <ul>
- *   <li>{@code Aws.Xml.encode} - Encode Unison values to XML</li>
- *   <li>{@code Aws.Xml.decode} - Decode XML to Unison values</li>
- *   <li>{@code Aws.Xml.extractElement} - Extract text content from XML element</li>
- *   <li>{@code Aws.Xml.extractAttribute} - Extract attribute value from XML element</li>
+ *   <li>{@code aws.xml.encode} - Encode Unison values to XML</li>
+ *   <li>{@code aws.xml.decode} - Decode XML to Unison values</li>
+ *   <li>{@code aws.xml.extractElement} - Extract text content from XML element</li>
+ *   <li>{@code aws.xml.extractAttribute} - Extract attribute value from XML element</li>
  * </ul>
  * 
  * <h2>XML Format</h2>
@@ -56,8 +56,8 @@ public class XmlGenerator {
             "Escape special XML characters in text content.\n\n" +
             "Converts: & -> &amp; < -> &lt; > -> &gt; \" -> &quot; ' -> &apos;");
         
-        writer.writeSignature("Aws.Xml.escape", "Text -> Text");
-        writer.write("Aws.Xml.escape text =");
+        writer.writeSignature("aws.xml.escape", "Text -> Text");
+        writer.write("aws.xml.escape text =");
         writer.indent();
         writer.write("text");
         writer.indent();
@@ -79,8 +79,8 @@ public class XmlGenerator {
             "Unescape XML entities in text content.\n\n" +
             "Converts: &amp; -> & &lt; -> < &gt; -> > &quot; -> \" &apos; -> '");
         
-        writer.writeSignature("Aws.Xml.unescape", "Text -> Text");
-        writer.write("Aws.Xml.unescape text =");
+        writer.writeSignature("aws.xml.unescape", "Text -> Text");
+        writer.write("aws.xml.unescape text =");
         writer.indent();
         writer.write("text");
         writer.indent();
@@ -110,8 +110,8 @@ public class XmlGenerator {
             "Returns: \"NoSuchKey\"\n\n" +
             "Returns empty string if element not found.");
         
-        writer.writeSignature("Aws.Xml.extractElement", "Text -> Text -> Text");
-        writer.write("Aws.Xml.extractElement tagName xml =");
+        writer.writeSignature("aws.xml.extractElement", "Text -> Text -> Text");
+        writer.write("aws.xml.extractElement tagName xml =");
         writer.indent();
         writer.write("let");
         writer.indent();
@@ -125,7 +125,7 @@ public class XmlGenerator {
         writer.write("(Some start, Some end) ->");
         writer.indent();
         writer.write("contentStart = start + Text.size openTag");
-        writer.write("Text.slice contentStart end xml |> Aws.Xml.unescape");
+        writer.write("Text.slice contentStart end xml |> aws.xml.unescape");
         writer.dedent();
         writer.write("_ -> \"\"");
         writer.dedent();
@@ -143,8 +143,8 @@ public class XmlGenerator {
             "Returns: \"http://...\"\n\n" +
             "Returns empty string if attribute not found.");
         
-        writer.writeSignature("Aws.Xml.extractAttribute", "Text -> Text -> Text");
-        writer.write("Aws.Xml.extractAttribute attrName xml =");
+        writer.writeSignature("aws.xml.extractAttribute", "Text -> Text -> Text");
+        writer.write("aws.xml.extractAttribute attrName xml =");
         writer.indent();
         writer.write("let");
         writer.indent();
@@ -182,8 +182,8 @@ public class XmlGenerator {
             "Note: This is a placeholder. Actual encoding requires type-specific\n" +
             "serialization functions generated per structure.");
         
-        writer.writeSignature("Aws.Xml.encode", "a -> Bytes");
-        writer.write("Aws.Xml.encode value =");
+        writer.writeSignature("aws.xml.encode", "a -> Bytes");
+        writer.write("aws.xml.encode value =");
         writer.indent();
         writer.write("-- Placeholder: actual implementation depends on type");
         writer.write("-- Each structure type will have its own toXml function");
@@ -204,12 +204,12 @@ public class XmlGenerator {
             "Note: This is a placeholder. Actual decoding requires type-specific\n" +
             "deserialization functions generated per structure.");
         
-        writer.writeSignature("Aws.Xml.decode", "Bytes -> a");
-        writer.write("Aws.Xml.decode bytes =");
+        writer.writeSignature("aws.xml.decode", "Bytes -> a");
+        writer.write("aws.xml.decode bytes =");
         writer.indent();
         writer.write("-- Placeholder: actual implementation depends on type");
         writer.write("-- Each structure type will have its own fromXml function");
-        writer.write("bug \"Aws.Xml.decode: not implemented - use type-specific fromXml\"");
+        writer.write("bug \"aws.xml.decode: not implemented - use type-specific fromXml\"");
         writer.dedent();
         writer.writeBlankLine();
     }
@@ -222,10 +222,10 @@ public class XmlGenerator {
             "Wrap content in an XML element.\n\n" +
             "Example: element \"Name\" \"MyBucket\" -> \"<Name>MyBucket</Name>\"");
         
-        writer.writeSignature("Aws.Xml.element", "Text -> Text -> Text");
-        writer.write("Aws.Xml.element tagName content =");
+        writer.writeSignature("aws.xml.element", "Text -> Text -> Text");
+        writer.write("aws.xml.element tagName content =");
         writer.indent();
-        writer.writeWithNoFormatting("\"<\" ++ tagName ++ \">\" ++ Aws.Xml.escape content ++ \"</\" ++ tagName ++ \">\"");
+        writer.writeWithNoFormatting("\"<\" ++ tagName ++ \">\" ++ aws.xml.escape content ++ \"</\" ++ tagName ++ \">\"");
         writer.dedent();
         writer.writeBlankLine();
     }
@@ -239,8 +239,8 @@ public class XmlGenerator {
             "Example: elementWithAttrs \"Bucket\" [(\"xmlns\", \"http://...\")] \"content\"\n" +
             "-> \"<Bucket xmlns=\\\"http://...\\\">content</Bucket>\"");
         
-        writer.writeSignature("Aws.Xml.elementWithAttrs", "Text -> [(Text, Text)] -> Text -> Text");
-        writer.write("Aws.Xml.elementWithAttrs tagName attrs content =");
+        writer.writeSignature("aws.xml.elementWithAttrs", "Text -> [(Text, Text)] -> Text -> Text");
+        writer.write("aws.xml.elementWithAttrs tagName attrs content =");
         writer.indent();
         writer.write("let");
         writer.indent();
@@ -264,12 +264,12 @@ public class XmlGenerator {
             "Example: optionalElement \"VersionId\" (Some \"v1\") -> \"<VersionId>v1</VersionId>\"\n" +
             "Example: optionalElement \"VersionId\" None -> \"\"");
         
-        writer.writeSignature("Aws.Xml.optionalElement", "Text -> Optional Text -> Text");
-        writer.write("Aws.Xml.optionalElement tagName maybeValue =");
+        writer.writeSignature("aws.xml.optionalElement", "Text -> Optional Text -> Text");
+        writer.write("aws.xml.optionalElement tagName maybeValue =");
         writer.indent();
         writer.write("match maybeValue with");
         writer.indent();
-        writer.write("Some value -> Aws.Xml.element tagName value");
+        writer.write("Some value -> aws.xml.element tagName value");
         writer.write("None -> \"\"");
         writer.dedent();
         writer.dedent();

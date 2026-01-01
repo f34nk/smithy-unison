@@ -202,7 +202,7 @@ public final class EnumGenerator {
     /**
      * Gets the namespaced type name.
      *
-     * @return The namespaced type name (e.g., "Aws.S3.BucketLocationConstraint")
+     * @return The namespaced type name (e.g., "aws.s3.BucketLocationConstraint")
      */
     public String getNamespacedTypeName() {
         return namespacedTypeName;

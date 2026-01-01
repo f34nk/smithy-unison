@@ -27,8 +27,8 @@ scratch/main> add
 scratch/main> load src/aws_xml_bridge_test.u
 scratch/main> add
 
-scratch/main> run Aws.Json.Test.runAllTests
-scratch/main> run Aws.Json.Bridge.Test.runAllTests
-scratch/main> run Aws.Xml.Test.runAllTests
-scratch/main> run Aws.Xml.Bridge.Test.runAllTests
+scratch/main> run aws.json.test.runAllTests
+scratch/main> run aws.json.bridge.test.runAllTests
+scratch/main> run aws.xml.test.runAllTests
+scratch/main> run aws.xml.bridge.test.runAllTests
 ```

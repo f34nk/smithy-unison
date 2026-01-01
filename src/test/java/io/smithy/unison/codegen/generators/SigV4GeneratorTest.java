@@ -30,8 +30,8 @@ class SigV4GeneratorTest {
         String output = writer.toString();
         
         // Verify type definition
-        assertTrue(output.contains("type Aws.Credentials = {"), 
-            "Should generate Aws.Credentials type");
+        assertTrue(output.contains("type aws.sigv4.Credentials = {"), 
+            "Should generate aws.sigv4.Credentials type");
         assertTrue(output.contains("accessKeyId : Text"), 
             "Should have accessKeyId field");
         assertTrue(output.contains("secretAccessKey : Text"), 
@@ -40,9 +40,9 @@ class SigV4GeneratorTest {
             "Should have optional sessionToken field");
         
         // Verify helper constructors
-        assertTrue(output.contains("Aws.Credentials.basic"), 
+        assertTrue(output.contains("aws.sigv4.Credentials.basic"), 
             "Should generate basic constructor");
-        assertTrue(output.contains("Aws.Credentials.withSessionToken"), 
+        assertTrue(output.contains("aws.sigv4.Credentials.withSessionToken"), 
             "Should generate withSessionToken constructor");
     }
     
@@ -51,13 +51,13 @@ class SigV4GeneratorTest {
         generator.generateSigningConfigType(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("type Aws.SigningConfig = {"), 
-            "Should generate Aws.SigningConfig type");
+        assertTrue(output.contains("type aws.sigv4.SigningConfig = {"), 
+            "Should generate aws.sigv4.SigningConfig type");
         assertTrue(output.contains("region : Text"), 
             "Should have region field");
         assertTrue(output.contains("service : Text"), 
             "Should have service field");
-        assertTrue(output.contains("credentials : Aws.Credentials"), 
+        assertTrue(output.contains("credentials : aws.sigv4.Credentials"), 
             "Should have credentials field");
     }
     
@@ -66,11 +66,11 @@ class SigV4GeneratorTest {
         generator.generateCredentialScopeType(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("type Aws.CredentialScope = {"), 
-            "Should generate Aws.CredentialScope type");
+        assertTrue(output.contains("type aws.sigv4.CredentialScope = {"), 
+            "Should generate aws.sigv4.CredentialScope type");
         assertTrue(output.contains("date : Text"), 
             "Should have date field");
-        assertTrue(output.contains("Aws.CredentialScope.toText"), 
+        assertTrue(output.contains("aws.sigv4.CredentialScope.toText"), 
             "Should generate toText function");
         assertTrue(output.contains("aws4_request"), 
             "toText should include aws4_request terminator");
@@ -81,14 +81,14 @@ class SigV4GeneratorTest {
         generator.generateTimestampFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.getTimestamp"), 
+        assertTrue(output.contains("aws.sigv4.getTimestamp"), 
             "Should generate getTimestamp function");
         assertTrue(output.contains("'{IO}"), 
             "Should have IO ability");
         assertTrue(output.contains("Instant.toBasicISO8601"), 
             "Should format as ISO8601");
         
-        assertTrue(output.contains("Aws.SigV4.getDateStamp"), 
+        assertTrue(output.contains("aws.sigv4.getDateStamp"), 
             "Should generate getDateStamp function");
         assertTrue(output.contains("Text.take 8"), 
             "Should extract first 8 characters for date");
@@ -99,7 +99,7 @@ class SigV4GeneratorTest {
         generator.generateHashPayloadFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.hashPayload"), 
+        assertTrue(output.contains("aws.sigv4.hashPayload"), 
             "Should generate hashPayload function");
         assertTrue(output.contains("Bytes -> Text"), 
             "Should take Bytes and return Text");
@@ -114,7 +114,7 @@ class SigV4GeneratorTest {
         generator.generateCanonicalHeadersFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.canonicalHeaders"), 
+        assertTrue(output.contains("aws.sigv4.canonicalHeaders"), 
             "Should generate canonicalHeaders function");
         assertTrue(output.contains("[(Text, Text)] -> Text"), 
             "Should take header list and return Text");
@@ -129,7 +129,7 @@ class SigV4GeneratorTest {
         generator.generateSignedHeadersFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.signedHeaders"), 
+        assertTrue(output.contains("aws.sigv4.signedHeaders"), 
             "Should generate signedHeaders function");
         assertTrue(output.contains("List.sort"), 
             "Should sort header names");
@@ -142,15 +142,15 @@ class SigV4GeneratorTest {
         generator.generateCanonicalRequestFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.canonicalRequest"), 
+        assertTrue(output.contains("aws.sigv4.canonicalRequest"), 
             "Should generate canonicalRequest function");
         assertTrue(output.contains("Text -> Text -> Text -> [(Text, Text)] -> Bytes -> Text"), 
             "Should have correct signature");
         assertTrue(output.contains("Text.join \"\\n\""), 
             "Should join components with newlines");
-        assertTrue(output.contains("Aws.SigV4.canonicalHeaders"), 
+        assertTrue(output.contains("aws.sigv4.canonicalHeaders"), 
             "Should call canonicalHeaders");
-        assertTrue(output.contains("Aws.SigV4.hashPayload"), 
+        assertTrue(output.contains("aws.sigv4.hashPayload"), 
             "Should call hashPayload");
     }
     
@@ -159,7 +159,7 @@ class SigV4GeneratorTest {
         generator.generateStringToSignFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.stringToSign"), 
+        assertTrue(output.contains("aws.sigv4.stringToSign"), 
             "Should generate stringToSign function");
         assertTrue(output.contains("AWS4-HMAC-SHA256"), 
             "Should include algorithm identifier");
@@ -172,7 +172,7 @@ class SigV4GeneratorTest {
         generator.generateDeriveSigningKeyFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.deriveSigningKey"), 
+        assertTrue(output.contains("aws.sigv4.deriveSigningKey"), 
             "Should generate deriveSigningKey function");
         assertTrue(output.contains("Text -> Text -> Text -> Text -> Bytes"), 
             "Should have correct signature");
@@ -195,7 +195,7 @@ class SigV4GeneratorTest {
         generator.generateSignatureFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.signature"), 
+        assertTrue(output.contains("aws.sigv4.signature"), 
             "Should generate signature function");
         assertTrue(output.contains("Bytes -> Text -> Text"), 
             "Should take signing key and string to sign");
@@ -210,7 +210,7 @@ class SigV4GeneratorTest {
         generator.generateAuthorizationHeaderFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.authorizationHeader"), 
+        assertTrue(output.contains("aws.sigv4.authorizationHeader"), 
             "Should generate authorizationHeader function");
         assertTrue(output.contains("AWS4-HMAC-SHA256 Credential="), 
             "Should include algorithm prefix");
@@ -225,9 +225,9 @@ class SigV4GeneratorTest {
         generator.generateSignRequestFunction(writer);
         String output = writer.toString();
         
-        assertTrue(output.contains("Aws.SigV4.signRequest"), 
+        assertTrue(output.contains("aws.sigv4.signRequest"), 
             "Should generate signRequest function");
-        assertTrue(output.contains("Aws.SigningConfig ->"), 
+        assertTrue(output.contains("aws.sigv4.SigningConfig ->"), 
             "Should take SigningConfig");
         assertTrue(output.contains("'{IO}"), 
             "Should have IO ability");
@@ -235,19 +235,19 @@ class SigV4GeneratorTest {
             "Should return header list");
         
         // Verify complete signing flow
-        assertTrue(output.contains("Aws.SigV4.getTimestamp"), 
+        assertTrue(output.contains("aws.sigv4.getTimestamp"), 
             "Should get timestamp");
-        assertTrue(output.contains("Aws.SigV4.hashPayload"), 
+        assertTrue(output.contains("aws.sigv4.hashPayload"), 
             "Should hash payload");
-        assertTrue(output.contains("Aws.SigV4.canonicalRequest"), 
+        assertTrue(output.contains("aws.sigv4.canonicalRequest"), 
             "Should build canonical request");
-        assertTrue(output.contains("Aws.SigV4.stringToSign"), 
+        assertTrue(output.contains("aws.sigv4.stringToSign"), 
             "Should build string to sign");
-        assertTrue(output.contains("Aws.SigV4.deriveSigningKey"), 
+        assertTrue(output.contains("aws.sigv4.deriveSigningKey"), 
             "Should derive signing key");
-        assertTrue(output.contains("Aws.SigV4.signature"), 
+        assertTrue(output.contains("aws.sigv4.signature"), 
             "Should calculate signature");
-        assertTrue(output.contains("Aws.SigV4.authorizationHeader"), 
+        assertTrue(output.contains("aws.sigv4.authorizationHeader"), 
             "Should build authorization header");
         
         // Verify headers
@@ -267,13 +267,13 @@ class SigV4GeneratorTest {
         String output = writer.toString();
         
         // Verify all major components are present
-        assertTrue(output.contains("type Aws.Credentials"), 
+        assertTrue(output.contains("type aws.sigv4.Credentials"), 
             "Should generate Credentials type");
-        assertTrue(output.contains("type Aws.SigningConfig"), 
+        assertTrue(output.contains("type aws.sigv4.SigningConfig"), 
             "Should generate SigningConfig type");
-        assertTrue(output.contains("type Aws.CredentialScope"), 
+        assertTrue(output.contains("type aws.sigv4.CredentialScope"), 
             "Should generate CredentialScope type");
-        assertTrue(output.contains("Aws.SigV4.signRequest"), 
+        assertTrue(output.contains("aws.sigv4.signRequest"), 
             "Should generate signRequest function");
     }
     
@@ -297,7 +297,7 @@ class SigV4GeneratorTest {
             "Should have main entry points section");
         
         // Verify helper function
-        assertTrue(output.contains("Aws.SigV4.addSigningHeaders"), 
+        assertTrue(output.contains("aws.sigv4.addSigningHeaders"), 
             "Should generate addSigningHeaders helper");
     }
     

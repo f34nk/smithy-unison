@@ -21,8 +21,8 @@ Converts:
   ' to &apos;
 
 }}
-Aws.Xml.escape : Text -> Text
-Aws.Xml.escape text =
+aws.xml.escape : Text -> Text
+aws.xml.escape text =
   text
     |> Text.replaceAll "&" "&amp;"
     |> Text.replaceAll "<" "&lt;"
@@ -41,8 +41,8 @@ Converts:
   &apos; to '
 
 }}
-Aws.Xml.unescape : Text -> Text
-Aws.Xml.unescape text =
+aws.xml.unescape : Text -> Text
+aws.xml.unescape text =
   text
     |> Text.replaceAll "&apos;" "'"
     |> Text.replaceAll "&quot;" "\""
@@ -59,58 +59,58 @@ Create an XML element with text content.
 The content is automatically escaped for special characters.
 
 }}
-Aws.Xml.element : Text -> Text -> Text
-Aws.Xml.element tagName content =
-  "<" ++ tagName ++ ">" ++ Aws.Xml.escape content ++ "</" ++ tagName ++ ">"
+aws.xml.element : Text -> Text -> Text
+aws.xml.element tagName content =
+  "<" ++ tagName ++ ">" ++ aws.xml.escape content ++ "</" ++ tagName ++ ">"
 
 {{
 Create an XML element with raw (unescaped) content.
 Use this when the content is already escaped or contains nested XML.
 }}
-Aws.Xml.elementRaw : Text -> Text -> Text
-Aws.Xml.elementRaw tagName content =
+aws.xml.elementRaw : Text -> Text -> Text
+aws.xml.elementRaw tagName content =
   "<" ++ tagName ++ ">" ++ content ++ "</" ++ tagName ++ ">"
 
 {{
 Create a self-closing XML element (empty element).
 
 }}
-Aws.Xml.emptyElement : Text -> Text
-Aws.Xml.emptyElement tagName =
+aws.xml.emptyElement : Text -> Text
+aws.xml.emptyElement tagName =
   "<" ++ tagName ++ "/>"
 
 {{
 Create an XML element with attributes.
 }}
-Aws.Xml.elementWithAttrs : Text -> [(Text, Text)] -> Text -> Text
-Aws.Xml.elementWithAttrs tagName attrs content =
-  attrStr = attrs |> List.map (cases (name, value) -> " " ++ name ++ "=\"" ++ Aws.Xml.escape value ++ "\"") |> Text.join ""
+aws.xml.elementWithAttrs : Text -> [(Text, Text)] -> Text -> Text
+aws.xml.elementWithAttrs tagName attrs content =
+  attrStr = attrs |> List.map (cases (name, value) -> " " ++ name ++ "=\"" ++ aws.xml.escape value ++ "\"") |> Text.join ""
   "<" ++ tagName ++ attrStr ++ ">" ++ content ++ "</" ++ tagName ++ ">"
 
 {{
 Create a self-closing XML element with attributes.
 }}
-Aws.Xml.emptyElementWithAttrs : Text -> [(Text, Text)] -> Text
-Aws.Xml.emptyElementWithAttrs tagName attrs =
-  attrStr = attrs |> List.map (cases (name, value) -> " " ++ name ++ "=\"" ++ Aws.Xml.escape value ++ "\"") |> Text.join ""
+aws.xml.emptyElementWithAttrs : Text -> [(Text, Text)] -> Text
+aws.xml.emptyElementWithAttrs tagName attrs =
+  attrStr = attrs |> List.map (cases (name, value) -> " " ++ name ++ "=\"" ++ aws.xml.escape value ++ "\"") |> Text.join ""
   "<" ++ tagName ++ attrStr ++ "/>"
 
 {{
 Create an XML element only if the value is present.
 
 }}
-Aws.Xml.optionalElement : Text -> Optional Text -> Text
-Aws.Xml.optionalElement tagName maybeValue =
+aws.xml.optionalElement : Text -> Optional Text -> Text
+aws.xml.optionalElement tagName maybeValue =
   match maybeValue with
-    Some value -> Aws.Xml.element tagName value
+    Some value -> aws.xml.element tagName value
     None -> ""
 
 {{
 Create an XML element with an integer value.
 
 }}
-Aws.Xml.intElement : Text -> Int -> Text
-Aws.Xml.intElement tagName value =
+aws.xml.intElement : Text -> Int -> Text
+aws.xml.intElement tagName value =
   "<" ++ tagName ++ ">" ++ Int.toText value ++ "</" ++ tagName ++ ">"
 
 {{
@@ -118,8 +118,8 @@ Create an XML element with a boolean value.
 AWS XML uses lowercase "true" and "false".
 
 }}
-Aws.Xml.boolElement : Text -> Boolean -> Text
-Aws.Xml.boolElement tagName value =
+aws.xml.boolElement : Text -> Boolean -> Text
+aws.xml.boolElement tagName value =
   textValue = if value then "true" else "false"
   "<" ++ tagName ++ ">" ++ textValue ++ "</" ++ tagName ++ ">"
 
@@ -127,20 +127,20 @@ Aws.Xml.boolElement tagName value =
 Create an optional integer element.
 
 }}
-Aws.Xml.optionalIntElement : Text -> Optional Int -> Text
-Aws.Xml.optionalIntElement tagName maybeValue =
+aws.xml.optionalIntElement : Text -> Optional Int -> Text
+aws.xml.optionalIntElement tagName maybeValue =
   match maybeValue with
-    Some value -> Aws.Xml.intElement tagName value
+    Some value -> aws.xml.intElement tagName value
     None -> ""
 
 {{
 Create an optional boolean element.
 
 }}
-Aws.Xml.optionalBoolElement : Text -> Optional Boolean -> Text
-Aws.Xml.optionalBoolElement tagName maybeValue =
+aws.xml.optionalBoolElement : Text -> Optional Boolean -> Text
+aws.xml.optionalBoolElement tagName maybeValue =
   match maybeValue with
-    Some value -> Aws.Xml.boolElement tagName value
+    Some value -> aws.xml.boolElement tagName value
     None -> ""
 
 -- =============================================================================
@@ -150,38 +150,38 @@ Aws.Xml.optionalBoolElement tagName maybeValue =
 {{
 Create XML elements for a list of text values.
 }}
-Aws.Xml.listElements : Text -> [Text] -> Text
-Aws.Xml.listElements tagName values =
+aws.xml.listElements : Text -> [Text] -> Text
+aws.xml.listElements tagName values =
   values
-    |> List.map (value -> Aws.Xml.element tagName value)
+    |> List.map (value -> aws.xml.element tagName value)
     |> Text.join ""
 
 {{
 Create a wrapper element containing a list of elements.
 }}
-Aws.Xml.wrappedList : Text -> Text -> [Text] -> Text
-Aws.Xml.wrappedList wrapperTag itemTag values =
+aws.xml.wrappedList : Text -> Text -> [Text] -> Text
+aws.xml.wrappedList wrapperTag itemTag values =
   let
-    items = Aws.Xml.listElements itemTag values
-    Aws.Xml.elementRaw wrapperTag items
+    items = aws.xml.listElements itemTag values
+    aws.xml.elementRaw wrapperTag items
 
 {{
 Create XML for a list using a custom element builder.
 }}
-Aws.Xml.listWith : Text -> (a -> Text) -> [a] -> Text
-Aws.Xml.listWith tagName toXml values =
+aws.xml.listWith : Text -> (a -> Text) -> [a] -> Text
+aws.xml.listWith tagName toXml values =
   values
-    |> List.map (value -> Aws.Xml.elementRaw tagName (toXml value))
+    |> List.map (value -> aws.xml.elementRaw tagName (toXml value))
     |> Text.join ""
 
 {{
 Create a flattened list (no wrapper element).
 Some AWS APIs use flattened lists where items appear directly without a wrapper.
 }}
-Aws.Xml.flattenedList : Text -> (a -> Text) -> [a] -> Text
-Aws.Xml.flattenedList tagName toXml values =
+aws.xml.flattenedList : Text -> (a -> Text) -> [a] -> Text
+aws.xml.flattenedList tagName toXml values =
   values
-    |> List.map (value -> Aws.Xml.elementRaw tagName (toXml value))
+    |> List.map (value -> aws.xml.elementRaw tagName (toXml value))
     |> Text.join ""
 
 -- =============================================================================
@@ -193,8 +193,8 @@ Extract text content from an XML element by tag name.
 Returns empty string if element not found.
 Content is automatically unescaped.
 }}
-Aws.Xml.extractElement : Text -> Text -> Text
-Aws.Xml.extractElement tagName xml =
+aws.xml.extractElement : Text -> Text -> Text
+aws.xml.extractElement tagName xml =
   openTag = "<" ++ tagName ++ ">"
   closeTag = "</" ++ tagName ++ ">"
   startIdx = Text.indexOf openTag xml
@@ -202,7 +202,7 @@ Aws.Xml.extractElement tagName xml =
   match (startIdx, endIdx) with
     (Some start, Some end) ->
       contentStart = start + Text.size openTag
-      Text.slice contentStart end xml |> Aws.Xml.unescape
+      Text.slice contentStart end xml |> aws.xml.unescape
     _ -> ""
 
 {{
@@ -210,10 +210,10 @@ Extract text content from an XML element, returning Optional.
 
 
 }}
-Aws.Xml.extractElementOpt : Text -> Text -> Optional Text
-Aws.Xml.extractElementOpt tagName xml =
+aws.xml.extractElementOpt : Text -> Text -> Optional Text
+aws.xml.extractElementOpt tagName xml =
   let
-    result = Aws.Xml.extractElement tagName xml
+    result = aws.xml.extractElement tagName xml
     if Text.isEmpty result then None else Some result
 
 {{
@@ -222,10 +222,10 @@ Extract an integer from an XML element.
 
 Returns None if element not found or not a valid integer.
 }}
-Aws.Xml.extractInt : Text -> Text -> Optional Int
-Aws.Xml.extractInt tagName xml =
+aws.xml.extractInt : Text -> Text -> Optional Int
+aws.xml.extractInt tagName xml =
   let
-    text = Aws.Xml.extractElement tagName xml
+    text = aws.xml.extractElement tagName xml
     if Text.isEmpty text then None
     else Int.fromText text
 
@@ -235,10 +235,10 @@ Extract a boolean from an XML element.
 AWS XML uses lowercase "true" and "false".
 
 }}
-Aws.Xml.extractBool : Text -> Text -> Optional Boolean
-Aws.Xml.extractBool tagName xml =
+aws.xml.extractBool : Text -> Text -> Optional Boolean
+aws.xml.extractBool tagName xml =
   let
-    text = Aws.Xml.extractElement tagName xml
+    text = aws.xml.extractElement tagName xml
     match text with
       "true" -> Some true
       "false" -> Some false
@@ -250,8 +250,8 @@ Extract an attribute value from an XML element.
 
 Returns empty string if attribute not found.
 }}
-Aws.Xml.extractAttribute : Text -> Text -> Text
-Aws.Xml.extractAttribute attrName xml =
+aws.xml.extractAttribute : Text -> Text -> Text
+aws.xml.extractAttribute attrName xml =
   let
     pattern = attrName ++ "=\""
     startIdx = Text.indexOf pattern xml
@@ -262,7 +262,7 @@ Aws.Xml.extractAttribute attrName xml =
           rest = Text.drop valueStart xml
           endIdx = Text.indexOf "\"" rest
           match endIdx with
-            Some end -> Text.take end rest |> Aws.Xml.unescape
+            Some end -> Text.take end rest |> aws.xml.unescape
             None -> ""
       None -> ""
 
@@ -270,18 +270,18 @@ Aws.Xml.extractAttribute attrName xml =
 Extract an attribute value, returning Optional.
 
 }}
-Aws.Xml.extractAttributeOpt : Text -> Text -> Optional Text
-Aws.Xml.extractAttributeOpt attrName xml =
+aws.xml.extractAttributeOpt : Text -> Text -> Optional Text
+aws.xml.extractAttributeOpt attrName xml =
   let
-    result = Aws.Xml.extractAttribute attrName xml
+    result = aws.xml.extractAttribute attrName xml
     if Text.isEmpty result then None else Some result
 
 {{
 Extract all occurrences of an element as a list.
 
 }}
-Aws.Xml.extractAll : Text -> Text -> [Text]
-Aws.Xml.extractAll tagName xml =
+aws.xml.extractAll : Text -> Text -> [Text]
+aws.xml.extractAll tagName xml =
   let
     openTag = "<" ++ tagName ++ ">"
     closeTag = "</" ++ tagName ++ ">"
@@ -300,7 +300,7 @@ Aws.Xml.extractAll tagName xml =
                 None -> acc
                 Some end ->
                   let
-                    content = Text.take end afterOpen |> Aws.Xml.unescape
+                    content = Text.take end afterOpen |> aws.xml.unescape
                     rest = Text.drop (end + Text.size closeTag) afterOpen
                     go rest (acc ++ [content])
     go xml []
@@ -312,8 +312,8 @@ This extracts the full XML of an element, not just its text content.
 Useful for extracting nested structures.
 
 }}
-Aws.Xml.extractBlock : Text -> Text -> Text
-Aws.Xml.extractBlock tagName xml =
+aws.xml.extractBlock : Text -> Text -> Text
+aws.xml.extractBlock tagName xml =
   let
     openTag = "<" ++ tagName
     closeTag = "</" ++ tagName ++ ">"
@@ -328,8 +328,8 @@ Aws.Xml.extractBlock tagName xml =
 Extract all blocks of an element as a list.
 
 }}
-Aws.Xml.extractAllBlocks : Text -> Text -> [Text]
-Aws.Xml.extractAllBlocks tagName xml =
+aws.xml.extractAllBlocks : Text -> Text -> [Text]
+aws.xml.extractAllBlocks tagName xml =
   let
     openTag = "<" ++ tagName
     closeTag = "</" ++ tagName ++ ">"
@@ -363,16 +363,16 @@ Wrap content in a CDATA section.
 CDATA sections allow including text that would otherwise need escaping.
 
 }}
-Aws.Xml.cdata : Text -> Text
-Aws.Xml.cdata content =
+aws.xml.cdata : Text -> Text
+aws.xml.cdata content =
   "<![CDATA[" ++ content ++ "]]>"
 
 {{
 Extract content from a CDATA section.
 
 }}
-Aws.Xml.extractCdata : Text -> Text
-Aws.Xml.extractCdata xml =
+aws.xml.extractCdata : Text -> Text
+aws.xml.extractCdata xml =
   let
     startMarker = "<![CDATA["
     endMarker = "]]>"
@@ -391,38 +391,38 @@ Aws.Xml.extractCdata xml =
 Create an XML declaration.
 
 }}
-Aws.Xml.declaration : Text
-Aws.Xml.declaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+aws.xml.declaration : Text
+aws.xml.declaration = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
 
 {{
 Create a complete XML document with declaration.
 
 }}
-Aws.Xml.document : Text -> Text
-Aws.Xml.document content =
-  Aws.Xml.declaration ++ content
+aws.xml.document : Text -> Text
+aws.xml.document content =
+  aws.xml.declaration ++ content
 
 {{
 Create an element with an AWS namespace.
 
 Many AWS services use the S3 namespace format.
 }}
-Aws.Xml.awsElement : Text -> Text -> Text -> Text
-Aws.Xml.awsElement tagName ns content =
-  Aws.Xml.elementWithAttrs tagName [("xmlns", ns)] content
+aws.xml.awsElement : Text -> Text -> Text -> Text
+aws.xml.awsElement tagName ns content =
+  aws.xml.elementWithAttrs tagName [("xmlns", ns)] content
 
 {{
 The standard S3 XML namespace.
 }}
-Aws.Xml.s3Namespace : Text
-Aws.Xml.s3Namespace = "http://s3.amazonaws.com/doc/2006-03-01/"
+aws.xml.s3Namespace : Text
+aws.xml.s3Namespace = "http://s3.amazonaws.com/doc/2006-03-01/"
 
 {{
 Create an element with the S3 namespace.
 }}
-Aws.Xml.s3Element : Text -> Text -> Text
-Aws.Xml.s3Element tagName content =
-  Aws.Xml.awsElement tagName Aws.Xml.s3Namespace content
+aws.xml.s3Element : Text -> Text -> Text
+aws.xml.s3Element tagName content =
+  aws.xml.awsElement tagName aws.xml.s3Namespace content
 
 -- =============================================================================
 -- Utility Functions
@@ -432,8 +432,8 @@ Aws.Xml.s3Element tagName content =
 Check if an XML string contains a specific element.
 
 }}
-Aws.Xml.hasElement : Text -> Text -> Boolean
-Aws.Xml.hasElement tagName xml =
+aws.xml.hasElement : Text -> Text -> Boolean
+aws.xml.hasElement tagName xml =
   let
     openTag = "<" ++ tagName
     match Text.indexOf openTag xml with
@@ -444,8 +444,8 @@ Aws.Xml.hasElement tagName xml =
 Get the root element name from an XML string.
 
 }}
-Aws.Xml.rootElement : Text -> Text
-Aws.Xml.rootElement xml =
+aws.xml.rootElement : Text -> Text
+aws.xml.rootElement xml =
   let
     -- Skip declaration if present
     content = if Text.startsWith "<?xml" xml
@@ -474,8 +474,8 @@ Aws.Xml.rootElement xml =
 Strip XML declaration and whitespace from the beginning of an XML string.
 
 }}
-Aws.Xml.stripDeclaration : Text -> Text
-Aws.Xml.stripDeclaration xml =
+aws.xml.stripDeclaration : Text -> Text
+aws.xml.stripDeclaration xml =
   let
     trimmed = Text.trim xml
     if Text.startsWith "<?xml" trimmed
@@ -488,14 +488,14 @@ Aws.Xml.stripDeclaration xml =
 {{
 Convert XML bytes to text (UTF-8).
 }}
-Aws.Xml.bytesToText : Bytes -> Text
-Aws.Xml.bytesToText bytes = Text.fromUtf8 bytes
+aws.xml.bytesToText : Bytes -> Text
+aws.xml.bytesToText bytes = Text.fromUtf8 bytes
 
 {{
 Convert text to XML bytes (UTF-8).
 }}
-Aws.Xml.textToBytes : Text -> Bytes
-Aws.Xml.textToBytes text =
+aws.xml.textToBytes : Text -> Bytes
+aws.xml.textToBytes text =
   Text.toUtf8 text
 
 -- =============================================================================
@@ -515,27 +515,27 @@ AWS error responses follow this format:
 
 Returns a record with code, message, requestId, and hostId.
 }}
-structural type Aws.Xml.ErrorResponse = { code : Text, message : Text, requestId : Text, hostId : Text }
+structural type aws.xml.ErrorResponse = { code : Text, message : Text, requestId : Text, hostId : Text }
 
 {{
 Parse an AWS XML error response.
 
 }}
-Aws.Xml.parseError : Text -> Aws.Xml.ErrorResponse
-Aws.Xml.parseError xml =
-  code = Aws.Xml.extractElement "Code" xml
-  msg = Aws.Xml.extractElement "Message" xml
-  reqId = Aws.Xml.extractElement "RequestId" xml
-  host = Aws.Xml.extractElement "HostId" xml
-  Aws.Xml.ErrorResponse.ErrorResponse code msg reqId host
+aws.xml.parseError : Text -> aws.xml.ErrorResponse
+aws.xml.parseError xml =
+  code = aws.xml.extractElement "Code" xml
+  msg = aws.xml.extractElement "Message" xml
+  reqId = aws.xml.extractElement "RequestId" xml
+  host = aws.xml.extractElement "HostId" xml
+  aws.xml.ErrorResponse.ErrorResponse code msg reqId host
 
 {{
 Check if an XML response is an error response.
 
 }}
-Aws.Xml.isError : Text -> Boolean
-Aws.Xml.isError xml =
-  Aws.Xml.hasElement "Error" xml
+aws.xml.isError : Text -> Boolean
+aws.xml.isError xml =
+  aws.xml.hasElement "Error" xml
 
 -- =============================================================================
 -- Timestamp Handling
@@ -546,8 +546,8 @@ Format a timestamp for AWS XML.
 
 AWS uses ISO 8601 format: YYYY-MM-DDTHH:MM:SS.sssZ
 }}
-Aws.Xml.formatTimestamp : Text -> Text
-Aws.Xml.formatTimestamp timestamp =
+aws.xml.formatTimestamp : Text -> Text
+aws.xml.formatTimestamp timestamp =
   -- Pass through - timestamps should already be in ISO 8601 format
   timestamp
 
@@ -555,9 +555,9 @@ Aws.Xml.formatTimestamp timestamp =
 Create a timestamp element.
 
 }}
-Aws.Xml.timestampElement : Text -> Text -> Text
-Aws.Xml.timestampElement tagName timestamp =
-  Aws.Xml.element tagName timestamp
+aws.xml.timestampElement : Text -> Text -> Text
+aws.xml.timestampElement tagName timestamp =
+  aws.xml.element tagName timestamp
 
 -- =============================================================================
 -- Map / Dictionary Handling
@@ -567,12 +567,12 @@ Aws.Xml.timestampElement tagName timestamp =
 Create XML for a map (key-value pairs) with custom element names.
 
 }}
-Aws.Xml.mapElements : Text -> Text -> Text -> [(Text, Text)] -> Text
-Aws.Xml.mapElements entryTag keyTag valueTag entries =
+aws.xml.mapElements : Text -> Text -> Text -> [(Text, Text)] -> Text
+aws.xml.mapElements entryTag keyTag valueTag entries =
   entries
     |> List.map (cases (k, v) -> 
-        Aws.Xml.elementRaw entryTag (
-          Aws.Xml.element keyTag k ++ Aws.Xml.element valueTag v
+        aws.xml.elementRaw entryTag (
+          aws.xml.element keyTag k ++ aws.xml.element valueTag v
         ))
     |> Text.join ""
 
@@ -580,15 +580,15 @@ Aws.Xml.mapElements entryTag keyTag valueTag entries =
 Extract a map from XML with custom element names.
 
 }}
-Aws.Xml.extractMap : Text -> Text -> Text -> Text -> [(Text, Text)]
-Aws.Xml.extractMap entryTag keyTag valueTag xml =
+aws.xml.extractMap : Text -> Text -> Text -> Text -> [(Text, Text)]
+aws.xml.extractMap entryTag keyTag valueTag xml =
   let
-    entries = Aws.Xml.extractAllBlocks entryTag xml
+    entries = aws.xml.extractAllBlocks entryTag xml
     entries
       |> List.map (entry ->
           let
-            key = Aws.Xml.extractElement keyTag entry
-            value = Aws.Xml.extractElement valueTag entry
+            key = aws.xml.extractElement keyTag entry
+            value = aws.xml.extractElement valueTag entry
             (key, value))
       |> List.filter (cases (k, _) -> not (Text.isEmpty k))
 
@@ -602,8 +602,8 @@ Add basic indentation to XML for debugging.
 Note: This is a simple implementation for debugging purposes only.
 It doesn't handle all XML edge cases.
 }}
-Aws.Xml.prettyPrint : Text -> Text
-Aws.Xml.prettyPrint xml =
+aws.xml.prettyPrint : Text -> Text
+aws.xml.prettyPrint xml =
   let
     indent : Nat -> Text
     indent level = Text.repeat level "  "
@@ -650,7 +650,7 @@ Aws.Xml.prettyPrint xml =
                         isSelfClosing = Text.endsWith "/>" tag
                         newLevel = if isSelfClosing then level else level + 1
                         go newLevel rest (acc ++ before ++ "\n" ++ indent level ++ tag)
-    go 0 (Aws.Xml.stripDeclaration xml) "" |> Text.trim
+    go 0 (aws.xml.stripDeclaration xml) "" |> Text.trim
 
 -- =============================================================================
 -- XML Encoding (Placeholder)
@@ -665,8 +665,8 @@ Currently returns empty bytes.
 
 TODO: Implement type-specific XML serialization for AWS request bodies.
 }}
-Aws.Xml.encode : a -> Bytes
-Aws.Xml.encode value = Bytes.empty
+aws.xml.encode : a -> Bytes
+aws.xml.encode value = Bytes.empty
 
 {{
 Encode a value to XML text.
@@ -677,8 +677,8 @@ Currently returns empty text.
 
 TODO: Implement type-specific XML serialization for AWS request bodies.
 }}
-Aws.Xml.toXml : a -> Text
-Aws.Xml.toXml value = ""
+aws.xml.toXml : a -> Text
+aws.xml.toXml value = ""
 
 -- =============================================================================
 -- XML to Record Mapping (Text-based)
@@ -694,11 +694,11 @@ Parse a list of structure elements from XML text.
 Extracts all blocks matching the tag name and applies the parser to each.
 
 Example:
-  buckets = Aws.Xml.parseListFromXml "Bucket" parseBucketFromXml xmlText
+  buckets = aws.xml.parseListFromXml "Bucket" parseBucketFromXml xmlText
 }}
-Aws.Xml.parseListFromXml : Text -> (Text -> a) -> Text -> [a]
-Aws.Xml.parseListFromXml tagName parser xmlText =
-  blocks = Aws.Xml.extractAllBlocks tagName xmlText
+aws.xml.parseListFromXml : Text -> (Text -> a) -> Text -> [a]
+aws.xml.parseListFromXml tagName parser xmlText =
+  blocks = aws.xml.extractAllBlocks tagName xmlText
   List.map parser blocks
 
 {{
@@ -707,13 +707,13 @@ Parse a wrapped list from XML text.
 Common S3 pattern: container element holds a list of item elements.
 
 Example:
-  buckets = Aws.Xml.parseWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
+  buckets = aws.xml.parseWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
 }}
-Aws.Xml.parseWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> [a]
-Aws.Xml.parseWrappedListFromXml containerTag itemTag parser xmlText =
-  containerXml = Aws.Xml.extractBlock containerTag xmlText
+aws.xml.parseWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> [a]
+aws.xml.parseWrappedListFromXml containerTag itemTag parser xmlText =
+  containerXml = aws.xml.extractBlock containerTag xmlText
   if Text.isEmpty containerXml then []
-  else Aws.Xml.parseListFromXml itemTag parser containerXml
+  else aws.xml.parseListFromXml itemTag parser containerXml
 
 {{
 Parse a nested structure from XML text.
@@ -721,11 +721,11 @@ Parse a nested structure from XML text.
 Returns Optional - None if the element doesn't exist.
 
 Example:
-  owner = Aws.Xml.parseNestedFromXml "Owner" parseOwnerFromXml xmlText
+  owner = aws.xml.parseNestedFromXml "Owner" parseOwnerFromXml xmlText
 }}
-Aws.Xml.parseNestedFromXml : Text -> (Text -> a) -> Text -> Optional a
-Aws.Xml.parseNestedFromXml tagName parser xmlText =
-  block = Aws.Xml.extractBlock tagName xmlText
+aws.xml.parseNestedFromXml : Text -> (Text -> a) -> Text -> Optional a
+aws.xml.parseNestedFromXml tagName parser xmlText =
+  block = aws.xml.extractBlock tagName xmlText
   if Text.isEmpty block then None
   else Some (parser block)
 
@@ -739,27 +739,27 @@ Handles two XML patterns:
 2. Flat: container IS the item tag, repeated directly in parent
 
 Example (wrapped):
-  buckets = Aws.Xml.parseOptionalWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
+  buckets = aws.xml.parseOptionalWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
 
 Example (flat - used when itemTag is "Member" but XML has no Member tags):
-  contents = Aws.Xml.parseOptionalWrappedListFromXml "Contents" "Member" parseObjectFromXml xmlText
+  contents = aws.xml.parseOptionalWrappedListFromXml "Contents" "Member" parseObjectFromXml xmlText
   This will parse all Contents elements directly from xmlText
 }}
-Aws.Xml.parseOptionalWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> Optional [a]
-Aws.Xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText =
+aws.xml.parseOptionalWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> Optional [a]
+aws.xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText =
   -- First try flat list pattern: multiple containerTag elements directly in xmlText
   -- This handles S3's <Contents>...</Contents><Contents>...</Contents> pattern
-  allContainerBlocks = Aws.Xml.extractAllBlocks containerTag xmlText
+  allContainerBlocks = aws.xml.extractAllBlocks containerTag xmlText
   if Nat.gt (List.size allContainerBlocks) 1 then
     -- Multiple container elements found - flat list pattern
     Some (List.map parser allContainerBlocks)
   else
     -- Single or no container element - try wrapped pattern
-    containerXml = Aws.Xml.extractBlock containerTag xmlText
+    containerXml = aws.xml.extractBlock containerTag xmlText
     if Text.isEmpty containerXml then None
     else
       -- Container found - try to extract items from inside it
-      wrappedItems = Aws.Xml.parseListFromXml itemTag parser containerXml
+      wrappedItems = aws.xml.parseListFromXml itemTag parser containerXml
       if List.isEmpty wrappedItems then
         -- No items found inside - containerTag IS the item (single item or flat pattern)
         Some [parser containerXml]
@@ -779,8 +779,8 @@ Currently crashes with an error.
 
 TODO: Implement type-specific XML deserialization for AWS response bodies.
 }}
-Aws.Xml.decode : Bytes -> a
-Aws.Xml.decode bytes = bug "Aws.Xml.decode not implemented"
+aws.xml.decode : Bytes -> a
+aws.xml.decode bytes = bug "aws.xml.decode not implemented"
 
 {{
 Decode XML text to a value.
@@ -791,5 +791,5 @@ Currently crashes with an error.
 
 TODO: Implement type-specific XML deserialization for AWS response bodies.
 }}
-Aws.Xml.fromXml : Text -> a
-Aws.Xml.fromXml text = bug "Aws.Xml.fromXml not implemented"
+aws.xml.fromXml : Text -> a
+aws.xml.fromXml text = bug "aws.xml.fromXml not implemented"
