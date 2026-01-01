@@ -570,10 +570,10 @@ public final class ClientModuleWriter {
     }
     
     /**
-     * Generates JSON serializer functions for all nested structures.
+     * Generates JSON serializer and deserializer functions for all nested structures.
      * 
      * <p>For AWS JSON protocols, nested structures need ToJson serializers
-     * so they can be serialized when used in lists, maps, or as nested fields.
+     * and FromJson deserializers so they can be used in lists, maps, or as nested fields.
      */
     private void generateJsonSerializers(Set<StructureShape> structures, UnisonWriter writer) {
         if (structures.isEmpty()) {
@@ -589,11 +589,12 @@ public final class ClientModuleWriter {
         
         AwsJsonProtocolGenerator jsonGen = (AwsJsonProtocolGenerator) protocolGenerator.get();
         
-        writer.writeComment("=== Structure JSON Serializers ===");
+        writer.writeComment("=== Structure JSON Serializers/Deserializers ===");
         writer.writeBlankLine();
         
         for (StructureShape structure : structures) {
             jsonGen.generateStructureSerializer(structure, writer, context);
+            jsonGen.generateStructureDeserializer(structure, writer, context);
         }
     }
     

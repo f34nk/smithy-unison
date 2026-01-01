@@ -235,6 +235,69 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
     }
     
     /**
+     * Generates a JSON deserializer for a structure with the naming pattern {StructureName}FromJson.
+     * Used for nested structures that are referenced by operation outputs.
+     */
+    public void generateStructureDeserializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
+        String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "FromJson");
+        
+        writer.writeComment("Parse " + structure.getId().getName() + " from JSON");
+        writer.writeSignature(functionName, "Aws.Json.JsonValue -> Optional " + structType);
+        writer.write("$L json =", functionName);
+        writer.indent();
+        writer.write("use Aws.Json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
+        
+        // Extract each field from JSON
+        List<MemberShape> members = structure.getAllMembers().values().stream().toList();
+        if (!members.isEmpty()) {
+            for (MemberShape member : members) {
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                String varName = memberName + "Val";
+                String jsonName = getJsonName(member);
+                
+                // For nested structure deserializers, all fields are optional extraction
+                Shape target = model.expectShape(member.getTarget());
+                String extraction = generateJsonExtraction(target, "json", jsonName, model, clientNamespace);
+                
+                // Check if field is non-optional (required or has default) - matches StructureGenerator logic
+                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+                
+                if (isNonOptional) {
+                    // Required field - unwrap or return None
+                    writer.write("$L = match $L with", varName, extraction);
+                    writer.indent();
+                    writer.write("Some v -> v");
+                    writer.write("None -> None");  // This will cause the whole function to return None
+                    writer.dedent();
+                } else {
+                    writer.write("$L = $L", varName, extraction);
+                }
+            }
+        }
+        
+        // Construct output using base type name
+        List<String> args = new ArrayList<>();
+        for (MemberShape member : members) {
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            args.add(memberName + "Val");
+        }
+        
+        if (args.isEmpty()) {
+            writer.write("Some $L", baseTypeName);
+        } else {
+            writer.write("Some ($L $L)", baseTypeName, String.join(" ", args));
+        }
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
      * Core implementation for generating a structure serializer with a given function name.
      */
     private void generateStructureSerializerWithName(StructureShape structure, String functionName, 
