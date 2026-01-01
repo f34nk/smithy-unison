@@ -537,6 +537,29 @@ public final class ClientModuleWriter {
             writer.dedent();
             writer.writeBlankLine();
         }
+        
+        // Generate toFailure function for the service error union
+        writer.writeDocComment("Convert service error to Failure for exception raising");
+        writer.write("$L.toFailure : $L -> Failure", errorUnionName, errorUnionName);
+        writer.write("$L.toFailure err =", errorUnionName);
+        writer.indent();
+        writer.write("match err with");
+        writer.indent();
+        
+        // Generate a match case for each error type
+        for (StructureShape error : errors) {
+            String errorTypeName = UnisonSymbolProvider.toUnisonTypeName(error.getId().getName());
+            String constructorName = errorTypeName;
+            String fullTypeName = getNamespacedTypeName(error.getId().getName());
+            writer.write("$L.$L e -> $L.toFailure e", errorUnionName, constructorName, fullTypeName);
+        }
+        
+        // Handle UnknownError case
+        writer.write("$L.UnknownError code msg -> Failure (typeLink Generic) (code ++ \": \" ++ msg) (Any err)", errorUnionName);
+        
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
     }
     
     /**
