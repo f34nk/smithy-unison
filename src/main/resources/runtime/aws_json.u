@@ -332,12 +332,80 @@ getFieldAsObject key value =
     _ -> None
 
 {{
+  Get a field as an object's field list.
+  Returns the list of key-value pairs from a JSON object field.
+}}
+getFieldAsObjectList : Text -> JsonValue -> Optional [(Text, JsonValue)]
+getFieldAsObjectList key value =
+  match getField key value with
+    Some (JsonObject fields) -> Some fields
+    _ -> None
+
+{{
   Get a field as an array value.
 }}
 getFieldAsArray : Text -> JsonValue -> Optional [JsonValue]
 getFieldAsArray key value =
   match getField key value with
     Some (JsonArray items) -> Some items
+    _ -> None
+
+-- === JsonValue Converters ===
+-- These convert a JsonValue directly to a typed Optional value.
+-- Used for converting list elements and map values.
+
+{{
+  Convert JsonValue to Optional Text.
+}}
+jsonValueToString : JsonValue -> Optional Text
+jsonValueToString value =
+  match value with
+    JsonString s -> Some s
+    _ -> None
+
+{{
+  Convert JsonValue to Optional Boolean.
+}}
+jsonValueToBoolean : JsonValue -> Optional Boolean
+jsonValueToBoolean value =
+  match value with
+    JsonBoolean b -> Some b
+    _ -> None
+
+{{
+  Convert JsonValue to Optional Float.
+}}
+jsonValueToNumber : JsonValue -> Optional Float
+jsonValueToNumber value =
+  match value with
+    JsonNumber n -> Some n
+    _ -> None
+
+{{
+  Convert JsonValue to Optional Int (truncated from Float).
+}}
+jsonValueToInt : JsonValue -> Optional Int
+jsonValueToInt value =
+  match value with
+    JsonNumber n -> Some (Float.truncate n)
+    _ -> None
+
+{{
+  Convert JsonValue to Optional list of JsonValue (array).
+}}
+jsonValueToArray : JsonValue -> Optional [JsonValue]
+jsonValueToArray value =
+  match value with
+    JsonArray items -> Some items
+    _ -> None
+
+{{
+  Convert JsonValue to Optional list of (Text, JsonValue) pairs (object fields).
+}}
+jsonValueToObjectList : JsonValue -> Optional [(Text, JsonValue)]
+jsonValueToObjectList value =
+  match value with
+    JsonObject fields -> Some fields
     _ -> None
 
 -- === DynamoDB AttributeValue Support ===
