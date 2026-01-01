@@ -252,45 +252,105 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.indent();
         writer.write("use Aws.Json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
         
-        // Extract each field from JSON
+        // Extract each field from JSON - all extractions return Optional
         List<MemberShape> members = structure.getAllMembers().values().stream().toList();
+        
+        // Collect required and optional field info
+        List<String> requiredVars = new ArrayList<>();
+        List<String> optionalVars = new ArrayList<>();
+        
         if (!members.isEmpty()) {
             for (MemberShape member : members) {
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                String varName = memberName + "Val";
+                String varName = memberName + "Opt";
                 String jsonName = getJsonName(member);
                 
-                // For nested structure deserializers, all fields are optional extraction
                 Shape target = model.expectShape(member.getTarget());
                 String extraction = generateJsonExtraction(target, "json", jsonName, model, clientNamespace);
                 
-                // Check if field is non-optional (required or has default) - matches StructureGenerator logic
-                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+                // All extractions are Optional - we unwrap required fields at the end
+                writer.write("$L = $L", varName, extraction);
                 
+                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
                 if (isNonOptional) {
-                    // Required field - unwrap or return None
-                    writer.write("$L = match $L with", varName, extraction);
-                    writer.indent();
-                    writer.write("Some v -> v");
-                    writer.write("None -> None");  // This will cause the whole function to return None
-                    writer.dedent();
+                    requiredVars.add(varName);
                 } else {
-                    writer.write("$L = $L", varName, extraction);
+                    optionalVars.add(varName);
                 }
             }
         }
         
-        // Construct output using base type name
-        List<String> args = new ArrayList<>();
-        for (MemberShape member : members) {
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-            args.add(memberName + "Val");
-        }
-        
-        if (args.isEmpty()) {
-            writer.write("Some $L", baseTypeName);
+        // Construct output - use Optional.flatMap chain for required fields
+        if (requiredVars.isEmpty()) {
+            // No required fields - just construct with optional values
+            List<String> args = new ArrayList<>();
+            for (MemberShape member : members) {
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                args.add(memberName + "Opt");
+            }
+            
+            if (args.isEmpty()) {
+                writer.write("Some $L", baseTypeName);
+            } else {
+                writer.write("Some ($L $L)", baseTypeName, String.join(" ", args));
+            }
         } else {
-            writer.write("Some ($L $L)", baseTypeName, String.join(" ", args));
+            // Has required fields - use match to unwrap them all at once
+            // Build constructor arguments, using unwrapped names for required, Opt suffix for optional
+            List<String> constructorArgs = new ArrayList<>();
+            List<String> matchPatterns = new ArrayList<>();
+            List<String> unwrappedNames = new ArrayList<>();
+            
+            for (MemberShape member : members) {
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+                
+                if (isNonOptional) {
+                    String unwrappedName = memberName + "Unwrapped";
+                    matchPatterns.add("Some " + unwrappedName);
+                    unwrappedNames.add(memberName + "Opt");
+                    constructorArgs.add(unwrappedName);
+                } else {
+                    constructorArgs.add(memberName + "Opt");
+                }
+            }
+            
+            // Generate nested Optional.flatMap for required fields
+            // Pattern: reqField1Opt |> Optional.flatMap (f1 -> reqField2Opt |> Optional.flatMap (f2 -> Some (Struct f1 f2 optFields...)))
+            StringBuilder nested = new StringBuilder();
+            int depth = 0;
+            
+            for (int i = 0; i < requiredVars.size(); i++) {
+                String varName = requiredVars.get(i);
+                String unwrappedName = varName.replace("Opt", "");
+                
+                if (i == 0) {
+                    nested.append(varName).append(" |> Optional.flatMap (").append(unwrappedName).append(" ->");
+                } else {
+                    nested.append(" ").append(varName).append(" |> Optional.flatMap (").append(unwrappedName).append(" ->");
+                }
+                depth++;
+            }
+            
+            // Build the constructor call with proper argument names
+            List<String> finalArgs = new ArrayList<>();
+            for (MemberShape member : members) {
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+                
+                if (isNonOptional) {
+                    finalArgs.add(memberName);  // unwrapped name (without Opt)
+                } else {
+                    finalArgs.add(memberName + "Opt");  // keep Optional
+                }
+            }
+            
+            nested.append(" Some ($L $L)");
+            for (int i = 0; i < depth; i++) {
+                nested.append(")");
+            }
+            
+            writer.write(nested.toString(), baseTypeName, String.join(" ", finalArgs));
         }
         
         writer.dedent();
