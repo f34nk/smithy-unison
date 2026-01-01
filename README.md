@@ -76,13 +76,17 @@ Run all example builds:
 make examples
 ```
 
-Run demo:
+Run demos:
 
 ```bash
-make demo
+make demo/s3
 ```
 
 The [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) generates the `aws_s3_client` from the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01), compiles it locally and executes functions against a mocked S3 bucket in Docker Compose.
+
+```bash
+make demo/dynamodb
+```
 
 The [DynamoDB demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u) generates the `aws_dynamodb_client` and runs ListTables, PutItem, GetItem, and DeleteItem operations against LocalStack.
 
