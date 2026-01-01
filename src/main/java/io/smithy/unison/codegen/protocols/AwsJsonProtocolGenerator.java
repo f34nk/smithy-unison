@@ -393,11 +393,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         writer.writeComment("Parse " + output.getId().getName() + " from AWS JSON response");
         writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
-        writer.write("$L response =", functionName);
+        writer.write("$L response = do", functionName);
         writer.indent();
         writer.write("use Aws.Json JsonNull JsonString JsonNumber JsonBoolean JsonObject JsonArray");
-        writer.write("let");
-        writer.indent();
         
         // Parse JSON from response body
         writer.write("-- Parse JSON response body");
@@ -436,7 +434,6 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             writer.write("$L $L", baseTypeName, String.join(" ", args));
         }
         
-        writer.dedent(); // Close let block
         writer.dedent(); // Close function
         writer.writeBlankLine();
     }
@@ -555,6 +552,18 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("Aws.Json.jsonValueToString %s |> Optional.flatMap Bytes.fromBase64", varName);
         } else if (target.isTimestampShape()) {
             return String.format("Aws.Json.jsonValueToString %s |> Optional.flatMap Instant.fromText", varName);
+        } else if (target.isListShape()) {
+            // List - convert array elements recursively
+            ListShape listShape = target.asListShape().get();
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            String elemConversion = generateJsonValueConversion(memberTarget, "elem", model, clientNamespace);
+            return String.format("Aws.Json.jsonValueToArray %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)", varName, elemConversion);
+        } else if (target.isMapShape()) {
+            // Map - convert object fields recursively
+            MapShape mapShape = target.asMapShape().get();
+            Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
+            return String.format("Aws.Json.jsonValueToObjectList %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
         } else if (target.isStructureShape()) {
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
