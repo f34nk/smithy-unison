@@ -1,119 +1,119 @@
 -- Unit tests for AWS JSON Runtime Module
 
+namespace Aws.Json.Test
+
 use Aws.Json
 use Bytes
+use Text ++
 
 -- === JSON Serialization Tests ===
 
-testToJsonString : Boolean
-testToJsonString =
+testToJsonString : '{Exception} Boolean
+testToJsonString = 'let
   result = toJson (JsonString "hello")
   result === "\"hello\""
 
-testToJsonNumber : Boolean
-testToJsonNumber =
+testToJsonNumber : '{Exception} Boolean
+testToJsonNumber = 'let
   result = toJson (JsonNumber 42.0)
   result === "42.0"
 
-testToJsonBoolean : Boolean
-testToJsonBoolean =
-  (toJson (JsonBoolean true) === "true") &&
-  (toJson (JsonBoolean false) === "false")
+testToJsonBoolean : '{Exception} Boolean
+testToJsonBoolean = 'let
+  (toJson (JsonBoolean true) === "true") && (toJson (JsonBoolean false) === "false")
 
-testToJsonNull : Boolean
-testToJsonNull =
+testToJsonNull : '{Exception} Boolean
+testToJsonNull = 'let
   toJson JsonNull === "null"
 
-testToJsonObject : Boolean
-testToJsonObject =
+testToJsonObject : '{Exception} Boolean
+testToJsonObject = 'let
   obj = JsonObject [("name", JsonString "Alice"), ("age", JsonNumber 30.0)]
   result = toJson obj
-  (result === "{\"name\":\"Alice\",\"age\":30.0}") ||
-  (result === "{\"age\":30.0,\"name\":\"Alice\"}")
+  (result === "{\"name\":\"Alice\",\"age\":30.0}") || (result === "{\"age\":30.0,\"name\":\"Alice\"}")
 
-testToJsonArray : Boolean
-testToJsonArray =
+testToJsonArray : '{Exception} Boolean
+testToJsonArray = 'let
   arr = JsonArray [JsonString "a", JsonString "b", JsonNumber 1.0]
   result = toJson arr
   result === "[\"a\",\"b\",1.0]"
 
-testToJsonNestedObject : Boolean
-testToJsonNestedObject =
+testToJsonNestedObject : '{Exception} Boolean
+testToJsonNestedObject = 'let
   inner = JsonObject [("city", JsonString "NYC")]
   outer = JsonObject [("person", inner)]
   result = toJson outer
   result === "{\"person\":{\"city\":\"NYC\"}}"
 
-testToJsonEscaping : Boolean
-testToJsonEscaping =
+testToJsonEscaping : '{Exception} Boolean
+testToJsonEscaping = 'let
   str = JsonString "line1\nline2\ttab\"quote"
   result = toJson str
   result === "\"line1\\nline2\\ttab\\\"quote\""
 
 -- === JSON Deserialization Tests ===
 
-testFromJsonString : Boolean
-testFromJsonString =
+testFromJsonString : '{Exception} Boolean
+testFromJsonString = 'let
   match fromJson "\"hello\"" with
     Some (JsonString "hello") -> true
     _ -> false
 
-testFromJsonNumber : Boolean
-testFromJsonNumber =
+testFromJsonNumber : '{Exception} Boolean
+testFromJsonNumber = 'let
   match fromJson "42.5" with
     Some (JsonNumber n) -> n === 42.5
     _ -> false
 
-testFromJsonBoolean : Boolean
-testFromJsonBoolean =
+testFromJsonBoolean : '{Exception} Boolean
+testFromJsonBoolean = 'let
   match fromJson "true" with
     Some (JsonBoolean true) -> true
     _ -> false
 
-testFromJsonNull : Boolean
-testFromJsonNull =
+testFromJsonNull : '{Exception} Boolean
+testFromJsonNull = 'let
   match fromJson "null" with
     Some JsonNull -> true
     _ -> false
 
-testFromJsonObject : Boolean
-testFromJsonObject =
+testFromJsonObject : '{Exception} Boolean
+testFromJsonObject = 'let
   json = "{\"name\":\"Alice\",\"age\":30}"
   match fromJson json with
     Some (JsonObject fields) ->
-      (getFieldAsString "name" (JsonObject fields) === Some "Alice") &&
-      (getFieldAsNumber "age" (JsonObject fields) === Some 30.0)
+      (getFieldAsString "name" (JsonObject fields) === Some "Alice") && (getFieldAsNumber "age" (JsonObject fields) === Some 30.0)
     _ -> false
 
-testFromJsonArray : Boolean
-testFromJsonArray =
+testFromJsonArray : '{Exception} Boolean
+testFromJsonArray = 'let
   json = "[\"a\",\"b\",1]"
   match fromJson json with
     Some (JsonArray items) -> List.size items === 3
     _ -> false
 
-testFromJsonEmptyObject : Boolean
-testFromJsonEmptyObject =
+testFromJsonEmptyObject : '{Exception} Boolean
+testFromJsonEmptyObject = 'let
   match fromJson "{}" with
     Some (JsonObject fields) -> List.isEmpty fields
     _ -> false
 
-testFromJsonEmptyArray : Boolean
-testFromJsonEmptyArray =
+testFromJsonEmptyArray : '{Exception} Boolean
+testFromJsonEmptyArray = 'let
   match fromJson "[]" with
     Some (JsonArray items) -> List.isEmpty items
     _ -> false
 
-testFromJsonWhitespace : Boolean
-testFromJsonWhitespace =
+testFromJsonWhitespace : '{Exception} Boolean
+testFromJsonWhitespace = 'let
   json = "  { \"key\" : \"value\" }  "
   match fromJson json with
     Some (JsonObject fields) -> 
       getFieldAsString "key" (JsonObject fields) === Some "value"
     _ -> false
 
-testFromJsonNested : Boolean
-testFromJsonNested =
+testFromJsonNested : '{Exception} Boolean
+testFromJsonNested = 'let
   json = "{\"outer\":{\"inner\":\"value\"}}"
   match fromJson json with
     Some (JsonObject fields) ->
@@ -124,41 +124,46 @@ testFromJsonNested =
 
 -- === Object Accessor Tests ===
 
-testGetField : Boolean
-testGetField =
+testGetField : '{Exception} Boolean
+testGetField = 'let
   obj = JsonObject [("key", JsonString "value")]
   match getField "key" obj with
     Some (JsonString "value") -> true
     _ -> false
 
-testGetFieldMissing : Boolean
-testGetFieldMissing =
+testGetFieldMissing : '{Exception} Boolean
+testGetFieldMissing = 'let
   obj = JsonObject [("key", JsonString "value")]
   getField "missing" obj === None
 
-testGetFieldOrNull : Boolean
-testGetFieldOrNull =
+testGetFieldOrNull : '{Exception} Boolean
+testGetFieldOrNull = 'let
   obj = JsonObject [("key", JsonString "value")]
-  (getFieldOrNull "key" obj |> cases JsonString "value" -> true; _ -> false) &&
-  (getFieldOrNull "missing" obj |> cases JsonNull -> true; _ -> false)
+  test1 = match getFieldOrNull "key" obj with
+    JsonString "value" -> true
+    _ -> false
+  test2 = match getFieldOrNull "missing" obj with
+    JsonNull -> true
+    _ -> false
+  test1 && test2
 
-testGetFieldAsString : Boolean
-testGetFieldAsString =
+testGetFieldAsString : '{Exception} Boolean
+testGetFieldAsString = 'let
   obj = JsonObject [("name", JsonString "Alice")]
   getFieldAsString "name" obj === Some "Alice"
 
-testGetFieldAsNumber : Boolean
-testGetFieldAsNumber =
+testGetFieldAsNumber : '{Exception} Boolean
+testGetFieldAsNumber = 'let
   obj = JsonObject [("age", JsonNumber 30.0)]
   getFieldAsNumber "age" obj === Some 30.0
 
-testGetFieldAsBoolean : Boolean
-testGetFieldAsBoolean =
+testGetFieldAsBoolean : '{Exception} Boolean
+testGetFieldAsBoolean = 'let
   obj = JsonObject [("active", JsonBoolean true)]
   getFieldAsBoolean "active" obj === Some true
 
-testGetFieldAsArray : Boolean
-testGetFieldAsArray =
+testGetFieldAsArray : '{Exception} Boolean
+testGetFieldAsArray = 'let
   obj = JsonObject [("items", JsonArray [JsonString "a", JsonString "b"])]
   match getFieldAsArray "items" obj with
     Some items -> List.size items === 2
@@ -166,50 +171,47 @@ testGetFieldAsArray =
 
 -- === AttributeValue Tests ===
 
-testAttributeValueString : Boolean
-testAttributeValueString =
+testAttributeValueString : '{Exception} Boolean
+testAttributeValueString = 'let
   attr = AttributeValue'S "hello"
   json = attributeValueToJson attr
   match json with
     JsonObject fields ->
-      (List.size fields === 1) &&
-      (getFieldAsString "S" json === Some "hello")
+      (List.size fields === 1) && (getFieldAsString "S" json === Some "hello")
     _ -> false
 
-testAttributeValueNumber : Boolean
-testAttributeValueNumber =
+testAttributeValueNumber : '{Exception} Boolean
+testAttributeValueNumber = 'let
   attr = AttributeValue'N "123.45"
   json = attributeValueToJson attr
   match json with
     JsonObject fields ->
-      (List.size fields === 1) &&
-      (getFieldAsString "N" json === Some "123.45")
+      (List.size fields === 1) && (getFieldAsString "N" json === Some "123.45")
     _ -> false
 
-testAttributeValueBoolean : Boolean
-testAttributeValueBoolean =
+testAttributeValueBoolean : '{Exception} Boolean
+testAttributeValueBoolean = 'let
   attr = AttributeValue'BOOL true
   json = attributeValueToJson attr
   match json with
     JsonObject fields ->
-      (List.size fields === 1) &&
-      (getFieldAsBoolean "BOOL" json === Some true)
+      (List.size fields === 1) && (getFieldAsBoolean "BOOL" json === Some true)
     _ -> false
 
-testAttributeValueNull : Boolean
-testAttributeValueNull =
+testAttributeValueNull : '{Exception} Boolean
+testAttributeValueNull = 'let
   attr = AttributeValue'NULL true
   json = attributeValueToJson attr
   toJson json === "{\"NULL\":true}"
 
-testAttributeValueStringSet : Boolean
-testAttributeValueStringSet =
+testAttributeValueStringSet : '{Exception} Boolean
+testAttributeValueStringSet = 'let
   attr = AttributeValue'SS ["a", "b", "c"]
   json = attributeValueToJson attr
   toJson json === "{\"SS\":[\"a\",\"b\",\"c\"]}"
 
-testAttributeValueMap : Boolean
-testAttributeValueMap =
+testAttributeValueMap : '{Exception} Boolean
+testAttributeValueMap = 'let
   attr = AttributeValue'M [
     ("name", AttributeValue'S "Alice"),
     ("age", AttributeValue'N "30")
@@ -218,14 +220,12 @@ testAttributeValueMap =
   match json with
     JsonObject fields ->
       match getFieldAsObject "M" json with
-        Some m -> 
-          (getFieldAsString "name" m === None) && -- Because it's wrapped in {"S": "Alice"}
-          true
+        Some m -> getFieldAsString "name" m === None
         _ -> false
     _ -> false
 
-testAttributeValueList : Boolean
-testAttributeValueList =
+testAttributeValueList : '{Exception} Boolean
+testAttributeValueList = 'let
   attr = AttributeValue'L [
     AttributeValue'S "first",
     AttributeValue'N "2",
@@ -239,36 +239,36 @@ testAttributeValueList =
         _ -> false
     _ -> false
 
-testJsonToAttributeValueString : Boolean
-testJsonToAttributeValueString =
+testJsonToAttributeValueString : '{Exception} Boolean
+testJsonToAttributeValueString = 'let
   json = JsonObject [("S", JsonString "hello")]
   match jsonToAttributeValue json with
     Some (AttributeValue'S "hello") -> true
     _ -> false
 
-testJsonToAttributeValueNumber : Boolean
-testJsonToAttributeValueNumber =
+testJsonToAttributeValueNumber : '{Exception} Boolean
+testJsonToAttributeValueNumber = 'let
   json = JsonObject [("N", JsonString "123")]
   match jsonToAttributeValue json with
     Some (AttributeValue'N "123") -> true
     _ -> false
 
-testJsonToAttributeValueBoolean : Boolean
-testJsonToAttributeValueBoolean =
+testJsonToAttributeValueBoolean : '{Exception} Boolean
+testJsonToAttributeValueBoolean = 'let
   json = JsonObject [("BOOL", JsonBoolean false)]
   match jsonToAttributeValue json with
     Some (AttributeValue'BOOL false) -> true
     _ -> false
 
-testJsonToAttributeValueNull : Boolean
-testJsonToAttributeValueNull =
+testJsonToAttributeValueNull : '{Exception} Boolean
+testJsonToAttributeValueNull = 'let
   json = JsonObject [("NULL", JsonBoolean true)]
   match jsonToAttributeValue json with
     Some (AttributeValue'NULL true) -> true
     _ -> false
 
-testJsonToAttributeValueStringSet : Boolean
-testJsonToAttributeValueStringSet =
+testJsonToAttributeValueStringSet : '{Exception} Boolean
+testJsonToAttributeValueStringSet = 'let
   json = JsonObject [("SS", JsonArray [JsonString "a", JsonString "b"])]
   match jsonToAttributeValue json with
     Some (AttributeValue'SS items) -> List.size items === 2
@@ -276,42 +276,41 @@ testJsonToAttributeValueStringSet =
 
 -- === Roundtrip Tests ===
 
-testRoundtripString : Boolean
-testRoundtripString =
+testRoundtripString : '{Exception} Boolean
+testRoundtripString = 'let
   original = JsonString "hello world"
   serialized = toJson original
   match fromJson serialized with
     Some (JsonString "hello world") -> true
     _ -> false
 
-testRoundtripNumber : Boolean
-testRoundtripNumber =
+testRoundtripNumber : '{Exception} Boolean
+testRoundtripNumber = 'let
   original = JsonNumber 42.5
   serialized = toJson original
   match fromJson serialized with
     Some (JsonNumber n) -> n === 42.5
     _ -> false
 
-testRoundtripObject : Boolean
-testRoundtripObject =
+testRoundtripObject : '{Exception} Boolean
+testRoundtripObject = 'let
   original = JsonObject [("key", JsonString "value"), ("num", JsonNumber 10.0)]
   serialized = toJson original
   match fromJson serialized with
     Some (JsonObject fields) ->
-      (getFieldAsString "key" (JsonObject fields) === Some "value") &&
-      (getFieldAsNumber "num" (JsonObject fields) === Some 10.0)
+      (getFieldAsString "key" (JsonObject fields) === Some "value") && (getFieldAsNumber "num" (JsonObject fields) === Some 10.0)
     _ -> false
 
-testRoundtripArray : Boolean
-testRoundtripArray =
+testRoundtripArray : '{Exception} Boolean
+testRoundtripArray = 'let
   original = JsonArray [JsonString "a", JsonNumber 1.0, JsonBoolean true, JsonNull]
   serialized = toJson original
   match fromJson serialized with
     Some (JsonArray items) -> List.size items === 4
     _ -> false
 
-testAttributeValueRoundtrip : Boolean
-testAttributeValueRoundtrip =
+testAttributeValueRoundtrip : '{Exception} Boolean
+testAttributeValueRoundtrip = 'let
   original = AttributeValue'M [
     ("id", AttributeValue'S "user123"),
     ("age", AttributeValue'N "30"),
@@ -334,61 +333,61 @@ runAllTests = do
   printLine ""
   
   -- Serialization tests
-  runTest "toJson String" testToJsonString
-  runTest "toJson Number" testToJsonNumber
-  runTest "toJson Boolean" testToJsonBoolean
-  runTest "toJson Null" testToJsonNull
-  runTest "toJson Object" testToJsonObject
-  runTest "toJson Array" testToJsonArray
-  runTest "toJson Nested Object" testToJsonNestedObject
-  runTest "toJson Escaping" testToJsonEscaping
+  runTest "toJson String" testToJsonString ()
+  runTest "toJson Number" testToJsonNumber ()
+  runTest "toJson Boolean" testToJsonBoolean ()
+  runTest "toJson Null" testToJsonNull ()
+  runTest "toJson Object" testToJsonObject ()
+  runTest "toJson Array" testToJsonArray ()
+  runTest "toJson Nested Object" testToJsonNestedObject ()
+  runTest "toJson Escaping" testToJsonEscaping ()
   
   -- Deserialization tests
-  runTest "fromJson String" testFromJsonString
-  runTest "fromJson Number" testFromJsonNumber
-  runTest "fromJson Boolean" testFromJsonBoolean
-  runTest "fromJson Null" testFromJsonNull
-  runTest "fromJson Object" testFromJsonObject
-  runTest "fromJson Array" testFromJsonArray
-  runTest "fromJson Empty Object" testFromJsonEmptyObject
-  runTest "fromJson Empty Array" testFromJsonEmptyArray
-  runTest "fromJson Whitespace" testFromJsonWhitespace
-  runTest "fromJson Nested" testFromJsonNested
+  runTest "fromJson String" testFromJsonString ()
+  runTest "fromJson Number" testFromJsonNumber ()
+  runTest "fromJson Boolean" testFromJsonBoolean ()
+  runTest "fromJson Null" testFromJsonNull ()
+  runTest "fromJson Object" testFromJsonObject ()
+  runTest "fromJson Array" testFromJsonArray ()
+  runTest "fromJson Empty Object" testFromJsonEmptyObject ()
+  runTest "fromJson Empty Array" testFromJsonEmptyArray ()
+  runTest "fromJson Whitespace" testFromJsonWhitespace ()
+  runTest "fromJson Nested" testFromJsonNested ()
   
   -- Accessor tests
-  runTest "getField" testGetField
-  runTest "getField Missing" testGetFieldMissing
-  runTest "getFieldOrNull" testGetFieldOrNull
-  runTest "getFieldAsString" testGetFieldAsString
-  runTest "getFieldAsNumber" testGetFieldAsNumber
-  runTest "getFieldAsBoolean" testGetFieldAsBoolean
-  runTest "getFieldAsArray" testGetFieldAsArray
+  runTest "getField" testGetField ()
+  runTest "getField Missing" testGetFieldMissing ()
+  runTest "getFieldOrNull" testGetFieldOrNull ()
+  runTest "getFieldAsString" testGetFieldAsString ()
+  runTest "getFieldAsNumber" testGetFieldAsNumber ()
+  runTest "getFieldAsBoolean" testGetFieldAsBoolean ()
+  runTest "getFieldAsArray" testGetFieldAsArray ()
   
   -- AttributeValue tests
-  runTest "AttributeValue String" testAttributeValueString
-  runTest "AttributeValue Number" testAttributeValueNumber
-  runTest "AttributeValue Boolean" testAttributeValueBoolean
-  runTest "AttributeValue Null" testAttributeValueNull
-  runTest "AttributeValue StringSet" testAttributeValueStringSet
-  runTest "AttributeValue Map" testAttributeValueMap
-  runTest "AttributeValue List" testAttributeValueList
-  runTest "jsonToAttributeValue String" testJsonToAttributeValueString
-  runTest "jsonToAttributeValue Number" testJsonToAttributeValueNumber
-  runTest "jsonToAttributeValue Boolean" testJsonToAttributeValueBoolean
-  runTest "jsonToAttributeValue Null" testJsonToAttributeValueNull
-  runTest "jsonToAttributeValue StringSet" testJsonToAttributeValueStringSet
+  runTest "AttributeValue String" testAttributeValueString ()
+  runTest "AttributeValue Number" testAttributeValueNumber ()
+  runTest "AttributeValue Boolean" testAttributeValueBoolean ()
+  runTest "AttributeValue Null" testAttributeValueNull ()
+  runTest "AttributeValue StringSet" testAttributeValueStringSet ()
+  runTest "AttributeValue Map" testAttributeValueMap ()
+  runTest "AttributeValue List" testAttributeValueList ()
+  runTest "jsonToAttributeValue String" testJsonToAttributeValueString ()
+  runTest "jsonToAttributeValue Number" testJsonToAttributeValueNumber ()
+  runTest "jsonToAttributeValue Boolean" testJsonToAttributeValueBoolean ()
+  runTest "jsonToAttributeValue Null" testJsonToAttributeValueNull ()
+  runTest "jsonToAttributeValue StringSet" testJsonToAttributeValueStringSet ()
   
   -- Roundtrip tests
-  runTest "Roundtrip String" testRoundtripString
-  runTest "Roundtrip Number" testRoundtripNumber
-  runTest "Roundtrip Object" testRoundtripObject
-  runTest "Roundtrip Array" testRoundtripArray
-  runTest "AttributeValue Roundtrip" testAttributeValueRoundtrip
+  runTest "Roundtrip String" testRoundtripString ()
+  runTest "Roundtrip Number" testRoundtripNumber ()
+  runTest "Roundtrip Object" testRoundtripObject ()
+  runTest "Roundtrip Array" testRoundtripArray ()
+  runTest "AttributeValue Roundtrip" testAttributeValueRoundtrip ()
   
   printLine ""
   printLine "All tests completed!"
 
-runTest : Text -> Boolean -> '{IO} ()
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
 runTest name test = do
-  result = if test then "✓ PASS" else "✗ FAIL"
+  result = if test () then "✓ PASS" else "✗ FAIL"
   printLine (result ++ " - " ++ name)
