@@ -112,3 +112,5 @@ target/
 
 # Ignore unison scratch spaces
 unison-*/
+
+*.output.md

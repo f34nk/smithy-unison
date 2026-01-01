@@ -1,7 +1,3 @@
-# AWS S3 Demo Makefile
-# UCM is installed locally via install.sh
-
-UCM_VERSION ?= 1.0.0
 
 .PHONY: all
 all: clean generate
@@ -16,7 +12,7 @@ generate: model/s3-2006-03-01.json
 
 .PHONY: clean
 clean:
-	rm -rf generated/*.u ./build .ucm
+	rm -rf generated/*.u ./build .ucm *.output.md
 	rm -f compiled/main.uc
 	rm -f model/*.json
 	rm -rf terraform/.terraform
@@ -24,40 +20,33 @@ clean:
 	rm -f terraform/terraform.tfstate
 	rm -f terraform/terraform.tfstate.backup
 
-.PHONY: install
-install:
-	#
-	# Install UCM $(UCM_VERSION) from GitHub if needed
-	#
-	UCM_VERSION=$(UCM_VERSION) ./install.sh
-
 .PHONY: compile
-compile: generate install
+compile: generate
 	#
 	# Compile Unison code locally
 	#
-	./compile.sh
+	./run-transcript.sh compile.md
 
 .PHONY: compile-with-lib
-compile-with-lib: install
+compile-with-lib:
 	#
 	# Fetch deps from Unison Share and compile locally
 	#
-	./compile-with-lib.sh
+	./run-transcript.sh compile-with-lib.md
 
 .PHONY: test
 test: compiled/main.uc docker/start terraform
 	#
 	# Run compiled Unison code against LocalStack
 	#
-	./demo.sh
+	./run-compiled.sh compiled/main.uc
 
 .PHONY: integration-test
 integration-test: compile-with-lib docker/start terraform
 	#
-	# Run compiled code in Docker Compose
+	# Run compiled code
 	#
-	./demo.sh
+	./run-compiled.sh compiled/main.uc
 
 # make sure model/s3-2006-03-01.json is available
 model/s3-2006-03-01.json:
