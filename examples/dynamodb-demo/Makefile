@@ -25,28 +25,28 @@ compile: generate
 	#
 	# Compile Unison code locally
 	#
-	./run-transcript.sh compile.md
+	../../scripts/run-transcript.sh compile.md
 
 .PHONY: compile-with-lib
 compile-with-lib:
 	#
 	# Fetch deps from Unison Share and compile locally
 	#
-	./run-transcript.sh compile-with-lib.md
+	../../scripts/run-transcript.sh compile-with-lib.md
 
 .PHONY: test
 test: compiled/main.uc docker/start terraform
 	#
 	# Run compiled Unison code against LocalStack
 	#
-	./run-compiled.sh compiled/main.uc
+	../../scripts/run-compiled.sh compiled/main.uc
 
 .PHONY: integration-test
 integration-test: compile-with-lib docker/start terraform
 	#
 	# Run compiled code
 	#
-	./run-compiled.sh compiled/main.uc
+	../../scripts/run-compiled.sh compiled/main.uc
 
 # make sure model/dynamodb-2012-08-10.json is available
 model/dynamodb-2012-08-10.json:
@@ -63,7 +63,7 @@ compiled/main.uc:
 .PHONY: terraform
 terraform:
 	#
-	# Run Terraform to create the S3 bucket
+	# Run Terraform to create infrastructure
 	#
 	cd terraform && terraform init && terraform apply -auto-approve
 

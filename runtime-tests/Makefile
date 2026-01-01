@@ -23,4 +23,4 @@ test:
 	#
 	# Run runtime tests
 	#
-	./test.sh
+	../scripts/run-transcript.sh test.md

@@ -23,12 +23,13 @@ export AWS_SECRET_ACCESS_KEY=dummy
 export AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT=http://localhost:4566
 
-# Wait for mocked infrastructure to be available
 echo "Waiting for LocalStack ..."
 until curl --silent --fail http://localhost:4566 > /dev/null 2>&1; do
     echo "Waiting for LocalStack..."
     sleep 2
 done
 echo "LocalStack is ready!"
+
+echo "Running compiled: $FILE_PATH"
 
 ucm run.compiled $FILE_PATH

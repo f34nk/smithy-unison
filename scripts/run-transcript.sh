@@ -33,8 +33,6 @@ export TERM=dumb
 export NO_COLOR=1
 export LESS="-F -X"
 
-FILE=$(basename "$FILE_PATH")
-echo "Running transcript: $FILE"
+echo "Running transcript: $FILE_PATH"
 
-# Run UCM transcript
-yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript $FILE 2>&1 | cat
+yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript $FILE_PATH 2>&1 | cat
