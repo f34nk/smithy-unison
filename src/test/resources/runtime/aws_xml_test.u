@@ -1,117 +1,117 @@
 -- Unit tests for AWS XML Runtime Module
 
-namespace Aws.Xml.Test
+namespace aws.xml.Test
 
-use Aws.Xml
+use aws.xml
 use Text ++
 
 -- === XML Escaping / Unescaping Tests ===
 
 testEscape : '{Exception} Boolean
 testEscape = 'let
-  result = Aws.Xml.escape "Hello & <World>"
+  result = aws.xml.escape "Hello & <World>"
   result === "Hello &amp; &lt;World&gt;"
 
 testEscapeQuotes : '{Exception} Boolean
 testEscapeQuotes = 'let
-  result = Aws.Xml.escape "Say \"hello\""
+  result = aws.xml.escape "Say \"hello\""
   result === "Say &quot;hello&quot;"
 
 testEscapeApostrophe : '{Exception} Boolean
 testEscapeApostrophe = 'let
-  result = Aws.Xml.escape "It's here"
+  result = aws.xml.escape "It's here"
   result === "It&apos;s here"
 
 testUnescape : '{Exception} Boolean
 testUnescape = 'let
-  result = Aws.Xml.unescape "Hello &amp; &lt;World&gt;"
+  result = aws.xml.unescape "Hello &amp; &lt;World&gt;"
   result === "Hello & <World>"
 
 testUnescapeQuotes : '{Exception} Boolean
 testUnescapeQuotes = 'let
-  result = Aws.Xml.unescape "Say &quot;hello&quot;"
+  result = aws.xml.unescape "Say &quot;hello&quot;"
   result === "Say \"hello\""
 
 testRoundtripEscape : '{Exception} Boolean
 testRoundtripEscape = 'let
   original = "Test & <tag> \"quoted\" 'apostrophe'"
-  (Aws.Xml.unescape (Aws.Xml.escape original)) === original
+  (aws.xml.unescape (aws.xml.escape original)) === original
 
 -- === Element Creation Tests ===
 
 testElement : '{Exception} Boolean
 testElement = 'let
-  result = Aws.Xml.element "Name" "Alice"
+  result = aws.xml.element "Name" "Alice"
   result === "<Name>Alice</Name>"
 
 testElementWithEscaping : '{Exception} Boolean
 testElementWithEscaping = 'let
-  result = Aws.Xml.element "Data" "Value & More"
+  result = aws.xml.element "Data" "Value & More"
   result === "<Data>Value &amp; More</Data>"
 
 testElementRaw : '{Exception} Boolean
 testElementRaw = 'let
-  result = Aws.Xml.elementRaw "Container" "<Child>nested</Child>"
+  result = aws.xml.elementRaw "Container" "<Child>nested</Child>"
   result === "<Container><Child>nested</Child></Container>"
 
 testEmptyElement : '{Exception} Boolean
 testEmptyElement = 'let
-  result = Aws.Xml.emptyElement "SelfClosing"
+  result = aws.xml.emptyElement "SelfClosing"
   result === "<SelfClosing/>"
 
 testElementWithAttrs : '{Exception} Boolean
 testElementWithAttrs = 'let
-  result = Aws.Xml.elementWithAttrs "Tag" [("id", "123"), ("name", "test")] "content"
+  result = aws.xml.elementWithAttrs "Tag" [("id", "123"), ("name", "test")] "content"
   Text.contains "id=\"123\"" result && Text.contains "name=\"test\"" result && Text.contains ">content<" result
 
 testEmptyElementWithAttrs : '{Exception} Boolean
 testEmptyElementWithAttrs = 'let
-  result = Aws.Xml.emptyElementWithAttrs "Tag" [("version", "1.0")]
+  result = aws.xml.emptyElementWithAttrs "Tag" [("version", "1.0")]
   Text.contains "version=\"1.0\"" result && Text.contains "/>" result
 
 testOptionalElement : '{Exception} Boolean
 testOptionalElement = 'let
-  (Aws.Xml.optionalElement "Field" (Some "value")) === "<Field>value</Field>" && (Aws.Xml.optionalElement "Field" None) === ""
+  (aws.xml.optionalElement "Field" (Some "value")) === "<Field>value</Field>" && (aws.xml.optionalElement "Field" None) === ""
 
 testIntElement : '{Exception} Boolean
 testIntElement = 'let
-  result = Aws.Xml.intElement "Count" +42
+  result = aws.xml.intElement "Count" +42
   result === "<Count>42</Count>"
 
 testBoolElement : '{Exception} Boolean
 testBoolElement = 'let
-  (Aws.Xml.boolElement "Flag" true) === "<Flag>true</Flag>" && (Aws.Xml.boolElement "Flag" false) === "<Flag>false</Flag>"
+  (aws.xml.boolElement "Flag" true) === "<Flag>true</Flag>" && (aws.xml.boolElement "Flag" false) === "<Flag>false</Flag>"
 
 testOptionalIntElement : '{Exception} Boolean
 testOptionalIntElement = 'let
-  (Aws.Xml.optionalIntElement "Count" (Some +10)) === "<Count>10</Count>" && (Aws.Xml.optionalIntElement "Count" None) === ""
+  (aws.xml.optionalIntElement "Count" (Some +10)) === "<Count>10</Count>" && (aws.xml.optionalIntElement "Count" None) === ""
 
 testOptionalBoolElement : '{Exception} Boolean
 testOptionalBoolElement = 'let
-  (Aws.Xml.optionalBoolElement "Flag" (Some true)) === "<Flag>true</Flag>" && (Aws.Xml.optionalBoolElement "Flag" None) === ""
+  (aws.xml.optionalBoolElement "Flag" (Some true)) === "<Flag>true</Flag>" && (aws.xml.optionalBoolElement "Flag" None) === ""
 
 -- === List / Array Tests ===
 
 testListElements : '{Exception} Boolean
 testListElements = 'let
-  result = Aws.Xml.listElements "Item" ["a", "b", "c"]
+  result = aws.xml.listElements "Item" ["a", "b", "c"]
   result === "<Item>a</Item><Item>b</Item><Item>c</Item>"
 
 testWrappedList : '{Exception} Boolean
 testWrappedList = 'let
-  result = Aws.Xml.wrappedList "Items" "Item" ["x", "y"]
+  result = aws.xml.wrappedList "Items" "Item" ["x", "y"]
   result === "<Items><Item>x</Item><Item>y</Item></Items>"
 
 testListWith : '{Exception} Boolean
 testListWith = 'let
-  toXml n = Aws.Xml.intElement "Value" n
-  result = Aws.Xml.listWith "Number" toXml [+1, +2, +3]
+  toXml n = aws.xml.intElement "Value" n
+  result = aws.xml.listWith "Number" toXml [+1, +2, +3]
   Text.contains "<Number><Value>1</Value></Number>" result
 
 testFlattenedList : '{Exception} Boolean
 testFlattenedList = 'let
-  toXml n = Aws.Xml.intElement "Value" n
-  result = Aws.Xml.flattenedList "Item" toXml [+5, +10]
+  toXml n = aws.xml.intElement "Value" n
+  result = aws.xml.flattenedList "Item" toXml [+5, +10]
   Text.contains "<Item><Value>5</Value></Item>" result && Text.contains "<Item><Value>10</Value></Item>" result
 
 -- === Element Extraction Tests ===
@@ -119,78 +119,78 @@ testFlattenedList = 'let
 testExtractElement : '{Exception} Boolean
 testExtractElement = 'let
   xml = "<Root><Name>Alice</Name></Root>"
-  Aws.Xml.extractElement "Name" xml === "Alice"
+  aws.xml.extractElement "Name" xml === "Alice"
 
 testExtractElementWithEscaping : '{Exception} Boolean
 testExtractElementWithEscaping = 'let
   xml = "<Root><Data>Value &amp; More</Data></Root>"
-  Aws.Xml.extractElement "Data" xml === "Value & More"
+  aws.xml.extractElement "Data" xml === "Value & More"
 
 testExtractElementNotFound : '{Exception} Boolean
 testExtractElementNotFound = 'let
   xml = "<Root><Name>Alice</Name></Root>"
-  Aws.Xml.extractElement "Missing" xml === ""
+  aws.xml.extractElement "Missing" xml === ""
 
 testExtractElementOpt : '{Exception} Boolean
 testExtractElementOpt = 'let
   xml = "<Root><Name>Bob</Name></Root>"
-  (Aws.Xml.extractElementOpt "Name" xml === Some "Bob") && (Aws.Xml.extractElementOpt "Missing" xml === None)
+  (aws.xml.extractElementOpt "Name" xml === Some "Bob") && (aws.xml.extractElementOpt "Missing" xml === None)
 
 testExtractInt : '{Exception} Boolean
 testExtractInt = 'let
   xml = "<Root><Count>42</Count></Root>"
-  Aws.Xml.extractInt "Count" xml === Some +42
+  aws.xml.extractInt "Count" xml === Some +42
 
 testExtractIntInvalid : '{Exception} Boolean
 testExtractIntInvalid = 'let
   xml = "<Root><Count>not-a-number</Count></Root>"
-  Aws.Xml.extractInt "Count" xml === None
+  aws.xml.extractInt "Count" xml === None
 
 testExtractBool : '{Exception} Boolean
 testExtractBool = 'let
   xmlTrue = "<Root><Flag>true</Flag></Root>"
   xmlFalse = "<Root><Flag>false</Flag></Root>"
-  (Aws.Xml.extractBool "Flag" xmlTrue === Some true) && (Aws.Xml.extractBool "Flag" xmlFalse === Some false)
+  (aws.xml.extractBool "Flag" xmlTrue === Some true) && (aws.xml.extractBool "Flag" xmlFalse === Some false)
 
 testExtractBoolInvalid : '{Exception} Boolean
 testExtractBoolInvalid = 'let
   xml = "<Root><Flag>yes</Flag></Root>"
-  Aws.Xml.extractBool "Flag" xml === None
+  aws.xml.extractBool "Flag" xml === None
 
 -- === Attribute Extraction Tests ===
 
 testExtractAttribute : '{Exception} Boolean
 testExtractAttribute = 'let
   xml = "<Tag id=\"123\" name=\"test\">content</Tag>"
-  Aws.Xml.extractAttribute "id" xml === "123"
+  aws.xml.extractAttribute "id" xml === "123"
 
 testExtractAttributeWithEscaping : '{Exception} Boolean
 testExtractAttributeWithEscaping = 'let
   xml = "<Tag value=\"test &amp; more\">content</Tag>"
-  Aws.Xml.extractAttribute "value" xml === "test & more"
+  aws.xml.extractAttribute "value" xml === "test & more"
 
 testExtractAttributeNotFound : '{Exception} Boolean
 testExtractAttributeNotFound = 'let
   xml = "<Tag id=\"123\">content</Tag>"
-  Aws.Xml.extractAttribute "missing" xml === ""
+  aws.xml.extractAttribute "missing" xml === ""
 
 testExtractAttributeOpt : '{Exception} Boolean
 testExtractAttributeOpt = 'let
   xml = "<Tag id=\"123\">content</Tag>"
-  (Aws.Xml.extractAttributeOpt "id" xml === Some "123") && (Aws.Xml.extractAttributeOpt "missing" xml === None)
+  (aws.xml.extractAttributeOpt "id" xml === Some "123") && (aws.xml.extractAttributeOpt "missing" xml === None)
 
 -- === ExtractAll Tests ===
 
 testExtractAll : '{Exception} Boolean
 testExtractAll = 'let
   xml = "<Root><Item>a</Item><Item>b</Item><Item>c</Item></Root>"
-  result = Aws.Xml.extractAll "Item" xml
+  result = aws.xml.extractAll "Item" xml
   result === ["a", "b", "c"]
 
 testExtractAllEmpty : '{Exception} Boolean
 testExtractAllEmpty = 'let
   xml = "<Root></Root>"
-  result = Aws.Xml.extractAll "Item" xml
+  result = aws.xml.extractAll "Item" xml
   List.isEmpty result
 
 -- === Block Extraction Tests ===
@@ -198,51 +198,51 @@ testExtractAllEmpty = 'let
 testExtractBlock : '{Exception} Boolean
 testExtractBlock = 'let
   xml = "<Root><Container><Child>nested</Child></Container></Root>"
-  result = Aws.Xml.extractBlock "Container" xml
+  result = aws.xml.extractBlock "Container" xml
   result === "<Container><Child>nested</Child></Container>"
 
 testExtractBlockNotFound : '{Exception} Boolean
 testExtractBlockNotFound = 'let
   xml = "<Root></Root>"
-  Aws.Xml.extractBlock "Missing" xml === ""
+  aws.xml.extractBlock "Missing" xml === ""
 
 testExtractAllBlocks : '{Exception} Boolean
 testExtractAllBlocks = 'let
   xml = "<Root><Item><Value>1</Value></Item><Item><Value>2</Value></Item></Root>"
-  result = Aws.Xml.extractAllBlocks "Item" xml
+  result = aws.xml.extractAllBlocks "Item" xml
   List.size result === 2
 
 -- === CDATA Tests ===
 
 testCdata : '{Exception} Boolean
 testCdata = 'let
-  result = Aws.Xml.cdata "raw <content> & stuff"
+  result = aws.xml.cdata "raw <content> & stuff"
   result === "<![CDATA[raw <content> & stuff]]>"
 
 testExtractCdata : '{Exception} Boolean
 testExtractCdata = 'let
   xml = "<Root><![CDATA[raw <content>]]></Root>"
-  Aws.Xml.extractCdata xml === "raw <content>"
+  aws.xml.extractCdata xml === "raw <content>"
 
 -- === Document Building Tests ===
 
 testDeclaration : '{Exception} Boolean
 testDeclaration = 'let
-  Aws.Xml.declaration === "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+  aws.xml.declaration === "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
 
 testDocument : '{Exception} Boolean
 testDocument = 'let
-  result = Aws.Xml.document "<Root>test</Root>"
+  result = aws.xml.document "<Root>test</Root>"
   Text.startsWith "<?xml" result && Text.contains "<Root>test</Root>" result
 
 testAwsElement : '{Exception} Boolean
 testAwsElement = 'let
-  result = Aws.Xml.awsElement "Bucket" "http://s3.amazonaws.com/doc/2006-03-01/" "content"
+  result = aws.xml.awsElement "Bucket" "http://s3.amazonaws.com/doc/2006-03-01/" "content"
   Text.contains "xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"" result && Text.contains ">content<" result
 
 testS3Element : '{Exception} Boolean
 testS3Element = 'let
-  result = Aws.Xml.s3Element "Bucket" "test-bucket"
+  result = aws.xml.s3Element "Bucket" "test-bucket"
   Text.contains "xmlns" result && Text.contains "test-bucket" result
 
 -- === Error Parsing Tests ===
@@ -250,27 +250,27 @@ testS3Element = 'let
 testParseError : '{Exception} Boolean
 testParseError = 'let
   xml = "<Error><Code>NoSuchKey</Code><Message>Not found</Message><RequestId>req123</RequestId><HostId>host456</HostId></Error>"
-  err = Aws.Xml.parseError xml
-  (Aws.Xml.ErrorResponse.code err === "NoSuchKey") && (Aws.Xml.ErrorResponse.message err === "Not found") && (Aws.Xml.ErrorResponse.requestId err === "req123") && (Aws.Xml.ErrorResponse.hostId err === "host456")
+  err = aws.xml.parseError xml
+  (aws.xml.ErrorResponse.code err === "NoSuchKey") && (aws.xml.ErrorResponse.message err === "Not found") && (aws.xml.ErrorResponse.requestId err === "req123") && (aws.xml.ErrorResponse.hostId err === "host456")
 
 testIsError : '{Exception} Boolean
 testIsError = 'let
   errorXml = "<Error><Code>TestError</Code></Error>"
   successXml = "<Response><Status>OK</Status></Response>"
-  Aws.Xml.isError errorXml && not (Aws.Xml.isError successXml)
+  aws.xml.isError errorXml && not (aws.xml.isError successXml)
 
 -- === Map Tests ===
 
 testMapElements : '{Exception} Boolean
 testMapElements = 'let
   entries = [("key1", "val1"), ("key2", "val2")]
-  result = Aws.Xml.mapElements "Entry" "Key" "Value" entries
+  result = aws.xml.mapElements "Entry" "Key" "Value" entries
   Text.contains "<Entry><Key>key1</Key><Value>val1</Value></Entry>" result && Text.contains "<Entry><Key>key2</Key><Value>val2</Value></Entry>" result
 
 testExtractMap : '{Exception} Boolean
 testExtractMap = 'let
   xml = "<Root><Entry><Key>k1</Key><Value>v1</Value></Entry><Entry><Key>k2</Key><Value>v2</Value></Entry></Root>"
-  result = Aws.Xml.extractMap "Entry" "Key" "Value" xml
+  result = aws.xml.extractMap "Entry" "Key" "Value" xml
   List.size result === 2
 
 -- === Utility Tests ===
@@ -278,22 +278,22 @@ testExtractMap = 'let
 testHasElement : '{Exception} Boolean
 testHasElement = 'let
   xml = "<Root><Name>test</Name></Root>"
-  Aws.Xml.hasElement "Name" xml && not (Aws.Xml.hasElement "Missing" xml)
+  aws.xml.hasElement "Name" xml && not (aws.xml.hasElement "Missing" xml)
 
 testRootElement : '{Exception} Boolean
 testRootElement = 'let
   xml = "<?xml version=\"1.0\"?><MyRoot><Child/></MyRoot>"
-  Aws.Xml.rootElement xml === "MyRoot"
+  aws.xml.rootElement xml === "MyRoot"
 
 testRootElementNoDeclaration : '{Exception} Boolean
 testRootElementNoDeclaration = 'let
   xml = "<SimpleRoot><Child/></SimpleRoot>"
-  Aws.Xml.rootElement xml === "SimpleRoot"
+  aws.xml.rootElement xml === "SimpleRoot"
 
 testStripDeclaration : '{Exception} Boolean
 testStripDeclaration = 'let
   xml = "<?xml version=\"1.0\"?><Root>test</Root>"
-  result = Aws.Xml.stripDeclaration xml
+  result = aws.xml.stripDeclaration xml
   result === "<Root>test</Root>"
 
 -- === Text-based List Parsing Tests ===
@@ -301,22 +301,22 @@ testStripDeclaration = 'let
 testParseListFromXml : '{Exception} Boolean
 testParseListFromXml = 'let
   xml = "<Root><Item>a</Item><Item>b</Item></Root>"
-  parser = text -> Aws.Xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
-  result = Aws.Xml.parseListFromXml "Item" parser xml
+  parser = text -> aws.xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
+  result = aws.xml.parseListFromXml "Item" parser xml
   List.size result === 2
 
 testParseWrappedListFromXml : '{Exception} Boolean
 testParseWrappedListFromXml = 'let
   xml = "<Root><Container><Item>x</Item><Item>y</Item></Container></Root>"
-  parser = text -> Aws.Xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
-  result = Aws.Xml.parseWrappedListFromXml "Container" "Item" parser xml
+  parser = text -> aws.xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
+  result = aws.xml.parseWrappedListFromXml "Container" "Item" parser xml
   List.size result === 2
 
 testParseNestedFromXml : '{Exception} Boolean
 testParseNestedFromXml = 'let
   xml = "<Root><Nested><Value>test</Value></Nested></Root>"
-  parser = text -> Aws.Xml.extractElement "Value" text
-  result = Aws.Xml.parseNestedFromXml "Nested" parser xml
+  parser = text -> aws.xml.extractElement "Value" text
+  result = aws.xml.parseNestedFromXml "Nested" parser xml
   result === Some "test"
 
 -- === Test Runner ===

@@ -1,8 +1,8 @@
 -- Unit tests for AWS JSON Runtime Module
 
-namespace Aws.Json.Test
+namespace aws.json.Test
 
-use Aws.Json
+use aws.json
 use Bytes
 use Text ++
 
