@@ -20,7 +20,7 @@ General SDK features not specific to AWS traits.
 | Input Validation | ❌ | `@required` trait validation |
 | Pagination Helpers | ✅ | Auto-generated pagination functions for `@paginated` operations |
 | Retry with Exponential Backoff | ✅ | Configurable retry with jitter in aws_http.u |
-| Error Handling | ✅ | Error parsing implemented for REST-XML |
+| Error Handling | ✅ | Error parsing implemented for REST-XML and AWS JSON protocols |
 | HTTP Prefix Headers | ❌ | `@httpPrefixHeaders` trait not implemented |
 | Idempotency Token | ❌ | `@idempotencyToken` trait not implemented |
 | Host Label | ❌ | `@hostLabel` trait not implemented |

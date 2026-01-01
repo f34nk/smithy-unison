@@ -53,8 +53,8 @@ AWS-specific protocol traits.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`aws.protocols#awsJson1_0`](https://smithy.io/2.0/aws/protocols/aws-json-1_0-protocol.html#aws-protocols-awsjson1_0-trait) | ❌ | AWS JSON 1.0 protocol (DynamoDB, Kinesis) |
-| [`aws.protocols#awsJson1_1`](https://smithy.io/2.0/aws/protocols/aws-json-1_1-protocol.html#aws-protocols-awsjson1_1-trait) | ❌ | AWS JSON 1.1 protocol (Lambda, ECS) |
+| [`aws.protocols#awsJson1_0`](https://smithy.io/2.0/aws/protocols/aws-json-1_0-protocol.html#aws-protocols-awsjson1_0-trait) | ✅ | AWS JSON 1.0 protocol (DynamoDB, Kinesis) - Implemented in AwsJsonProtocolGenerator |
+| [`aws.protocols#awsJson1_1`](https://smithy.io/2.0/aws/protocols/aws-json-1_1-protocol.html#aws-protocols-awsjson1_1-trait) | ✅ | AWS JSON 1.1 protocol (Lambda, ECS) - Implemented in AwsJsonProtocolGenerator |
 | [`aws.protocols#awsQuery`](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html#aws-protocols-awsquery-trait) | ❌ | AWS Query protocol (SQS, SNS, RDS) |
 | [`aws.protocols#ec2Query`](https://smithy.io/2.0/aws/protocols/aws-ec2-query-protocol.html#aws-protocols-ec2query-trait) | ❌ | EC2 Query protocol |
 | [`aws.protocols#restJson1`](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#aws-protocols-restjson1-trait) | ❌ | REST-JSON protocol (API Gateway, Step Functions) |
@@ -70,7 +70,7 @@ AWS-specific authentication traits.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`aws.auth#sigv4`](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-sigv4-trait) | ❌ | Enables AWS SigV4 request signing |
+| [`aws.auth#sigv4`](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-sigv4-trait) | ✅ | Enables AWS SigV4 request signing - Implemented in aws_sigv4.u |
 | [`aws.auth#cognitoUserPools`](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-cognitouserpools-trait) | ❌ | Cognito User Pools authentication |
 | [`aws.auth#sigv4a`](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-sigv4a-trait) | ❌ | Multi-region SigV4a signing |
 | [`aws.auth#unsignedPayload`](https://smithy.io/2.0/aws/aws-auth.html#aws-auth-unsignedpayload-trait) | ❌ | Skips payload signing |
@@ -182,4 +182,4 @@ When implementing trait support, prioritize in this order:
 
 *Generated from [Smithy 2.0 Trait Index](https://smithy.io/2.0/trait-index.html)*
 
-**FIRST DRAFT - No traits are currently implemented.**
+**Work in progress - See individual trait status above.**

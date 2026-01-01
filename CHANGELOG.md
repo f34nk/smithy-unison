@@ -4,6 +4,24 @@
 
 ### Added
 
+#### AWS JSON Protocol Full Implementation
+- Complete AWS JSON 1.0/1.1 protocol support with request serialization, response deserialization, and error parsing
+- Generate JSON serializers and deserializers for nested structures
+- Service error union types with `toFailure` conversion for exception handling
+- Proper handling of required vs optional fields using `@required` and `@default` traits
+- `Optional.flatMap` chain pattern for deserializing structures with required fields
+
+#### DynamoDB Demo
+- Integration test against LocalStack with ListTables, PutItem, GetItem, and DeleteItem operations
+- Terraform configuration for LocalStack table provisioning
+- Compiled demo using generated DynamoDB client
+
+### Fixed
+
+#### AWS JSON Request Signing
+- Use `addSigningHeaders` instead of `signRequest` to preserve Content-Type and X-Amz-Target headers
+- Include original headers in signed requests (previously only signing headers were sent)
+
 #### Smithy Document Type Support
 - Map Smithy `document` shapes to `Aws.Json.JsonValue` runtime type
 - Pass-through serialization for document types in JSON protocols
