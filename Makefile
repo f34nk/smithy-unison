@@ -74,7 +74,7 @@ demo: clean build
 	#
 	# Run the examples/aws-demo against a mocked S3 bucket
 	#
-	cd examples/aws-demo && \
+	cd examples/s3-demo && \
 	make clean && \
 	make test
 
@@ -84,6 +84,6 @@ integration-test:
 	# Install the AWS SDK from Unison Share and 
 	# run the examples/aws-demo against a mocked S3 bucket
 	#
-	cd examples/aws-demo && \
+	cd examples/s3-demo && \
 	make clean && \
 	make integration-test
