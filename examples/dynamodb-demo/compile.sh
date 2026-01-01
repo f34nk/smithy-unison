@@ -46,7 +46,7 @@ OUTPUT_FILE="$SCRIPT_DIR/compiled/main"
 
 # Create UCM transcript
 cat > /tmp/compile.md << TRANSCRIPT
-# Compile Unison S3 Demo
+# Compile Unison DynamoDB Demo
 
 Initialize with builtins and base library:
 

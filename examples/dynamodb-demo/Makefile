@@ -1,4 +1,4 @@
-# AWS S3 Demo Makefile
+# AWS DynamoDB Demo Makefile
 # UCM is installed locally via install.sh
 
 UCM_VERSION ?= 1.0.0

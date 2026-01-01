@@ -13,7 +13,7 @@ export AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT=http://localhost:4566
 
 
-echo "=== Starting Unison S3 Demo ==="
+echo "=== Starting Unison DynamoDB Demo ==="
 echo ""
 
 # Show UCM version
@@ -40,7 +40,7 @@ done
 echo "LocalStack is ready!"
 echo ""
 
-echo "=== Running S3 Demo ==="
+echo "=== Running DynamoDB Demo ==="
 echo ""
 
 $UCM_BIN run.compiled compiled/main.uc
