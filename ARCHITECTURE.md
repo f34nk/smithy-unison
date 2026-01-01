@@ -244,7 +244,7 @@ public interface ProtocolGenerator {
 | Protocol | Generator Class | Status | Services |
 |----------|----------------|--------|----------|
 | REST-XML | `RestXmlProtocolGenerator` | ✅ | S3, CloudFront, Route 53 |
-| AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | Planned | DynamoDB, Lambda, Kinesis |
+| AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | ✅ | DynamoDB, Lambda, Kinesis |
 | AWS Query | `AwsQueryProtocolGenerator` | Planned | SQS, SNS, RDS |
 | EC2 Query | `Ec2QueryProtocolGenerator` | Planned | EC2, Auto Scaling |
 | REST-JSON | `RestJsonProtocolGenerator` | Planned | API Gateway, Step Functions |

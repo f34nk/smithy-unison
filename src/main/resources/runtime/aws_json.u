@@ -1,0 +1,499 @@
+-- AWS JSON Runtime Module
+-- Provides JSON serialization/deserialization for AWS services
+-- Focused on DynamoDB and AWS JSON protocol support
+
+namespace Aws.Json
+
+use Bytes
+use Nat >= <
+
+-- Helper functions for character comparisons
+isWhitespaceChar : Optional Char -> Boolean
+isWhitespaceChar c =
+  match c with
+    Some ?\s -> true
+    Some ?\n -> true
+    Some ?\r -> true
+    Some ?\t -> true
+    _ -> false
+
+isNumberChar : Optional Char -> Boolean
+isNumberChar c =
+  match c with
+    Some ?0 -> true
+    Some ?1 -> true
+    Some ?2 -> true
+    Some ?3 -> true
+    Some ?4 -> true
+    Some ?5 -> true
+    Some ?6 -> true
+    Some ?7 -> true
+    Some ?8 -> true
+    Some ?9 -> true
+    Some ?- -> true
+    Some ?+ -> true
+    Some ?. -> true
+    Some ?e -> true
+    Some ?E -> true
+    _ -> false
+
+-- JSON Value Type Definition
+type JsonValue
+  = JsonString Text
+  | JsonNumber Float
+  | JsonBoolean Boolean
+  | JsonNull
+  | JsonObject [(Text, JsonValue)]
+  | JsonArray [JsonValue]
+
+-- === Serialization ===
+
+{{
+  Serialize a JsonValue to compact JSON text.
+  
+  Examples:
+  - `toJson (JsonString "hello")` → `"hello"`
+  - `toJson (JsonNumber 42.0)` → `42.0`
+  - `toJson (JsonObject [("key", JsonString "value")])` → `{"key":"value"}`
+}}
+toJson : JsonValue -> Text
+toJson value =
+  use Text ++
+  match value with
+    JsonString s -> escapeJsonString s
+    JsonNumber n -> Float.toText n
+    JsonBoolean b -> if b then "true" else "false"
+    JsonNull -> "null"
+    JsonObject fields -> 
+      "{" ++ (List.map (cases (k, v) -> escapeJsonString k ++ ":" ++ toJson v) fields |> Text.join ",") ++ "}"
+    JsonArray items ->
+      "[" ++ (List.map toJson items |> Text.join ",") ++ "]"
+
+{{
+  Serialize a JsonValue to pretty-printed JSON text with indentation.
+  Useful for debugging and human-readable output.
+}}
+toJsonPretty : JsonValue -> Text
+toJsonPretty value = toJsonPrettyIndent 0 value
+
+toJsonPrettyIndent : Nat -> JsonValue -> Text
+toJsonPrettyIndent indent value =
+  use Text ++
+  spaces = Text.repeat indent "  "
+  nextIndent = indent + 1
+  nextSpaces = Text.repeat nextIndent "  "
+  match value with
+    JsonString s -> escapeJsonString s
+    JsonNumber n -> Float.toText n
+    JsonBoolean b -> if b then "true" else "false"
+    JsonNull -> "null"
+    JsonObject fields ->
+      if List.isEmpty fields then "{}"
+      else
+        items = List.map (cases (k, v) -> nextSpaces ++ escapeJsonString k ++ ": " ++ toJsonPrettyIndent nextIndent v) fields
+        "{\n" ++ Text.join ",\n" items ++ "\n" ++ spaces ++ "}"
+    JsonArray items ->
+      if List.isEmpty items then "[]"
+      else
+        values = List.map (v -> nextSpaces ++ toJsonPrettyIndent nextIndent v) items
+        "[\n" ++ Text.join ",\n" values ++ "\n" ++ spaces ++ "]"
+
+escapeJsonString : Text -> Text
+escapeJsonString s =
+  use Text ++
+  escaped = s |> Text.replaceAll "\\" "\\\\" |> Text.replaceAll "\"" "\\\"" |> Text.replaceAll "\n" "\\n" |> Text.replaceAll "\r" "\\r" |> Text.replaceAll "\t" "\\t"
+  "\"" ++ escaped ++ "\""
+
+-- === Deserialization ===
+
+{{
+  Parse JSON text into a JsonValue.
+  Returns None if the input is not valid JSON.
+  
+  Example:
+  - `fromJson "{\"key\":\"value\"}"` → `Some (JsonObject [("key", JsonString "value")])`
+}}
+fromJson : Text -> Optional JsonValue
+fromJson text =
+  parseResult = parseJsonValue (Text.trim text) 0
+  match parseResult with
+    Some (value, _) -> Some value
+    None -> None
+
+{{
+  Parse JSON text into a JsonValue, raising an exception on failure.
+  Use this when you expect valid JSON and want errors to propagate.
+}}
+parseJson : Text -> '{Exception} JsonValue
+parseJson text = do
+  match fromJson text with
+    Some value -> value
+    None -> Exception.raise (Failure (typeLink Exception) "Invalid JSON" (Any ()))
+
+-- Minimal JSON parser implementation
+-- Returns (parsed value, remaining text position)
+parseJsonValue : Text -> Nat -> Optional (JsonValue, Nat)
+parseJsonValue text pos =
+  pos' = skipWhitespace text pos
+  if pos' >= Text.size text then None
+  else
+    c = List.at pos' (Text.toCharList text)
+    match c with
+      Some ?\" -> parseString text pos'
+      Some ?{ -> parseObject text pos'
+      Some ?[ -> parseArray text pos'
+      Some ?t -> if Text.startsWith "true" (Text.drop pos' text) then Some (JsonBoolean true, pos' + 4) else None
+      Some ?f -> if Text.startsWith "false" (Text.drop pos' text) then Some (JsonBoolean false, pos' + 5) else None
+      Some ?n -> if Text.startsWith "null" (Text.drop pos' text) then Some (JsonNull, pos' + 4) else None
+      _ -> parseNumber text pos'
+
+skipWhitespace : Text -> Nat -> Nat
+skipWhitespace text pos =
+  if pos >= Text.size text then pos
+  else
+    c = List.at pos (Text.toCharList text)
+    if isWhitespaceChar c then
+      skipWhitespace text (pos + 1)
+    else pos
+
+parseString : Text -> Nat -> Optional (JsonValue, Nat)
+parseString text pos =
+  match List.at pos (Text.toCharList text) with
+    Some ?\" -> parseStringContent text (pos + 1) ""
+    _ -> None
+
+parseStringContent : Text -> Nat -> Text -> Optional (JsonValue, Nat)
+parseStringContent text pos acc =
+  if pos >= Text.size text then None
+  else
+    c = List.at pos (Text.toCharList text)
+    match c with
+      Some ?\" -> Some (JsonString acc, pos + 1)
+      Some ?\\ ->
+        if pos + 1 >= Text.size text then None
+        else
+          next = List.at (pos + 1) (Text.toCharList text)
+          escaped = match next with
+            Some ?\" -> "\""
+            Some ?\\ -> "\\"
+            Some ?n -> "\n"
+            Some ?r -> "\r"
+            Some ?t -> "\t"
+            Some ch -> fromCharList [ch]
+            _ -> ""
+          parseStringContent text (pos + 2) (acc Text.++ escaped)
+      Some ch -> parseStringContent text (pos + 1) (acc Text.++ fromCharList [ch])
+      _ -> None
+
+parseNumber : Text -> Nat -> Optional (JsonValue, Nat)
+parseNumber text pos =
+  end = findNumberEnd text pos
+  numText = Text.take (end - pos) (Text.drop pos text)
+  match Float.fromText numText with
+    Some n -> Some (JsonNumber n, end)
+    None -> None
+
+findNumberEnd : Text -> Nat -> Nat
+findNumberEnd text pos =
+  if pos >= Text.size text then pos
+  else
+    c = List.at pos (Text.toCharList text)
+    if isNumberChar c then
+      findNumberEnd text (pos + 1)
+    else pos
+
+parseObject : Text -> Nat -> Optional (JsonValue, Nat)
+parseObject text pos =
+  match List.at pos (Text.toCharList text) with
+    Some ?{ ->
+      pos' = skipWhitespace text (pos + 1)
+      match (if pos' < Text.size text then List.at pos' (Text.toCharList text) else None) with
+        Some ?} -> Some (JsonObject [], pos' + 1)
+        _ -> parseObjectFields text pos' []
+    _ -> None
+
+parseObjectFields : Text -> Nat -> [(Text, JsonValue)] -> Optional (JsonValue, Nat)
+parseObjectFields text pos acc =
+  pos' = skipWhitespace text pos
+  match parseString text pos' with
+    None -> None
+    Some (JsonString key, pos'') ->
+      pos''' = skipWhitespace text pos''
+      match (if pos''' < Text.size text then List.at pos''' (Text.toCharList text) else None) with
+        Some ?: ->
+          match parseJsonValue text (pos''' + 1) with
+            None -> None
+            Some (value, pos'''') ->
+              fields = acc List.++ [(key, value)]
+              pos''''' = skipWhitespace text pos''''
+              if pos''''' >= Text.size text then None
+              else
+                c = List.at pos''''' (Text.toCharList text)
+                match c with
+                  Some ?} -> Some (JsonObject fields, pos''''' + 1)
+                  Some ?, -> parseObjectFields text (pos''''' + 1) fields
+                  _ -> None
+        _ -> None
+    _ -> None
+
+parseArray : Text -> Nat -> Optional (JsonValue, Nat)
+parseArray text pos =
+  match List.at pos (Text.toCharList text) with
+    Some ?[ ->
+      pos' = skipWhitespace text (pos + 1)
+      match (if pos' < Text.size text then List.at pos' (Text.toCharList text) else None) with
+        Some ?] -> Some (JsonArray [], pos' + 1)
+        _ -> parseArrayItems text pos' []
+    _ -> None
+
+parseArrayItems : Text -> Nat -> [JsonValue] -> Optional (JsonValue, Nat)
+parseArrayItems text pos acc =
+  match parseJsonValue text pos with
+    None -> None
+    Some (value, pos') ->
+      items = acc List.++ [value]
+      pos'' = skipWhitespace text pos'
+      if pos'' >= Text.size text then None
+      else
+        c = List.at pos'' (Text.toCharList text)
+        match c with
+          Some ?] -> Some (JsonArray items, pos'' + 1)
+          Some ?, -> parseArrayItems text (pos'' + 1) items
+          _ -> None
+
+-- === Object Builders ===
+
+{{
+  Create a JSON object from a list of key-value pairs.
+}}
+jsonObject : [(Text, JsonValue)] -> JsonValue
+jsonObject fields = JsonObject fields
+
+{{
+  Create a JSON array from a list of values.
+}}
+jsonArray : [JsonValue] -> JsonValue
+jsonArray items = JsonArray items
+
+-- === Object Accessors ===
+
+{{
+  Get a field from a JSON object by key.
+  Returns None if the value is not an object or the field doesn't exist.
+}}
+getField : Text -> JsonValue -> Optional JsonValue
+getField key value =
+  match value with
+    JsonObject fields ->
+      List.find (cases (k, _) -> k === key) fields |> Optional.map (cases (_, v) -> v)
+    _ -> None
+
+{{
+  Get a field from a JSON object by key, returning JsonNull if not found.
+}}
+getFieldOrNull : Text -> JsonValue -> JsonValue
+getFieldOrNull key value =
+  Optional.getOrElse JsonNull (getField key value)
+
+{{
+  Get a field as a string value.
+}}
+getFieldAsString : Text -> JsonValue -> Optional Text
+getFieldAsString key value =
+  match getField key value with
+    Some (JsonString s) -> Some s
+    _ -> None
+
+{{
+  Get a field as a number value.
+}}
+getFieldAsNumber : Text -> JsonValue -> Optional Float
+getFieldAsNumber key value =
+  match getField key value with
+    Some (JsonNumber n) -> Some n
+    _ -> None
+
+{{
+  Get a field as a boolean value.
+}}
+getFieldAsBoolean : Text -> JsonValue -> Optional Boolean
+getFieldAsBoolean key value =
+  match getField key value with
+    Some (JsonBoolean b) -> Some b
+    _ -> None
+
+{{
+  Get a field as an object value.
+}}
+getFieldAsObject : Text -> JsonValue -> Optional JsonValue
+getFieldAsObject key value =
+  match getField key value with
+    Some obj@(JsonObject _) -> Some obj
+    _ -> None
+
+{{
+  Get a field as an object's field list.
+  Returns the list of key-value pairs from a JSON object field.
+}}
+getFieldAsObjectList : Text -> JsonValue -> Optional [(Text, JsonValue)]
+getFieldAsObjectList key value =
+  match getField key value with
+    Some (JsonObject fields) -> Some fields
+    _ -> None
+
+{{
+  Get a field as an array value.
+}}
+getFieldAsArray : Text -> JsonValue -> Optional [JsonValue]
+getFieldAsArray key value =
+  match getField key value with
+    Some (JsonArray items) -> Some items
+    _ -> None
+
+-- === JsonValue Converters ===
+-- These convert a JsonValue directly to a typed Optional value.
+-- Used for converting list elements and map values.
+
+{{
+  Convert JsonValue to Optional Text.
+}}
+jsonValueToString : JsonValue -> Optional Text
+jsonValueToString value =
+  match value with
+    JsonString s -> Some s
+    _ -> None
+
+{{
+  Convert JsonValue to Optional Boolean.
+}}
+jsonValueToBoolean : JsonValue -> Optional Boolean
+jsonValueToBoolean value =
+  match value with
+    JsonBoolean b -> Some b
+    _ -> None
+
+{{
+  Convert JsonValue to Optional Float.
+}}
+jsonValueToNumber : JsonValue -> Optional Float
+jsonValueToNumber value =
+  match value with
+    JsonNumber n -> Some n
+    _ -> None
+
+{{
+  Convert JsonValue to Optional Int (truncated from Float).
+}}
+jsonValueToInt : JsonValue -> Optional Int
+jsonValueToInt value =
+  match value with
+    JsonNumber n -> Some (Float.truncate n)
+    _ -> None
+
+{{
+  Convert JsonValue to Optional list of JsonValue (array).
+}}
+jsonValueToArray : JsonValue -> Optional [JsonValue]
+jsonValueToArray value =
+  match value with
+    JsonArray items -> Some items
+    _ -> None
+
+{{
+  Convert JsonValue to Optional list of (Text, JsonValue) pairs (object fields).
+}}
+jsonValueToObjectList : JsonValue -> Optional [(Text, JsonValue)]
+jsonValueToObjectList value =
+  match value with
+    JsonObject fields -> Some fields
+    _ -> None
+
+-- === DynamoDB AttributeValue Support ===
+
+{{
+  DynamoDB AttributeValue type.
+  
+  DynamoDB uses a tagged union format for attribute values:
+  - `{"S": "text"}` for strings
+  - `{"N": "123"}` for numbers (stored as strings to preserve precision)
+  - `{"B": "base64data"}` for binary data
+  - `{"SS": ["str1", "str2"]}` for string sets
+  - `{"NS": ["1", "2"]}` for number sets
+  - `{"BS": ["data1", "data2"]}` for binary sets
+  - `{"M": {"key": {...}}}` for maps
+  - `{"L": [{...}, {...}]}` for lists
+  - `{"NULL": true}` for null
+  - `{"BOOL": true}` for boolean
+}}
+type AttributeValue
+  = AttributeValue'S Text
+  | AttributeValue'N Text
+  | AttributeValue'B Bytes
+  | AttributeValue'SS [Text]
+  | AttributeValue'NS [Text]
+  | AttributeValue'BS [Bytes]
+  | AttributeValue'M [(Text, AttributeValue)]
+  | AttributeValue'L [AttributeValue]
+  | AttributeValue'NULL Boolean
+  | AttributeValue'BOOL Boolean
+
+{{
+  Convert an AttributeValue to JSON format for DynamoDB requests.
+}}
+attributeValueToJson : AttributeValue -> JsonValue
+attributeValueToJson attr =
+  match attr with
+    AttributeValue'S s -> JsonObject [("S", JsonString s)]
+    AttributeValue'N n -> JsonObject [("N", JsonString n)]
+    AttributeValue'B b -> JsonObject [("B", JsonString (Text.fromUtf8 (Bytes.toBase64 b)))]
+    AttributeValue'SS ss -> JsonObject [("SS", JsonArray (List.map JsonString ss))]
+    AttributeValue'NS ns -> JsonObject [("NS", JsonArray (List.map JsonString ns))]
+    AttributeValue'BS bs -> JsonObject [("BS", JsonArray (List.map (b -> JsonString (Text.fromUtf8 (Bytes.toBase64 b))) bs))]
+    AttributeValue'M m -> 
+      fields = List.map (cases (k, v) -> (k, attributeValueToJson v)) m
+      JsonObject [("M", JsonObject fields)]
+    AttributeValue'L l ->
+      items = List.map attributeValueToJson l
+      JsonObject [("L", JsonArray items)]
+    AttributeValue'NULL _ -> JsonObject [("NULL", JsonBoolean true)]
+    AttributeValue'BOOL b -> JsonObject [("BOOL", JsonBoolean b)]
+
+{{
+  Parse a JSON object into an AttributeValue.
+  Returns None if the JSON doesn't match DynamoDB's AttributeValue format.
+}}
+jsonToAttributeValue : JsonValue -> Optional AttributeValue
+jsonToAttributeValue value =
+  match value with
+    JsonObject fields | List.size fields === 1 ->
+      match List.head fields with
+        Some ("S", JsonString s) -> Some (AttributeValue'S s)
+        Some ("N", JsonString n) -> Some (AttributeValue'N n)
+        Some ("B", JsonString b) ->
+          match builtin.Bytes.fromBase64 (toUtf8 b) with
+            Right bytes -> Some (AttributeValue'B bytes)
+            Left _ -> None
+        Some ("SS", JsonArray items) ->
+          Some (AttributeValue'SS (List.filterMap (cases
+            JsonString s -> Some s
+            _ -> None) items))
+        Some ("NS", JsonArray items) ->
+          Some (AttributeValue'NS (List.filterMap (cases
+            JsonString n -> Some n
+            _ -> None) items))
+        Some ("BS", JsonArray items) ->
+          Some (AttributeValue'BS (List.filterMap (cases
+            JsonString b -> match builtin.Bytes.fromBase64 (toUtf8 b) with
+              Right bytes -> Some bytes
+              Left _ -> None
+            _ -> None) items))
+        Some ("M", JsonObject mapFields) ->
+          Some (AttributeValue'M (List.filterMap (cases
+            (k, v) -> Optional.map (attr -> (k, attr)) (jsonToAttributeValue v)) mapFields))
+        Some ("L", JsonArray listItems) ->
+          Some (AttributeValue'L (List.filterMap jsonToAttributeValue listItems))
+        Some ("NULL", JsonBoolean true) -> Some (AttributeValue'NULL true)
+        Some ("BOOL", JsonBoolean b) -> Some (AttributeValue'BOOL b)
+        _ -> None
+    JsonObject _ -> None
+    _ -> None

@@ -80,7 +80,9 @@ public final class ProtocolGeneratorFactory {
      * @return true if the protocol has a full implementation
      */
     public static boolean isFullyImplemented(AwsProtocol protocol) {
-        return protocol == AwsProtocol.REST_XML;
+        return protocol == AwsProtocol.REST_XML 
+            || protocol == AwsProtocol.AWS_JSON_1_0 
+            || protocol == AwsProtocol.AWS_JSON_1_1;
     }
     
     private ProtocolGeneratorFactory() {

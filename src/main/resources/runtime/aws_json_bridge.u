@@ -1,0 +1,213 @@
+-- AWS JSON Bridge Module
+-- Bridge between Unison JSON types and HTTP request/response bodies
+-- Provides integration between aws_json.u and aws_http.u
+
+namespace Aws.Json.Bridge
+
+use Aws.Json
+use Bytes
+
+-- =============================================================================
+-- Request Serialization
+-- =============================================================================
+
+{{
+  Serialize a JsonValue to bytes for HTTP request body.
+  
+  Converts JSON to compact text and encodes as UTF-8 bytes.
+  
+  Example:
+  @typechecked ```
+  serializeJsonRequest (JsonObject [("name", JsonString "Alice")])
+  ```
+}}
+serializeJsonRequest : JsonValue -> Bytes
+serializeJsonRequest value =
+  text = toJson value
+  toUtf8 text
+
+{{
+  Serialize a JsonValue to text for HTTP request body.
+  
+  Returns compact JSON text without pretty-printing.
+  Use this when you need the text representation directly.
+  
+  Example:
+  @typechecked ```
+  jsonToRequestBody (JsonObject [("TableName", JsonString "users")])
+  ```
+}}
+jsonToRequestBody : JsonValue -> Text
+jsonToRequestBody value = toJson value
+
+-- =============================================================================
+-- Response Deserialization
+-- =============================================================================
+
+{{
+  Deserialize HTTP response body bytes to JsonValue.
+  
+  Decodes UTF-8 bytes to text and parses as JSON.
+  Raises an exception if the bytes are not valid UTF-8 or valid JSON.
+}}
+deserializeJsonResponse : Bytes -> '{Exception} JsonValue
+deserializeJsonResponse bytes = 'let
+  text = Text.fromUtf8 bytes
+  parseJson text ()
+
+{{
+  Parse HTTP response body text to JsonValue.
+  
+  Raises an exception if the text is not valid JSON.
+}}
+responseBodyToJson : Text -> '{Exception} JsonValue
+responseBodyToJson text = parseJson text
+
+-- =============================================================================
+-- AWS JSON Error Parsing
+-- =============================================================================
+
+structural type JsonError = { errorType : Text, errorMessage : Text }
+
+{{
+  Parse AWS JSON error response.
+  
+  AWS JSON services like DynamoDB return errors with __type and message fields.
+  The __type field can be in full format with namespace or short format.
+  
+  Returns a JsonError record with errorType and errorMessage fields.
+  Returns None if the text is not valid JSON or doesn't match the expected format.
+}}
+parseJsonError : Text -> Optional JsonError
+parseJsonError text =
+  match fromJson text with
+    Some json ->
+      errorType = extractErrorType json
+      errorMessage = extractErrorMessage json
+      match (errorType, errorMessage) with
+        (Some et, Some em) -> Some (JsonError.JsonError et em)
+        (Some et, None) -> Some (JsonError.JsonError et "")
+        (None, Some em) -> Some (JsonError.JsonError "UnknownError" em)
+        (None, None) -> None
+    None -> None
+
+{{
+  Extract the error type from an AWS JSON error response.
+  
+  Looks for the `__type` field and extracts the error name.
+  Handles both full format ("com.amazon.coral.validate#ValidationException")
+  and short format ("ValidationException").
+}}
+extractErrorType : JsonValue -> Optional Text
+extractErrorType json =
+  match getFieldAsString "__type" json with
+    Some fullType ->
+      -- Extract error name from full format: "namespace#ErrorName" -> "ErrorName"
+      if Text.contains "#" fullType then
+        parts = Text.split ?# fullType
+        match List.last parts with
+          Some errorName -> Some errorName
+          None -> Some fullType
+      else
+        Some fullType
+    None -> None
+
+{{
+  Extract the error message from an AWS JSON error response.
+  
+  Looks for the `message` or `Message` field (AWS services use both conventions).
+}}
+extractErrorMessage : JsonValue -> Optional Text
+extractErrorMessage json =
+  match getFieldAsString "message" json with
+    Some msg -> Some msg
+    None -> getFieldAsString "Message" json
+
+-- =============================================================================
+-- Convenience Functions
+-- =============================================================================
+
+{{
+  Parse a DynamoDB Item from JSON response.
+  
+  DynamoDB returns items as maps where each value is an AttributeValue with a type tag
+  (e.g., S for string, N for number). This function extracts the Item field and converts
+  each field value from JSON to AttributeValue.
+}}
+parseItemFromJson : JsonValue -> Optional [(Text, AttributeValue)]
+parseItemFromJson json =
+  match getFieldAsObject "Item" json with
+    Some (JsonObject fields) ->
+      toAttr = cases
+        (k, v) -> match jsonToAttributeValue v with
+          Some attr -> Some (k, attr)
+          None -> None
+      attrs = List.map toAttr fields
+      if List.all Optional.isSome attrs then
+        Some (List.map (a -> Optional.getOrElse ("", AttributeValue'NULL true) a) attrs)
+      else None
+    _ -> None
+
+{{
+  Serialize a DynamoDB Item to JSON for requests.
+  
+  Takes a map of field names to AttributeValues and converts to the JSON format
+  expected by DynamoDB operations.
+}}
+serializeItemToJson : [(Text, AttributeValue)] -> JsonValue
+serializeItemToJson item =
+  fields = List.map (cases (k, v) -> (k, attributeValueToJson v)) item
+  JsonObject fields
+
+{{
+  Parse a DynamoDB Key from JSON.
+  
+  Similar to parseItemFromJson but typically used for parsing the Key field
+  in requests/responses.
+}}
+parseKeyFromJson : JsonValue -> Optional [(Text, AttributeValue)]
+parseKeyFromJson json =
+  match getFieldAsObject "Key" json with
+    Some (JsonObject fields) ->
+      toAttr = cases
+        (k, v) -> match jsonToAttributeValue v with
+          Some attr -> Some (k, attr)
+          None -> None
+      attrs = List.map toAttr fields
+      if List.all Optional.isSome attrs then
+        Some (List.map (a -> Optional.getOrElse ("", AttributeValue'NULL true) a) attrs)
+      else None
+    _ -> None
+
+{{
+  Serialize a DynamoDB Key to JSON.
+}}
+serializeKeyToJson : [(Text, AttributeValue)] -> JsonValue
+serializeKeyToJson key = serializeItemToJson key
+
+{{
+  Parse a list of DynamoDB Items from JSON response.
+  
+  Used for operations that return multiple items (Query, Scan, BatchGetItem).
+  Extracts the Items field which contains an array of DynamoDB items.
+}}
+parseItemsFromJson : JsonValue -> Optional [[(Text, AttributeValue)]]
+parseItemsFromJson json =
+  toAttr = cases
+    (k, v) -> match jsonToAttributeValue v with
+      Some attr -> Some (k, attr)
+      None -> None
+  parseItem = cases
+    JsonObject fields ->
+      attrs = List.map toAttr fields
+      if List.all Optional.isSome attrs then
+        Some (List.map (a -> Optional.getOrElse ("", AttributeValue'NULL true) a) attrs)
+      else None
+    _ -> None
+  match getFieldAsArray "Items" json with
+    Some items ->
+      parsedItems = List.map parseItem items
+      if List.all Optional.isSome parsedItems then
+        Some (List.map (i -> Optional.getOrElse [] i) parsedItems)
+      else None
+    _ -> None

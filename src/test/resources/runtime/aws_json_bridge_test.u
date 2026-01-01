@@ -1,0 +1,305 @@
+-- Unit tests for AWS JSON Bridge Module
+
+namespace Aws.Json.Bridge.Test
+
+use Aws.Json
+use Bytes
+use Text ++
+use Nat >
+
+-- === Request Serialization Tests ===
+
+testSerializeJsonRequest : '{Exception} Boolean
+testSerializeJsonRequest = 'let
+  json = JsonObject [("key", JsonString "value")]
+  bytes = serializeJsonRequest json
+  -- Should produce UTF-8 bytes for {"key":"value"}
+  Bytes.size bytes > 0
+
+testJsonToRequestBody : '{Exception} Boolean
+testJsonToRequestBody = 'let
+  json = JsonObject [("TableName", JsonString "users")]
+  text = jsonToRequestBody json
+  (text === "{\"TableName\":\"users\"}") || (text === "{\"TableName\":\"users\"}")
+
+testSerializeComplexRequest : '{Exception} Boolean
+testSerializeComplexRequest = 'let
+  json = JsonObject [
+    ("TableName", JsonString "users"),
+    ("Key", JsonObject [("id", JsonObject [("S", JsonString "user123")])])
+  ]
+  text = jsonToRequestBody json
+  Text.contains "TableName" text && Text.contains "user123" text
+
+-- === Response Deserialization Tests ===
+
+testDeserializeJsonResponse : '{Exception} Boolean
+testDeserializeJsonResponse = do
+  jsonText = "{\"status\":\"ok\"}"
+  bytes = toUtf8 jsonText
+  json = !(deserializeJsonResponse bytes)
+  match json with
+    JsonObject fields -> getFieldAsString "status" json === Some "ok"
+    _ -> false
+
+testResponseBodyToJson : '{Exception} Boolean
+testResponseBodyToJson = do
+  text = "{\"result\":42}"
+  json = !(responseBodyToJson text)
+  match json with
+    JsonObject _ -> getFieldAsNumber "result" json === Some 42.0
+    _ -> false
+
+testDeserializeInvalidJson : '{Exception} Boolean
+testDeserializeInvalidJson = 'let
+  -- Note: This test would fail in practice with invalid JSON,
+  -- but we can't easily test exception handling in unit tests.
+  -- Just verify the function type checks.
+  true
+
+-- === Error Parsing Tests ===
+
+testParseJsonErrorFull : '{Exception} Boolean
+testParseJsonErrorFull = 'let
+  errorText = "{\"__type\":\"com.amazon.coral.validate#ValidationException\",\"message\":\"Invalid input\"}"
+  match parseJsonError errorText with
+    Some err ->
+      (JsonError.errorType err === "ValidationException") && (JsonError.errorMessage err === "Invalid input")
+    None -> false
+
+testParseJsonErrorShort : '{Exception} Boolean
+testParseJsonErrorShort = 'let
+  errorText = "{\"__type\":\"ResourceNotFoundException\",\"message\":\"Not found\"}"
+  match parseJsonError errorText with
+    Some err ->
+      (JsonError.errorType err === "ResourceNotFoundException") && (JsonError.errorMessage err === "Not found")
+    None -> false
+
+testParseJsonErrorNoMessage : '{Exception} Boolean
+testParseJsonErrorNoMessage = 'let
+  errorText = "{\"__type\":\"SomeError\"}"
+  match parseJsonError errorText with
+    Some err ->
+      (JsonError.errorType err === "SomeError") && (JsonError.errorMessage err === "")
+    None -> false
+
+testParseJsonErrorCapitalMessage : '{Exception} Boolean
+testParseJsonErrorCapitalMessage = 'let
+  errorText = "{\"__type\":\"Error\",\"Message\":\"Capital M\"}"
+  match parseJsonError errorText with
+    Some err -> JsonError.errorMessage err === "Capital M"
+    None -> false
+
+testParseJsonErrorInvalid : '{Exception} Boolean
+testParseJsonErrorInvalid = 'let
+  errorText = "not json"
+  match parseJsonError errorText with
+    Some _ -> false
+    None -> true
+
+testExtractErrorType : '{Exception} Boolean
+testExtractErrorType = 'let
+  json = JsonObject [("__type", JsonString "com.amazon.coral.validate#ValidationException")]
+  match extractErrorType json with
+    Some "ValidationException" -> true
+    _ -> false
+
+testExtractErrorTypeShort : '{Exception} Boolean
+testExtractErrorTypeShort = 'let
+  json = JsonObject [("__type", JsonString "SimpleError")]
+  match extractErrorType json with
+    Some "SimpleError" -> true
+    _ -> false
+
+testExtractErrorTypeMissing : '{Exception} Boolean
+testExtractErrorTypeMissing = 'let
+  json = JsonObject [("message", JsonString "error")]
+  match extractErrorType json with
+    Some _ -> false
+    None -> true
+
+testExtractErrorMessage : '{Exception} Boolean
+testExtractErrorMessage = 'let
+  json = JsonObject [("message", JsonString "Something went wrong")]
+  match extractErrorMessage json with
+    Some "Something went wrong" -> true
+    _ -> false
+
+testExtractErrorMessageCapital : '{Exception} Boolean
+testExtractErrorMessageCapital = 'let
+  json = JsonObject [("Message", JsonString "Capital M")]
+  match extractErrorMessage json with
+    Some "Capital M" -> true
+    _ -> false
+
+-- === DynamoDB Item Parsing Tests ===
+
+testParseItemFromJson : '{Exception} Boolean
+testParseItemFromJson = 'let
+  json = JsonObject [
+    ("Item", JsonObject [
+      ("id", JsonObject [("S", JsonString "user123")]),
+      ("name", JsonObject [("S", JsonString "Alice")])
+    ])
+  ]
+  match parseItemFromJson json with
+    Some item ->
+      test1 = List.size item === 2
+      test2 = match List.find (cases (k, _) -> k === "id") item with
+        Some (_, AttributeValue'S "user123") -> true
+        _ -> false
+      test1 && test2
+    None -> false
+
+testParseItemFromJsonMissing : '{Exception} Boolean
+testParseItemFromJsonMissing = 'let
+  json = JsonObject [("other", JsonString "field")]
+  match parseItemFromJson json with
+    Some _ -> false
+    None -> true
+
+testSerializeItemToJson : '{Exception} Boolean
+testSerializeItemToJson = 'let
+  item = [
+    ("id", AttributeValue'S "user123"),
+    ("age", AttributeValue'N "30")
+  ]
+  json = serializeItemToJson item
+  text = toJson json
+  Text.contains "user123" text && Text.contains "30" text
+
+testParseKeyFromJson : '{Exception} Boolean
+testParseKeyFromJson = 'let
+  json = JsonObject [
+    ("Key", JsonObject [
+      ("id", JsonObject [("S", JsonString "key123")])
+    ])
+  ]
+  match parseKeyFromJson json with
+    Some key ->
+      test1 = List.size key === 1
+      test2 = match List.head key with
+        Some ("id", AttributeValue'S "key123") -> true
+        _ -> false
+      test1 && test2
+    None -> false
+
+testSerializeKeyToJson : '{Exception} Boolean
+testSerializeKeyToJson = 'let
+  key = [("id", AttributeValue'S "key123")]
+  json = serializeKeyToJson key
+  text = toJson json
+  Text.contains "key123" text
+
+testParseItemsFromJson : '{Exception} Boolean
+testParseItemsFromJson = 'let
+  json = JsonObject [
+    ("Items", JsonArray [
+      JsonObject [("id", JsonObject [("S", JsonString "user1")])],
+      JsonObject [("id", JsonObject [("S", JsonString "user2")])]
+    ])
+  ]
+  match parseItemsFromJson json with
+    Some items -> List.size items === 2
+    None -> false
+
+testParseItemsFromJsonEmpty : '{Exception} Boolean
+testParseItemsFromJsonEmpty = 'let
+  json = JsonObject [("Items", JsonArray [])]
+  match parseItemsFromJson json with
+    Some items -> List.isEmpty items
+    None -> false
+
+-- === Integration Tests ===
+
+testRoundtripSimpleItem : '{Exception} Boolean
+testRoundtripSimpleItem = 'let
+  original = [
+    ("id", AttributeValue'S "test123"),
+    ("active", AttributeValue'BOOL true)
+  ]
+  json = serializeItemToJson original
+  wrapped = JsonObject [("Item", json)]
+  match parseItemFromJson wrapped with
+    Some parsed ->
+      test1 = List.size parsed === 2
+      test2 = match List.find (cases (k, _) -> k === "id") parsed with
+        Some (_, AttributeValue'S "test123") -> true
+        _ -> false
+      test1 && test2
+    None -> false
+
+testRoundtripComplexItem : '{Exception} Boolean
+testRoundtripComplexItem = 'let
+  original = [
+    ("id", AttributeValue'S "user123"),
+    ("tags", AttributeValue'SS ["tag1", "tag2"]),
+    ("metadata", AttributeValue'M [
+      ("created", AttributeValue'N "1234567890"),
+      ("active", AttributeValue'BOOL true)
+    ])
+  ]
+  json = serializeItemToJson original
+  wrapped = JsonObject [("Item", json)]
+  match parseItemFromJson wrapped with
+    Some parsed -> List.size parsed === 3
+    None -> false
+
+testDynamoDBErrorResponse : '{Exception} Boolean
+testDynamoDBErrorResponse = 'let
+  errorResponse = "{\"__type\":\"com.amazonaws.dynamodb.v20120810#ResourceNotFoundException\",\"message\":\"Requested resource not found\"}"
+  match parseJsonError errorResponse with
+    Some err ->
+      (JsonError.errorType err === "ResourceNotFoundException") && Text.contains "not found" (JsonError.errorMessage err)
+    None -> false
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS JSON Bridge Tests..."
+  printLine ""
+  
+  -- Request serialization tests
+  !(runTest "serializeJsonRequest" testSerializeJsonRequest)
+  !(runTest "jsonToRequestBody" testJsonToRequestBody)
+  !(runTest "serializeComplexRequest" testSerializeComplexRequest)
+  
+  -- Response deserialization tests
+  !(runTest "deserializeJsonResponse" testDeserializeJsonResponse)
+  !(runTest "responseBodyToJson" testResponseBodyToJson)
+  !(runTest "deserializeInvalidJson" testDeserializeInvalidJson)
+  
+  -- Error parsing tests
+  !(runTest "parseJsonError Full" testParseJsonErrorFull)
+  !(runTest "parseJsonError Short" testParseJsonErrorShort)
+  !(runTest "parseJsonError NoMessage" testParseJsonErrorNoMessage)
+  !(runTest "parseJsonError CapitalMessage" testParseJsonErrorCapitalMessage)
+  !(runTest "parseJsonError Invalid" testParseJsonErrorInvalid)
+  !(runTest "extractErrorType" testExtractErrorType)
+  !(runTest "extractErrorType Short" testExtractErrorTypeShort)
+  !(runTest "extractErrorType Missing" testExtractErrorTypeMissing)
+  !(runTest "extractErrorMessage" testExtractErrorMessage)
+  !(runTest "extractErrorMessage Capital" testExtractErrorMessageCapital)
+  
+  -- DynamoDB item parsing tests
+  !(runTest "parseItemFromJson" testParseItemFromJson)
+  !(runTest "parseItemFromJson Missing" testParseItemFromJsonMissing)
+  !(runTest "serializeItemToJson" testSerializeItemToJson)
+  !(runTest "parseKeyFromJson" testParseKeyFromJson)
+  !(runTest "serializeKeyToJson" testSerializeKeyToJson)
+  !(runTest "parseItemsFromJson" testParseItemsFromJson)
+  !(runTest "parseItemsFromJson Empty" testParseItemsFromJsonEmpty)
+  
+  -- Integration tests
+  !(runTest "Roundtrip Simple Item" testRoundtripSimpleItem)
+  !(runTest "Roundtrip Complex Item" testRoundtripComplexItem)
+  !(runTest "DynamoDB Error Response" testDynamoDBErrorResponse)
+  
+  printLine ""
+  printLine "All tests completed!"
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)

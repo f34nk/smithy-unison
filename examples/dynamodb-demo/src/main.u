@@ -1,0 +1,294 @@
+-- DynamoDB Demo Application
+-- Tests the generated DynamoDB client against LocalStack mock server
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests (not placeholders), install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
+
+-- Import AttributeValue constructors from Aws.Json namespace
+use Aws.Json AttributeValue
+use Aws.Json.AttributeValue'S
+use Aws.Json.AttributeValue'N
+use Aws.Json.AttributeValue'B
+use Aws.Json.AttributeValue'SS
+use Aws.Json.AttributeValue'NS
+use Aws.Json.AttributeValue'BS
+use Aws.Json.AttributeValue'M
+use Aws.Json.AttributeValue'L
+use Aws.Json.AttributeValue'NULL
+use Aws.Json.AttributeValue'BOOL
+
+-- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  value = getEnv name
+  if Text.isEmpty value then default else value
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create DynamoDB client configuration for LocalStack
+defaultConfig : '{IO, Exception} Aws.Dynamodb.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  Aws.Dynamodb.Config.Config endpoint region creds false
+
+-- Test table name - created by terraform provisioner
+testTable : Text
+testTable = "example"
+
+-- Test item key
+testItemKey : Text
+testItemKey = "test-item-123"
+
+-- Test item data
+testItemData : Text
+testItemData = "Hello from Unison DynamoDB Client!"
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
+main : '{IO, Exception} ()
+main = do
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║  DynamoDB Client Demo (LocalStack Backend)  ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ Config.endpoint config)
+  printLine ("Region: " ++ Config.region config)
+  printLine ("Table: " ++ testTable)
+  printLine ""
+  
+  -- Demo 1: List Tables
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: List Tables"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(listTablesDemo config)
+  
+  -- Demo 2: Put Item
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Put Item"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(putItemDemo config)
+  
+  -- Demo 3: Get Item
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: Get Item"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(getItemDemo config)
+  
+  -- Demo 4: Delete Item (cleanup)
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 4: Delete Item (cleanup)"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(deleteItemDemo config)
+  
+  -- Demo 5: Verify Deletion
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 5: Verify Deletion"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(verifyDeletionDemo config)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║         DynamoDB Demo Complete!              ║"
+  printLine "╚══════════════════════════════════════════════╝"
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+List all tables in the account.
+The terraform provisioner creates 'example' table.
+}}
+listTablesDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+listTablesDemo config = do
+  printLine "  → Creating ListTablesRequest..."
+  
+  -- Create request with optional fields
+  request = Aws.Dynamodb.ListTablesInput.ListTablesInput None (Some +100)
+  
+  -- Call the DynamoDB client
+  printLine "  → Calling listTables..."
+  result = !(Aws.Dynamodb.listTables config request)
+  
+  -- Extract and print tables
+  printLine "  ✓ SUCCESS: ListTables returned"
+  match Aws.Dynamodb.ListTablesOutput.tableNames result with
+    Some tables -> 
+      count = List.size tables
+      printLine ("  → Found " ++ Nat.toText count ++ " table(s):")
+      List.foreach (table -> printLine ("      • " ++ table)) tables
+    None -> 
+      printLine "  → No tables found (response was empty)"
+
+{{
+Put a test item into the example table.
+Uses the hash key "TestTableHashKey" as defined in terraform.
+}}
+putItemDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+putItemDemo config = do
+  printLine "  → Creating PutItemRequest..."
+  printLine ("    Table: " ++ testTable)
+  printLine ("    Key: " ++ testItemKey)
+  printLine ("    Data: \"" ++ testItemData ++ "\"")
+  
+  -- Build item attributes using DynamoDB AttributeValue types
+  -- The table has hash key "TestTableHashKey" (String type)
+  hashKeyAttr = AttributeValue'S testItemKey
+  dataAttr = AttributeValue'S testItemData
+  
+  -- Create the item map
+  item = Map.fromList [
+    ("TestTableHashKey", hashKeyAttr),
+    ("Data", dataAttr)
+  ]
+  
+  -- PutItemInput: conditionalOperator, conditionExpression, expected, expressionAttributeNames, 
+  --               expressionAttributeValues, item, returnConsumedCapacity, returnItemCollectionMetrics,
+  --               returnValues, returnValuesOnConditionCheckFailure, tableName
+  request = PutItemInput.PutItemInput None None None None None item None None None None testTable
+  
+  -- Call the DynamoDB client
+  printLine "  → Calling putItem..."
+  result = !(Aws.Dynamodb.putItem config request)
+  
+  printLine "  ✓ SUCCESS: PutItem completed"
+
+{{
+Get the test item we just uploaded.
+}}
+getItemDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+getItemDemo config = do
+  printLine "  → Creating GetItemRequest..."
+  printLine ("    Table: " ++ testTable)
+  printLine ("    Key: " ++ testItemKey)
+  
+  -- Build the key to retrieve
+  hashKeyAttr = AttributeValue'S testItemKey
+  key = Map.fromList [("TestTableHashKey", hashKeyAttr)]
+  
+  -- GetItemInput: attributesToGet, consistentRead, expressionAttributeNames, key,
+  --               projectionExpression, returnConsumedCapacity, tableName
+  request = GetItemInput.GetItemInput None (Some true) None key None None testTable
+  
+  -- Call the DynamoDB client
+  printLine "  → Calling getItem..."
+  result = !(Aws.Dynamodb.getItem config request)
+  
+  printLine "  ✓ SUCCESS: GetItem returned"
+  
+  -- Extract and print item
+  match Aws.Dynamodb.GetItemOutput.item result with
+    Some itemMap ->
+      printLine "  → Retrieved item:"
+      printLine ("      TestTableHashKey: " ++ extractStringAttribute "TestTableHashKey" itemMap)
+      printLine ("      Data: " ++ extractStringAttribute "Data" itemMap)
+      
+      -- Verify content matches what we uploaded
+      dataValue = extractStringAttribute "Data" itemMap
+      if Text.eq dataValue testItemData then
+        printLine "    ✓ Content matches uploaded data!"
+      else
+        printLine ("    ✗ Content does NOT match! Expected: \"" ++ testItemData ++ "\"")
+    None -> 
+      printLine "  → Item not found"
+
+{{
+Delete the test item (cleanup).
+}}
+deleteItemDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+deleteItemDemo config = do
+  printLine "  → Creating DeleteItemRequest..."
+  printLine ("    Table: " ++ testTable)
+  printLine ("    Key: " ++ testItemKey)
+  
+  -- Build the key to delete
+  hashKeyAttr = AttributeValue'S testItemKey
+  key = Map.fromList [("TestTableHashKey", hashKeyAttr)]
+  
+  -- DeleteItemInput: conditionalOperator, conditionExpression, expected, expressionAttributeNames,
+  --                  expressionAttributeValues, key, returnConsumedCapacity, returnItemCollectionMetrics,
+  --                  returnValues, returnValuesOnConditionCheckFailure, tableName
+  request = DeleteItemInput.DeleteItemInput None None None None None key None None None None testTable
+  
+  -- Call the DynamoDB client
+  printLine "  → Calling deleteItem..."
+  result = !(Aws.Dynamodb.deleteItem config request)
+  
+  printLine "  ✓ SUCCESS: DeleteItem completed"
+
+{{
+Verify the test item was deleted by trying to get it again.
+}}
+verifyDeletionDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+verifyDeletionDemo config = do
+  printLine "  → Attempting to get deleted item..."
+  printLine ("    Table: " ++ testTable)
+  printLine ("    Key: " ++ testItemKey)
+  
+  -- Build the key to retrieve
+  hashKeyAttr = AttributeValue'S testItemKey
+  key = Map.fromList [("TestTableHashKey", hashKeyAttr)]
+  
+  -- GetItemInput
+  request = GetItemInput.GetItemInput None (Some true) None key None None testTable
+  
+  -- Call the DynamoDB client
+  result = !(Aws.Dynamodb.getItem config request)
+  
+  printLine "  ✓ SUCCESS: GetItem returned"
+  
+  -- Check if item exists
+  match Aws.Dynamodb.GetItemOutput.item result with
+    Some _ ->
+      printLine ("    ✗ Item " ++ testItemKey ++ " still exists!")
+    None -> 
+      printLine "    ✓ Deletion verified (item not found)"
+
+-- =============================================================================
+-- Helper Functions
+-- =============================================================================
+
+{{
+Extract a String attribute value from a DynamoDB item map.
+Returns empty string if the attribute doesn't exist or is not a String.
+}}
+extractStringAttribute : Text -> Map Text AttributeValue -> Text
+extractStringAttribute attrName itemMap =
+  match Map.get attrName itemMap with
+    Some attrValue ->
+      match attrValue with
+        AttributeValue'S strValue -> strValue
+        _ -> "<not a string>"
+    None -> "<missing>"

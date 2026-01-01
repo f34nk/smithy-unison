@@ -4,6 +4,103 @@
 
 ### Added
 
+#### AWS JSON Protocol Full Implementation
+- Complete AWS JSON 1.0/1.1 protocol support with request serialization, response deserialization, and error parsing
+- Generate JSON serializers and deserializers for nested structures
+- Service error union types with `toFailure` conversion for exception handling
+- Proper handling of required vs optional fields using `@required` and `@default` traits
+- `Optional.flatMap` chain pattern for deserializing structures with required fields
+
+#### DynamoDB Demo
+- Integration test against LocalStack with ListTables, PutItem, GetItem, and DeleteItem operations
+- Terraform configuration for LocalStack table provisioning
+- Compiled demo using generated DynamoDB client
+
+### Fixed
+
+#### AWS JSON Request Signing
+- Use `addSigningHeaders` instead of `signRequest` to preserve Content-Type and X-Amz-Target headers
+- Include original headers in signed requests (previously only signing headers were sent)
+
+#### Smithy Document Type Support
+- Map Smithy `document` shapes to `Aws.Json.JsonValue` runtime type
+- Pass-through serialization for document types in JSON protocols
+- Pass-through deserialization for document types in JSON protocols
+- Support for document types in nested structures, lists, and maps
+- Enable schema-less JSON data in AWS services
+
+#### DynamoDB AttributeValue Type Support
+- Special handling for DynamoDB AttributeValue union type
+- Skip code generation for AttributeValue, use runtime type `Aws.Json.AttributeValue`
+- Automatic detection of `com.amazonaws.dynamodb#AttributeValue` shape
+- Map AttributeValue fields to runtime type in structure generation
+- Use `Aws.Json.attributeValueToJson` for request serialization
+- Use `Aws.Json.jsonToAttributeValue` for response deserialization
+- Support for AttributeValue in lists and maps (nested collections)
+
+#### AWS JSON Protocol Operation Generation
+- Enhanced operation generation for AWS JSON 1.0/1.1 protocols with complete implementation
+- Proper X-Amz-Target header formation using service name and operation name
+- AWS Signature Version 4 (SigV4) request signing integration
+- Explicit status code checking (2xx for success, 4xx/5xx for errors)
+- JSON request body serialization with proper Content-Type headers
+- Service-specific error handling using generated parseError and toFailure functions
+- Dynamic service name extraction for signing (removes version suffixes)
+- Support for operations with and without input/output structures
+
+#### AWS JSON Protocol Error Parsing
+- Implemented error parsing for AWS JSON 1.0/1.1 protocols
+- Generate `parseError` function for each service
+- Parse `__type` field from JSON error responses
+- Extract error message from `message` or `Message` fields
+- Handle both full format (`com.amazon.coral#ErrorName`) and short format (`ErrorName`)
+- Map error types to service error variants using `fromCodeAndMessage`
+- Fallback to `UnknownError` for unrecognized error types
+- Leverage runtime helpers: `extractErrorType` and `extractErrorMessage`
+
+#### AWS JSON Protocol Response Deserialization
+- Implemented response deserialization for AWS JSON 1.0/1.1 protocols
+- Generate JSON response parsers for all operation outputs
+- Support for primitive types (string, boolean, integer, float)
+- Support for complex types (lists, maps, nested structures)
+- Support for optional fields with missing value handling
+- Support for blob types with Base64 decoding
+- Support for timestamp types with ISO-8601 parsing
+- Support for enum types with fromText conversion
+- Required field validation with exception raising
+- Respect `@jsonName` trait for custom field names
+
+#### AWS JSON Protocol Request Serialization
+- Implemented request serialization for AWS JSON 1.0/1.1 protocols
+- Generate JSON request body serializers for all operation inputs
+- Support for primitive types (string, boolean, integer, float)
+- Support for complex types (lists, maps, nested structures)
+- Support for optional fields with null filtering
+- Support for blob types with Base64 encoding
+- Support for timestamp types with ISO-8601 formatting
+- Support for enum types with text conversion
+- Respect `@jsonName` trait for custom field names
+
+#### Runtime Module Copier Updates
+- Added `AWS_JSON` and `AWS_JSON_BRIDGE` to available runtime modules
+- Automatic copying of JSON modules for JSON-based AWS protocols (AWS JSON 1.0/1.1, REST-JSON)
+- Protocol-aware runtime module selection in `copyAwsModulesForProtocol`
+
+#### JSON Bridge Module
+- `aws_json_bridge.u` runtime module for JSON-HTTP integration
+- Request serialization functions (`serializeJsonRequest`, `jsonToRequestBody`)
+- Response deserialization functions (`deserializeJsonResponse`, `responseBodyToJson`)
+- AWS JSON error parsing (`parseJsonError`, `extractErrorType`, `extractErrorMessage`)
+- DynamoDB-specific helpers (`parseItemFromJson`, `serializeItemToJson`, `parseKeyFromJson`, `parseItemsFromJson`)
+- Comprehensive unit tests for bridge functionality
+
+#### JSON Runtime Module
+- `aws_json.u` runtime module with JSON serialization/deserialization
+- `JsonValue` type for representing JSON data structures
+- DynamoDB `AttributeValue` type with tagged union format support
+- JSON object builders and accessors for field extraction
+- Comprehensive unit tests for JSON parsing and AttributeValue conversion
+
 #### Library Publishing Support
 - `compile-with-lib.sh` script for compiling using published `@f34nk/aws` library
 - Namespace aliases in `compile.sh` for portable demo code

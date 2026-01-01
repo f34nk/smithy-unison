@@ -11,6 +11,8 @@
 --
 -- Load this module AFTER loading aws_xml.u and installing @unison/xml
 
+use base.abilities.Throw
+
 -- =============================================================================
 -- XML Parsing
 -- =============================================================================
@@ -38,7 +40,7 @@ Aws.Xml.decodeToSoup bytes =
 Parse and process XML with error handling.
 
 Wraps Soup.withXML to provide safe XML processing that returns
-Either Text [a] - Left for errors, Right for results.
+`Either Text [a]`: `Left` for errors, `Right` for results.
 
 The callback function can use Each and Throw abilities.
 }}
@@ -68,7 +70,7 @@ Find an element, returning Optional instead of throwing.
 }}
 Aws.Xml.findOpt : Text -> Soup -> Optional Soup
 Aws.Xml.findOpt tagName soup =
-  Throw.toOptional do Soup.findFirst tagName soup
+  base.abilities.Throw.toOptional do Soup.findFirst tagName soup
 
 {{
 Iterate over child elements (tags only, skips text nodes).
@@ -125,7 +127,7 @@ Get an attribute value as Optional.
 }}
 Aws.Xml.attrOpt : Text -> Soup -> Optional Text
 Aws.Xml.attrOpt name soup =
-  Throw.toOptional do Soup.getAttribute name soup
+  base.abilities.Throw.toOptional do Soup.getAttribute name soup
 
 {{
 Check if the current element has an attribute.
@@ -144,7 +146,7 @@ Returns Optional - None if element not found.
 }}
 Aws.Xml.findText : Text -> Soup -> Optional Text
 Aws.Xml.findText tagName soup =
-  Throw.toOptional do
+  base.abilities.Throw.toOptional do
     elem = Soup.findFirst tagName soup
     Soup.text elem
 
@@ -191,7 +193,7 @@ Returns Optional - None if element or attribute not found.
 }}
 Aws.Xml.findAttr : Text -> Text -> Soup -> Optional Text
 Aws.Xml.findAttr tagName attrName soup =
-  Throw.toOptional do
+  base.abilities.Throw.toOptional do
     elem = Soup.findFirst tagName soup
     Soup.getAttribute attrName elem
 
@@ -206,11 +208,8 @@ Returns a list of text values from matching elements.
 }}
 Aws.Xml.findAllText : Text -> Soup -> [Text]
 Aws.Xml.findAllText tagName soup =
-  match Soup.withXML (Soup.toXML (Soup.root soup)) do
-    s ->
-      child = Soup.named tagName (Soup.root s)
-      Soup.text child
-  with
+  match Soup.withXML (Soup.toXML (Soup.root soup)) (s ->
+      Soup.text (Soup.named tagName (Soup.root s))) with
     Left _ -> []
     Right texts -> texts
 
@@ -221,11 +220,8 @@ Processes each child element using the provided function.
 }}
 Aws.Xml.mapChildren : (Soup ->{Throw XMLError} a) -> Soup -> [a]
 Aws.Xml.mapChildren f soup =
-  match Soup.withXML (Soup.toXML (Soup.root soup)) do
-    s ->
-      child = Soup.childTags (Soup.root s)
-      f child
-  with
+  match Soup.withXML (Soup.toXML (Soup.root soup)) (s ->
+      f (Soup.childTags (Soup.root s))) with
     Left _ -> []
     Right results -> results
 
@@ -257,7 +253,7 @@ Aws.Xml.runXml thunk =
 Run an XML operation returning Optional instead of throwing.
 }}
 Aws.Xml.tryXml : '{Throw XMLError} a -> Optional a
-Aws.Xml.tryXml = Throw.toOptional
+Aws.Xml.tryXml = base.abilities.Throw.toOptional
 
 -- =============================================================================
 -- XMLNode Helpers
@@ -322,11 +318,8 @@ Example:
 }}
 Aws.Xml.parseList : Text -> (Soup -> a) -> Soup -> [a]
 Aws.Xml.parseList tagName parser soup =
-  match Soup.withXML (Soup.toXML soup) do
-    s ->
-      child = Soup.named tagName (Soup.root s)
-      parser child
-  with
+  match Soup.withXML (Soup.toXML soup) (s ->
+      parser (Soup.named tagName (Soup.root s))) with
     Left _ -> []
     Right results -> results
 
@@ -340,11 +333,8 @@ Example:
 }}
 Aws.Xml.parseChildList : (Soup -> a) -> Soup -> [a]
 Aws.Xml.parseChildList parser soup =
-  match Soup.withXML (Soup.toXML soup) do
-    s ->
-      child = Soup.childTags (Soup.root s)
-      parser child
-  with
+  match Soup.withXML (Soup.toXML soup) (s ->
+      parser (Soup.childTags (Soup.root s))) with
     Left _ -> []
     Right results -> results
 
@@ -381,7 +371,7 @@ Aws.Xml.parseWrappedList containerTag itemTag parser soup =
 {{
 Parse a nested structure that wraps a list, returning Optional.
 
-Returns None if container element not found, Some [] if empty.
+Returns `None` if container element not found, `Some []` if empty.
 
 Example:
   buckets = Aws.Xml.parseOptionalWrappedList "Buckets" "Bucket" parseBucket response

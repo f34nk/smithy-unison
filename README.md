@@ -26,8 +26,12 @@ Reference: https://smithy.io/2.0/index.html
   - HTTP binding traits: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
   - Request serialization / Response deserialization
   - Error parsing
+- **AWS JSON 1.0/1.1 protocols** (DynamoDB, Lambda, Kinesis)
+  - Full operation implementation with request serialization and response deserialization
+  - Nested structure serializer/deserializer generation
+  - Error parsing (JSON error responses with `__type` field)
+  - Service error union types with exception handling
 - REST-JSON protocol (planned)
-- AWS JSON 1.0/1.1 protocols (planned)
 - AWS Query / EC2 Query protocols (planned)
 
 ### AWS Authentication
@@ -50,7 +54,7 @@ Check out [AWS_SDK_SUPPORT.md](https://github.com/f34nk/smithy-unison/blob/main/
 - Gradle 8.0+
 - Unison (UCM)
 - Smithy CLI
-- Docker Compose (for testing)
+- Docker and Terraform (for testing)
 
 ## Build
 
@@ -78,7 +82,9 @@ Run demo:
 make demo
 ```
 
-The [demo application](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/src/main.u) generates the `aws_s3_client` from the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01), compiles it locally and executes functions against a mocked S3 bucket in Docker Compose.
+The [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) generates the `aws_s3_client` from the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01), compiles it locally and executes functions against a mocked S3 bucket in Docker Compose.
+
+The [DynamoDB demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u) generates the `aws_dynamodb_client` and runs ListTables, PutItem, GetItem, and DeleteItem operations against LocalStack.
 
 Run integration-test:
 
@@ -86,7 +92,7 @@ Run integration-test:
 make integration-test
 ```
 
-The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/compile-with-lib.sh#L11) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [demo application](https://github.com/f34nk/smithy-unison/blob/main/examples/aws-demo/src/main.u) against a mocked S3 bucket in Docker Compose.
+The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.sh#L11) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked S3 bucket in Docker Compose.
 
 ## Basic Usage
 
@@ -129,6 +135,8 @@ Generated files in `generated/`:
 For AWS services, additional runtime modules are copied:
 - `aws_sigv4.u` - AWS Signature V4 request signing
 - `aws_xml.u` - XML encoding/decoding (REST-XML protocol only)
+- `aws_json.u` - JSON encoding/decoding with DynamoDB AttributeValue support
+- `aws_json_bridge.u` - JSON-HTTP integration for AWS JSON protocols
 - `aws_http.u` - HTTP request/response utilities
 - `aws_http_bridge.u` - Bridge for @unison/http library (enables real HTTP)
 - `aws_s3.u` - S3-specific URL routing (S3 only)

@@ -246,6 +246,9 @@ public final class StructureGenerator {
             return "Bytes";
         } else if (shape instanceof TimestampShape) {
             return "Text";
+        } else if (shape instanceof DocumentShape) {
+            // Document type for schema-less JSON - map to JsonValue
+            return "Aws.Json.JsonValue";
         } else if (shape instanceof ListShape) {
             ListShape list = (ListShape) shape;
             Shape memberShape = model.expectShape(list.getMember().getTarget());
@@ -266,6 +269,11 @@ public final class StructureGenerator {
         } else if (shape instanceof StructureShape) {
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof UnionShape) {
+            // Check if this is DynamoDB AttributeValue - use runtime type
+            UnionShape unionShape = (UnionShape) shape;
+            if (isDynamoDBAttributeValue(unionShape)) {
+                return "Aws.Json.AttributeValue";
+            }
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         } else if (shape instanceof EnumShape) {
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
@@ -273,6 +281,22 @@ public final class StructureGenerator {
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
         }
         return "a";  // Generic type parameter as fallback
+    }
+    
+    /**
+     * Checks if a union shape is the DynamoDB AttributeValue type.
+     * 
+     * <p>DynamoDB's AttributeValue is a special union that should use the runtime
+     * type Aws.Json.AttributeValue instead of generating a new type.
+     * 
+     * @param union The union shape to check
+     * @return true if this is DynamoDB's AttributeValue union
+     */
+    private boolean isDynamoDBAttributeValue(UnionShape union) {
+        String shapeId = union.getId().toString();
+        // Check if this is the DynamoDB AttributeValue union
+        // Pattern: com.amazonaws.dynamodb#AttributeValue
+        return shapeId.contains("dynamodb") && shapeId.endsWith("#AttributeValue");
     }
     
     /**

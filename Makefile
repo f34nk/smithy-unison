@@ -16,7 +16,7 @@ build:
 	tree -h ~/.m2/repository/io/smithy/unison/smithy-unison
 
 .PHONY: test
-test: test/java
+test: test/java test/runtime
 
 .PHONY: test/java
 test/java:
@@ -26,6 +26,15 @@ test/java:
 	rm -rf test-errors.log
 	./gradlew test 2>test-errors.log
 	[ -s test-errors.log ] || rm -rf test-errors.log
+
+.PHONY: test/runtime
+test/runtime:
+	#
+	# Run runtime tests
+	#
+	cd runtime-tests && \
+	make && \
+	make test
 
 .PHONY: clean
 clean:
@@ -50,7 +59,7 @@ examples: examples/clean
 		fi ; \
 	done
 
-# Usage: make examples/error-types
+# Usage: make examples/simple-service
 .PHONY: $(EXAMPLES)
 examples/%: $(EXAMPLES)
 	#
@@ -70,11 +79,12 @@ examples/clean:
 	done
 
 .PHONY: demo
-demo: clean build
+demo/%:
 	#
-	# Run the examples/aws-demo against a mocked S3 bucket
+	# Run $@
 	#
-	cd examples/aws-demo && \
+	name=$(shell echo $@|sed 's/demo\///g') && \
+	cd examples/$$name-demo && \
 	make clean && \
 	make test
 
@@ -84,6 +94,6 @@ integration-test:
 	# Install the AWS SDK from Unison Share and 
 	# run the examples/aws-demo against a mocked S3 bucket
 	#
-	cd examples/aws-demo && \
+	cd examples/s3-demo && \
 	make clean && \
 	make integration-test

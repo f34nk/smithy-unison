@@ -24,11 +24,13 @@ import java.util.stream.Collectors;
  * functionality needed by generated code, such as:
  * <ul>
  *   <li>{@code aws_sigv4.u} - AWS SigV4 request signing</li>
- *   <li>{@code aws_xml.u} - XML encoding/decoding (planned)</li>
- *   <li>{@code aws_http.u} - HTTP request helpers (planned)</li>
- *   <li>{@code aws_s3.u} - S3-specific utilities (planned)</li>
- *   <li>{@code aws_config.u} - Configuration types (planned)</li>
- *   <li>{@code aws_credentials.u} - Credential loading (planned)</li>
+ *   <li>{@code aws_xml.u} - XML encoding/decoding</li>
+ *   <li>{@code aws_json.u} - JSON encoding/decoding with DynamoDB AttributeValue support</li>
+ *   <li>{@code aws_json_bridge.u} - JSON-HTTP integration</li>
+ *   <li>{@code aws_http.u} - HTTP request helpers</li>
+ *   <li>{@code aws_s3.u} - S3-specific utilities</li>
+ *   <li>{@code aws_config.u} - Configuration types</li>
+ *   <li>{@code aws_credentials.u} - Credential loading</li>
  * </ul>
  * 
  * <p>These modules are bundled as resources in the generator JAR and copied
@@ -56,6 +58,16 @@ public final class RuntimeModuleCopier {
          * XML encoding/decoding utilities.
          */
         AWS_XML("aws_xml.u", "XML encoding/decoding"),
+        
+        /**
+         * JSON encoding/decoding utilities with DynamoDB AttributeValue support.
+         */
+        AWS_JSON("aws_json.u", "JSON encoding/decoding with AttributeValue support"),
+        
+        /**
+         * JSON-HTTP integration for AWS JSON protocols.
+         */
+        AWS_JSON_BRIDGE("aws_json_bridge.u", "JSON-HTTP integration"),
         
         /**
          * HTTP request helpers.
@@ -240,6 +252,7 @@ public final class RuntimeModuleCopier {
      * <ul>
      *   <li>Core modules (sigv4, config, credentials, http) - all AWS services</li>
      *   <li>{@code aws_xml.u} - only for XML-based protocols (REST-XML, AWS Query, EC2 Query)</li>
+     *   <li>{@code aws_json.u} and {@code aws_json_bridge.u} - only for JSON-based protocols (AWS JSON 1.0/1.1, REST-JSON)</li>
      *   <li>{@code aws_s3.u} - only for S3 service</li>
      * </ul>
      * 
@@ -272,6 +285,15 @@ public final class RuntimeModuleCopier {
         if (protocol.isXml()) {
             if (copyModule(RuntimeModule.AWS_XML)) {
                 copied.add(RuntimeModule.AWS_XML.getFilename());
+            }
+        }
+        
+        if (protocol.isJson()) {
+            if (copyModule(RuntimeModule.AWS_JSON)) {
+                copied.add(RuntimeModule.AWS_JSON.getFilename());
+            }
+            if (copyModule(RuntimeModule.AWS_JSON_BRIDGE)) {
+                copied.add(RuntimeModule.AWS_JSON_BRIDGE.getFilename());
             }
         }
         
