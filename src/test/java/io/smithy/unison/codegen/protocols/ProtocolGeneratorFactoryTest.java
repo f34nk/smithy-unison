@@ -84,13 +84,17 @@ class ProtocolGeneratorFactoryTest {
     }
     
     @Test
+    void testIsFullyImplementedAwsJsonProtocols() {
+        assertTrue(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_JSON_1_0),
+            "AWS JSON 1.0 should be fully implemented");
+        assertTrue(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_JSON_1_1),
+            "AWS JSON 1.1 should be fully implemented");
+    }
+    
+    @Test
     void testIsFullyImplementedOtherProtocols() {
         assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.REST_JSON_1),
             "REST-JSON should not be fully implemented yet");
-        assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_JSON_1_0),
-            "AWS JSON 1.0 should not be fully implemented yet");
-        assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_JSON_1_1),
-            "AWS JSON 1.1 should not be fully implemented yet");
         assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_QUERY),
             "AWS Query should not be fully implemented yet");
         assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.EC2_QUERY),
