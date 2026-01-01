@@ -27,6 +27,7 @@ type JsonValue
 }}
 toJson : JsonValue -> Text
 toJson value =
+  use Text ++
   match value with
     JsonString s -> escapeJsonString s
     JsonNumber n -> Float.toString n
@@ -46,6 +47,7 @@ toJsonPretty value = toJsonPrettyIndent 0 value
 
 toJsonPrettyIndent : Nat -> JsonValue -> Text
 toJsonPrettyIndent indent value =
+  use Text ++
   spaces = Text.repeat indent "  "
   nextIndent = indent + 1
   nextSpaces = Text.repeat nextIndent "  "
@@ -57,9 +59,7 @@ toJsonPrettyIndent indent value =
     JsonObject fields ->
       if List.isEmpty fields then "{}"
       else
-        items = List.map (cases (k, v) -> 
-          nextSpaces ++ escapeJsonString k ++ ": " ++ toJsonPrettyIndent nextIndent v
-        ) fields
+        items = List.map (cases (k, v) -> nextSpaces ++ escapeJsonString k ++ ": " ++ toJsonPrettyIndent nextIndent v) fields
         "{\n" ++ Text.join ",\n" items ++ "\n" ++ spaces ++ "}"
     JsonArray items ->
       if List.isEmpty items then "[]"
@@ -69,12 +69,8 @@ toJsonPrettyIndent indent value =
 
 escapeJsonString : Text -> Text
 escapeJsonString s =
-  escaped = s
-    |> Text.replace "\\" "\\\\"
-    |> Text.replace "\"" "\\\""
-    |> Text.replace "\n" "\\n"
-    |> Text.replace "\r" "\\r"
-    |> Text.replace "\t" "\\t"
+  use Text ++
+  escaped = s |> Text.replace "\\" "\\\\" |> Text.replace "\"" "\\\"" |> Text.replace "\n" "\\n" |> Text.replace "\r" "\\r" |> Text.replace "\t" "\\t"
   "\"" ++ escaped ++ "\""
 
 -- === Deserialization ===
@@ -152,8 +148,8 @@ parseStringContent text pos acc =
           ?r -> "\r"
           ?t -> "\t"
           _ -> Text.fromChar next
-        parseStringContent text (pos + 2) (acc ++ escaped)
-    else parseStringContent text (pos + 1) (acc ++ Text.fromChar c)
+        parseStringContent text (pos + 2) (acc Text.++ escaped)
+    else parseStringContent text (pos + 1) (acc Text.++ Text.fromChar c)
 
 parseNumber : Text -> Nat -> Optional (JsonValue, Nat)
 parseNumber text pos =
@@ -168,9 +164,7 @@ findNumberEnd text pos =
   if pos >= Text.size text then pos
   else
     c = Text.at pos text
-    if c === ?0 || c === ?1 || c === ?2 || c === ?3 || c === ?4 ||
-       c === ?5 || c === ?6 || c === ?7 || c === ?8 || c === ?9 ||
-       c === ?- || c === ?+ || c === ?. || c === ?e || c === ?E then
+    if c === ?0 || c === ?1 || c === ?2 || c === ?3 || c === ?4 || c === ?5 || c === ?6 || c === ?7 || c === ?8 || c === ?9 || c === ?- || c === ?+ || c === ?. || c === ?e || c === ?E then
       findNumberEnd text (pos + 1)
     else pos
 
@@ -196,7 +190,7 @@ parseObjectFields text pos acc =
         match parseJsonValue text (pos''' + 1) with
           None -> None
           Some (value, pos'''') ->
-            fields = acc ++ [(key, value)]
+            fields = acc List.++ [(key, value)]
             pos''''' = skipWhitespace text pos''''
             if pos''''' >= Text.size text then None
             else
@@ -221,7 +215,7 @@ parseArrayItems text pos acc =
   match parseJsonValue text pos with
     None -> None
     Some (value, pos') ->
-      items = acc ++ [value]
+      items = acc List.++ [value]
       pos'' = skipWhitespace text pos'
       if pos'' >= Text.size text then None
       else
@@ -297,7 +291,7 @@ getFieldAsBoolean key value =
 getFieldAsObject : Text -> JsonValue -> Optional JsonValue
 getFieldAsObject key value =
   match getField key value with
-    Some (JsonObject _) as obj -> obj
+    Some obj@(JsonObject _) -> Some obj
     _ -> None
 
 {{
@@ -346,10 +340,10 @@ attributeValueToJson attr =
   match attr with
     AttributeValue'S s -> JsonObject [("S", JsonString s)]
     AttributeValue'N n -> JsonObject [("N", JsonString n)]
-    AttributeValue'B b -> JsonObject [("B", JsonString (Bytes.toBase64 b))]
+    AttributeValue'B b -> JsonObject [("B", JsonString (Bytes.toBase64Url b))]
     AttributeValue'SS ss -> JsonObject [("SS", JsonArray (List.map JsonString ss))]
     AttributeValue'NS ns -> JsonObject [("NS", JsonArray (List.map JsonString ns))]
-    AttributeValue'BS bs -> JsonObject [("BS", JsonArray (List.map (b -> JsonString (Bytes.toBase64 b)) bs))]
+    AttributeValue'BS bs -> JsonObject [("BS", JsonArray (List.map (b -> JsonString (Bytes.toBase64Url b)) bs))]
     AttributeValue'M m -> 
       fields = List.map (cases (k, v) -> (k, attributeValueToJson v)) m
       JsonObject [("M", JsonObject fields)]
@@ -366,49 +360,33 @@ attributeValueToJson attr =
 jsonToAttributeValue : JsonValue -> Optional AttributeValue
 jsonToAttributeValue value =
   match value with
-    JsonObject fields ->
-      if List.size fields =/= 1 then None
-      else
-        match List.head fields with
-          Some ("S", JsonString s) -> Some (AttributeValue'S s)
-          Some ("N", JsonString n) -> Some (AttributeValue'N n)
-          Some ("B", JsonString b) ->
-            match Bytes.fromBase64 b with
-              Some bytes -> Some (AttributeValue'B bytes)
-              None -> None
-          Some ("SS", JsonArray items) ->
-            strings = List.map (cases JsonString s -> Some s; _ -> None) items
-            if List.all Optional.isSome strings then
-              Some (AttributeValue'SS (List.map (s -> Optional.getOrElse "" s) strings))
-            else None
-          Some ("NS", JsonArray items) ->
-            numbers = List.map (cases JsonString n -> Some n; _ -> None) items
-            if List.all Optional.isSome numbers then
-              Some (AttributeValue'NS (List.map (n -> Optional.getOrElse "" n) numbers))
-            else None
-          Some ("BS", JsonArray items) ->
-            binaries = List.map (cases 
-              JsonString b -> Bytes.fromBase64 b
-              _ -> None
-            ) items
-            if List.all Optional.isSome binaries then
-              Some (AttributeValue'BS (List.map (b -> Optional.getOrElse Bytes.empty b) binaries))
-            else None
-          Some ("M", JsonObject mapFields) ->
-            attrFields = List.map (cases (k, v) -> 
-              match jsonToAttributeValue v with
-                Some attr -> Some (k, attr)
-                None -> None
-            ) mapFields
-            if List.all Optional.isSome attrFields then
-              Some (AttributeValue'M (List.map (f -> Optional.getOrElse ("", AttributeValue'NULL true) f) attrFields))
-            else None
-          Some ("L", JsonArray listItems) ->
-            attrs = List.map jsonToAttributeValue listItems
-            if List.all Optional.isSome attrs then
-              Some (AttributeValue'L (List.map (a -> Optional.getOrElse (AttributeValue'NULL true) a) attrs))
-            else None
-          Some ("NULL", JsonBoolean true) -> Some (AttributeValue'NULL true)
-          Some ("BOOL", JsonBoolean b) -> Some (AttributeValue'BOOL b)
-          _ -> None
+    JsonObject fields | List.size fields === 1 ->
+      match List.head fields with
+        Some ("S", JsonString s) -> Some (AttributeValue'S s)
+        Some ("N", JsonString n) -> Some (AttributeValue'N n)
+        Some ("B", JsonString b) ->
+          match Bytes.fromBase64Url b with
+            Some bytes -> Some (AttributeValue'B bytes)
+            None -> None
+        Some ("SS", JsonArray items) ->
+          Some (AttributeValue'SS (List.filterMap (cases
+            JsonString s -> Some s
+            _ -> None) items))
+        Some ("NS", JsonArray items) ->
+          Some (AttributeValue'NS (List.filterMap (cases
+            JsonString n -> Some n
+            _ -> None) items))
+        Some ("BS", JsonArray items) ->
+          Some (AttributeValue'BS (List.filterMap (cases
+            JsonString b -> Bytes.fromBase64Url b
+            _ -> None) items))
+        Some ("M", JsonObject mapFields) ->
+          Some (AttributeValue'M (List.filterMap (cases
+            (k, v) -> Optional.map (attr -> (k, attr)) (jsonToAttributeValue v)) mapFields))
+        Some ("L", JsonArray listItems) ->
+          Some (AttributeValue'L (List.filterMap jsonToAttributeValue listItems))
+        Some ("NULL", JsonBoolean true) -> Some (AttributeValue'NULL true)
+        Some ("BOOL", JsonBoolean b) -> Some (AttributeValue'BOOL b)
+        _ -> None
+    JsonObject _ -> None
     _ -> None
