@@ -1,7 +1,9 @@
 package io.smithy.unison.codegen;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -150,6 +152,31 @@ public final class ClientModuleWriter {
         // Generate model types (structures, enums, errors) referenced by operations
         // Types are always needed - protocol generators use these types but don't generate them
         generateModelTypes(writer, protocol);
+        
+        // Generate error parser for protocol (if using protocol generator)
+        if (useProtocolGenerator && protocolGenerator.isPresent()) {
+            ProtocolGenerator gen = protocolGenerator.get();
+            
+            // Generate error parser (once per service)
+            ShapeId firstOpId = service.getOperations().iterator().next();
+            OperationShape firstOp = model.expectShape(firstOpId, OperationShape.class);
+            gen.generateErrorParser(firstOp, writer, context);
+            
+            // For AWS JSON protocols, generate standalone serializer/deserializer functions
+            // (REST protocols do inline serialization within each operation)
+            if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
+                writer.writeComment("=== Request/Response Serializers ===");
+                writer.writeBlankLine();
+                
+                for (ShapeId opId : service.getOperations()) {
+                    OperationShape operation = model.expectShape(opId, OperationShape.class);
+                    gen.generateRequestSerializer(operation, writer, context);
+                    gen.generateResponseDeserializer(operation, writer, context);
+                }
+                
+                writer.writeBlankLine();
+            }
+        }
         
         // Generate operations
         for (ShapeId opId : service.getOperations()) {
@@ -323,6 +350,12 @@ public final class ClientModuleWriter {
                 generateErrorToFailure(error, writer);
                 writer.writeBlankLine();
             }
+            
+            // Generate service-level error union type (for all AWS protocols that need error parsing)
+            if (protocol == AwsProtocol.REST_XML || protocol == AwsProtocol.REST_JSON_1 ||
+                protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
+                generateServiceErrorUnion(errors, writer);
+            }
         }
     }
     
@@ -406,6 +439,97 @@ public final class ClientModuleWriter {
         }
         
         writer.dedent();
+    }
+    
+    /**
+     * Generates a service-level error union type that encompasses all service-specific errors.
+     * Also generates a fromCodeAndMessage function to map error codes to specific error types.
+     */
+    private void generateServiceErrorUnion(Set<StructureShape> errors, UnisonWriter writer) {
+        String serviceName = service.getId().getName();
+        // Remove "Service" suffix if present to avoid "S3ServiceServiceError"
+        if (serviceName.endsWith("Service")) {
+            serviceName = serviceName.substring(0, serviceName.length() - 7);
+        }
+        String errorUnionName = UnisonSymbolProvider.toNamespacedTypeName(
+                serviceName + "ServiceError", clientNamespace);
+        
+        writer.writeDocComment("Service-level error union type for " + serviceName);
+        writer.write("unique type $L", errorUnionName);
+        writer.indent();
+        
+        // Generate a constructor for each error type
+        boolean isFirst = true;
+        for (StructureShape error : errors) {
+            String errorTypeName = UnisonSymbolProvider.toUnisonTypeName(error.getId().getName());
+            String constructorName = errorTypeName;
+            String prefix = isFirst ? "=" : "|";
+            writer.write("$L $L $L", prefix, constructorName, getNamespacedTypeName(error.getId().getName()));
+            isFirst = false;
+        }
+        
+        // Add a generic unknown error constructor
+        writer.write("| UnknownError Text Text"); // code, message
+        writer.dedent();
+        writer.writeBlankLine();
+        
+        // Generate fromCodeAndMessage function
+        writer.writeDocComment("Maps error code and message to the appropriate error type");
+        writer.write("$L.fromCodeAndMessage : Text -> Text -> $L", errorUnionName, errorUnionName);
+        writer.write("$L.fromCodeAndMessage code message =", errorUnionName);
+        writer.indent();
+        writer.write("match code with");
+        writer.indent();
+        
+        // Generate a match case for each error - use the error name trait if available
+        for (StructureShape error : errors) {
+            String errorTypeName = UnisonSymbolProvider.toUnisonTypeName(error.getId().getName());
+            String errorCode = error.getId().getName(); // Default to shape name
+            
+            // Try to get the actual error code from traits
+            if (error.hasTrait("smithy.api#error")) {
+                // Use the shape name as the error code
+                errorCode = error.getId().getName();
+            }
+            
+            String constructorName = errorTypeName;
+            String fullTypeName = getNamespacedTypeName(error.getId().getName());
+            writer.write("\"$L\" -> $L.$L ($L.fromMessage message)", 
+                    errorCode, errorUnionName, constructorName, fullTypeName);
+        }
+        
+        // Default case for unknown errors
+        writer.write("_ -> $L.UnknownError code message", errorUnionName);
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
+        
+        // Generate fromMessage helper for each error type if needed
+        for (StructureShape error : errors) {
+            String fullTypeName = getNamespacedTypeName(error.getId().getName());
+            String typeName = UnisonSymbolProvider.toUnisonTypeName(error.getId().getName());
+            
+            writer.write("$L.fromMessage : Text -> $L", fullTypeName, fullTypeName);
+            writer.write("$L.fromMessage message =", fullTypeName);
+            writer.indent();
+            
+            // Get all members
+            List<MemberShape> members = new ArrayList<>(error.getAllMembers().values());
+            
+            // Construct the error with the message field set and other fields as None
+            writer.write("$L", typeName);
+            writer.indent();
+            for (MemberShape member : members) {
+                if (member.getMemberName().equalsIgnoreCase("message")) {
+                    writer.write("(Some message)");
+                } else {
+                    writer.write("None");
+                }
+            }
+            writer.dedent();
+            writer.dedent();
+            writer.writeBlankLine();
+        }
     }
     
     /**
