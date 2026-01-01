@@ -14,6 +14,7 @@ import io.smithy.unison.codegen.generators.EnumGenerator;
 import io.smithy.unison.codegen.generators.PaginationGenerator;
 import io.smithy.unison.codegen.generators.StructureGenerator;
 import io.smithy.unison.codegen.generators.UnionGenerator;
+import io.smithy.unison.codegen.protocols.AwsJsonProtocolGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGenerator;
 import io.smithy.unison.codegen.protocols.ProtocolGeneratorFactory;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
@@ -334,6 +335,12 @@ public final class ClientModuleWriter {
             if (protocol.isXml()) {
                 generateXmlParsers(structures, writer);
             }
+            
+            // Generate JSON serializers for nested structures (used by request serialization)
+            // Only generate for AWS JSON protocols
+            if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
+                generateJsonSerializers(structures, writer);
+            }
         }
         
         // Generate error types
@@ -559,6 +566,34 @@ public final class ClientModuleWriter {
         for (StructureShape structure : structures) {
             generateXmlParserForStructure(structure, writer);
             writer.writeBlankLine();
+        }
+    }
+    
+    /**
+     * Generates JSON serializer functions for all nested structures.
+     * 
+     * <p>For AWS JSON protocols, nested structures need ToJson serializers
+     * so they can be serialized when used in lists, maps, or as nested fields.
+     */
+    private void generateJsonSerializers(Set<StructureShape> structures, UnisonWriter writer) {
+        if (structures.isEmpty()) {
+            return;
+        }
+        
+        // Get the protocol generator
+        Optional<ProtocolGenerator> protocolGenerator = ProtocolGeneratorFactory.getGenerator(
+                AwsProtocolDetector.detectProtocol(service));
+        if (protocolGenerator.isEmpty() || !(protocolGenerator.get() instanceof AwsJsonProtocolGenerator)) {
+            return;
+        }
+        
+        AwsJsonProtocolGenerator jsonGen = (AwsJsonProtocolGenerator) protocolGenerator.get();
+        
+        writer.writeComment("=== Structure JSON Serializers ===");
+        writer.writeBlankLine();
+        
+        for (StructureShape structure : structures) {
+            jsonGen.generateStructureSerializer(structure, writer, context);
         }
     }
     

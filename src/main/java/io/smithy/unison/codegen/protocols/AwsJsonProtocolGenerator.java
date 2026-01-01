@@ -169,10 +169,10 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("if Nat.lt statusCode 300 then");
         writer.indent();
         
-        // Success - parse response
+        // Success - parse response (force the delayed computation with !)
         if (operation.getOutput().isPresent()) {
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
-            writer.write("$L response", parserName);
+            writer.write("!($L response)", parserName);
         } else {
             writer.write("()");
         }
@@ -213,7 +213,34 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         String inputType = UnisonSymbolProvider.toNamespacedTypeName(input.getId().getName(), clientNamespace);
         String functionName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
         
-        writer.writeComment("Serialize " + input.getId().getName() + " to JSON for AWS JSON protocol");
+        generateStructureSerializerWithName(input, functionName, inputType, model, clientNamespace, writer);
+    }
+    
+    /**
+     * Generates a JSON serializer for a structure with the naming pattern {StructureName}ToJson.
+     * Used for nested structures that are referenced by operation inputs.
+     */
+    public void generateStructureSerializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        if (structure.getAllMembers().isEmpty()) {
+            return; // No fields to serialize
+        }
+        
+        String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
+        String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "ToJson");
+        
+        generateStructureSerializerWithName(structure, functionName, structType, model, clientNamespace, writer);
+    }
+    
+    /**
+     * Core implementation for generating a structure serializer with a given function name.
+     */
+    private void generateStructureSerializerWithName(StructureShape structure, String functionName, 
+                                                      String inputType, Model model, String clientNamespace,
+                                                      UnisonWriter writer) {
+        writer.writeComment("Serialize " + structure.getId().getName() + " to JSON");
         writer.writeSignature(functionName, inputType + " -> Aws.Json.JsonValue");
         writer.write("$L input =", functionName);
         writer.indent();
@@ -224,10 +251,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("fields = [");
         writer.indent();
         
-        List<MemberShape> members = input.getAllMembers().values().stream().toList();
+        List<MemberShape> members = structure.getAllMembers().values().stream().toList();
         for (int i = 0; i < members.size(); i++) {
             MemberShape member = members.get(i);
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
             String jsonName = getJsonName(member);
             boolean isLast = (i == members.size() - 1);
             
