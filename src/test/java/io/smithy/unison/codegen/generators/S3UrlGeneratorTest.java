@@ -27,11 +27,11 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.urlEncode : Text -> Text"),
+        assertTrue(output.contains("aws.urlEncode : Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check function definition
-        assertTrue(output.contains("Aws.urlEncode text ="),
+        assertTrue(output.contains("aws.urlEncode text ="),
                 "Should generate function definition. Got: " + output);
         
         // Check URL encoding for common special characters
@@ -48,7 +48,7 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.urlEncodePathSegment : Text -> Text"),
+        assertTrue(output.contains("aws.urlEncodePathSegment : Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it encodes slashes
@@ -63,11 +63,11 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.buildQueryString : [(Text, Optional Text)] -> Text"),
+        assertTrue(output.contains("aws.buildQueryString : [(Text, Optional Text)] -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check function definition
-        assertTrue(output.contains("Aws.buildQueryString params ="),
+        assertTrue(output.contains("aws.buildQueryString params ="),
                 "Should generate function definition. Got: " + output);
         
         // Check that it handles None values
@@ -86,11 +86,11 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.S3.buildUrl : Config -> Text -> Text -> Text"),
+        assertTrue(output.contains("aws.s3.buildUrl : Config -> Text -> Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check function definition
-        assertTrue(output.contains("Aws.S3.buildUrl config bucket key ="),
+        assertTrue(output.contains("aws.s3.buildUrl config bucket key ="),
                 "Should generate function definition. Got: " + output);
         
         // Check for path style handling
@@ -113,14 +113,14 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.S3.buildUrlWithQuery : Config -> Text -> Text -> [(Text, Optional Text)] -> Text"),
+        assertTrue(output.contains("aws.s3.buildUrlWithQuery : Config -> Text -> Text -> [(Text, Optional Text)] -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it uses buildUrl and buildQueryString
-        assertTrue(output.contains("Aws.S3.buildUrl"),
-                "Should call Aws.S3.buildUrl. Got: " + output);
-        assertTrue(output.contains("Aws.buildQueryString"),
-                "Should call Aws.buildQueryString. Got: " + output);
+        assertTrue(output.contains("aws.s3.buildUrl"),
+                "Should call aws.s3.buildUrl. Got: " + output);
+        assertTrue(output.contains("aws.buildQueryString"),
+                "Should call aws.buildQueryString. Got: " + output);
     }
     
     @Test
@@ -130,11 +130,11 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check all core functions are generated
-        assertTrue(output.contains("Aws.urlEncode :"),
+        assertTrue(output.contains("aws.urlEncode :"),
                 "Should generate urlEncode. Got: " + output);
-        assertTrue(output.contains("Aws.buildQueryString :"),
+        assertTrue(output.contains("aws.buildQueryString :"),
                 "Should generate buildQueryString. Got: " + output);
-        assertTrue(output.contains("Aws.S3.buildUrl :"),
+        assertTrue(output.contains("aws.s3.buildUrl :"),
                 "Should generate S3.buildUrl. Got: " + output);
     }
     
@@ -145,15 +145,15 @@ public class S3UrlGeneratorTest {
         String output = writer.toString();
         
         // Check all functions including helpers
-        assertTrue(output.contains("Aws.urlEncode :"),
+        assertTrue(output.contains("aws.urlEncode :"),
                 "Should generate urlEncode");
-        assertTrue(output.contains("Aws.urlEncodePathSegment :"),
+        assertTrue(output.contains("aws.urlEncodePathSegment :"),
                 "Should generate urlEncodePathSegment");
-        assertTrue(output.contains("Aws.buildQueryString :"),
+        assertTrue(output.contains("aws.buildQueryString :"),
                 "Should generate buildQueryString");
-        assertTrue(output.contains("Aws.S3.buildUrl :"),
+        assertTrue(output.contains("aws.s3.buildUrl :"),
                 "Should generate S3.buildUrl");
-        assertTrue(output.contains("Aws.S3.buildUrlWithQuery :"),
+        assertTrue(output.contains("aws.s3.buildUrlWithQuery :"),
                 "Should generate S3.buildUrlWithQuery");
         
         // Check section comments

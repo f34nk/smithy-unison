@@ -44,18 +44,18 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("Aws.Credentials"),
-            "Module should define Aws.Credentials type");
-        assertTrue(content.contains("Aws.SigningConfig"),
-            "Module should define Aws.SigningConfig type");
-        assertTrue(content.contains("Aws.CredentialScope"),
-            "Module should define Aws.CredentialScope type");
-        assertTrue(content.contains("Aws.SigV4.signRequest"),
-            "Module should define Aws.SigV4.signRequest function");
-        assertTrue(content.contains("Aws.SigV4.deriveSigningKey"),
-            "Module should define Aws.SigV4.deriveSigningKey function");
-        assertTrue(content.contains("Aws.SigV4.canonicalRequest"),
-            "Module should define Aws.SigV4.canonicalRequest function");
+        assertTrue(content.contains("aws.credentials"),
+            "Module should define aws.credentials type");
+        assertTrue(content.contains("aws.signingconfig"),
+            "Module should define aws.signingconfig type");
+        assertTrue(content.contains("aws.credentialscope"),
+            "Module should define aws.credentialscope type");
+        assertTrue(content.contains("aws.sigv4.signRequest"),
+            "Module should define aws.sigv4.signRequest function");
+        assertTrue(content.contains("aws.sigv4.deriveSigningKey"),
+            "Module should define aws.sigv4.deriveSigningKey function");
+        assertTrue(content.contains("aws.sigv4.canonicalRequest"),
+            "Module should define aws.sigv4.canonicalRequest function");
     }
     
     @Test
@@ -148,35 +148,35 @@ class RuntimeModuleCopierTest {
         String content = copier.getModuleContent(RuntimeModule.AWS_SIGV4);
         
         // Types
-        assertTrue(content.contains("type Aws.Credentials"));
-        assertTrue(content.contains("type Aws.SigningConfig"));
-        assertTrue(content.contains("type Aws.CredentialScope"));
+        assertTrue(content.contains("type aws.credentials"));
+        assertTrue(content.contains("type aws.signingconfig"));
+        assertTrue(content.contains("type aws.credentialscope"));
         
         // Credential helpers
-        assertTrue(content.contains("Aws.Credentials.basic"));
-        assertTrue(content.contains("Aws.Credentials.withSessionToken"));
+        assertTrue(content.contains("aws.credentials.basic"));
+        assertTrue(content.contains("aws.credentials.withSessionToken"));
         
         // Timestamp functions
-        assertTrue(content.contains("Aws.SigV4.getTimestamp"));
-        assertTrue(content.contains("Aws.SigV4.getDateStamp"));
+        assertTrue(content.contains("aws.sigv4.getTimestamp"));
+        assertTrue(content.contains("aws.sigv4.getDateStamp"));
         
         // Hashing
-        assertTrue(content.contains("Aws.SigV4.hashPayload"));
+        assertTrue(content.contains("aws.sigv4.hashPayload"));
         
         // Canonical request building
-        assertTrue(content.contains("Aws.SigV4.canonicalHeaders"));
-        assertTrue(content.contains("Aws.SigV4.signedHeaders"));
-        assertTrue(content.contains("Aws.SigV4.canonicalRequest"));
+        assertTrue(content.contains("aws.sigv4.canonicalHeaders"));
+        assertTrue(content.contains("aws.sigv4.signedHeaders"));
+        assertTrue(content.contains("aws.sigv4.canonicalRequest"));
         
         // Signing
-        assertTrue(content.contains("Aws.SigV4.stringToSign"));
-        assertTrue(content.contains("Aws.SigV4.deriveSigningKey"));
-        assertTrue(content.contains("Aws.SigV4.signature"));
-        assertTrue(content.contains("Aws.SigV4.authorizationHeader"));
+        assertTrue(content.contains("aws.sigv4.stringToSign"));
+        assertTrue(content.contains("aws.sigv4.deriveSigningKey"));
+        assertTrue(content.contains("aws.sigv4.signature"));
+        assertTrue(content.contains("aws.sigv4.authorizationHeader"));
         
         // Main entry points
-        assertTrue(content.contains("Aws.SigV4.signRequest"));
-        assertTrue(content.contains("Aws.SigV4.addSigningHeaders"));
+        assertTrue(content.contains("aws.sigv4.signRequest"));
+        assertTrue(content.contains("aws.sigv4.addSigningHeaders"));
     }
     
     // ========== XML Module Tests ==========
@@ -195,14 +195,14 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("Aws.Xml.escape"),
-            "Module should define Aws.Xml.escape function");
-        assertTrue(content.contains("Aws.Xml.unescape"),
-            "Module should define Aws.Xml.unescape function");
-        assertTrue(content.contains("Aws.Xml.element"),
-            "Module should define Aws.Xml.element function");
-        assertTrue(content.contains("Aws.Xml.extractElement"),
-            "Module should define Aws.Xml.extractElement function");
+        assertTrue(content.contains("aws.xml.escape"),
+            "Module should define aws.xml.escape function");
+        assertTrue(content.contains("aws.xml.unescape"),
+            "Module should define aws.xml.unescape function");
+        assertTrue(content.contains("aws.xml.element"),
+            "Module should define aws.xml.element function");
+        assertTrue(content.contains("aws.xml.extractElement"),
+            "Module should define aws.xml.extractElement function");
     }
     
     @Test
@@ -227,11 +227,11 @@ class RuntimeModuleCopierTest {
         String content = copier.getModuleContent(RuntimeModule.AWS_XML);
         
         // Element creation functions
-        assertTrue(content.contains("Aws.Xml.element"));
-        assertTrue(content.contains("Aws.Xml.elementRaw"));
-        assertTrue(content.contains("Aws.Xml.emptyElement"));
-        assertTrue(content.contains("Aws.Xml.elementWithAttrs"));
-        assertTrue(content.contains("Aws.Xml.optionalElement"));
+        assertTrue(content.contains("aws.xml.element"));
+        assertTrue(content.contains("aws.xml.elementRaw"));
+        assertTrue(content.contains("aws.xml.emptyElement"));
+        assertTrue(content.contains("aws.xml.elementWithAttrs"));
+        assertTrue(content.contains("aws.xml.optionalElement"));
     }
     
     @Test
@@ -239,11 +239,11 @@ class RuntimeModuleCopierTest {
         String content = copier.getModuleContent(RuntimeModule.AWS_XML);
         
         // List handling
-        assertTrue(content.contains("Aws.Xml.listElements"),
+        assertTrue(content.contains("aws.xml.listElements"),
             "Module should have listElements function");
-        assertTrue(content.contains("Aws.Xml.wrappedList"),
+        assertTrue(content.contains("aws.xml.wrappedList"),
             "Module should have wrappedList function");
-        assertTrue(content.contains("Aws.Xml.extractAll"),
+        assertTrue(content.contains("aws.xml.extractAll"),
             "Module should have extractAll function");
     }
     
@@ -252,13 +252,13 @@ class RuntimeModuleCopierTest {
         String content = copier.getModuleContent(RuntimeModule.AWS_XML);
         
         // Extraction functions
-        assertTrue(content.contains("Aws.Xml.extractElement"));
-        assertTrue(content.contains("Aws.Xml.extractElementOpt"));
-        assertTrue(content.contains("Aws.Xml.extractAttribute"));
-        assertTrue(content.contains("Aws.Xml.extractInt"));
-        assertTrue(content.contains("Aws.Xml.extractBool"));
-        assertTrue(content.contains("Aws.Xml.extractBlock"));
-        assertTrue(content.contains("Aws.Xml.extractAllBlocks"));
+        assertTrue(content.contains("aws.xml.extractElement"));
+        assertTrue(content.contains("aws.xml.extractElementOpt"));
+        assertTrue(content.contains("aws.xml.extractAttribute"));
+        assertTrue(content.contains("aws.xml.extractInt"));
+        assertTrue(content.contains("aws.xml.extractBool"));
+        assertTrue(content.contains("aws.xml.extractBlock"));
+        assertTrue(content.contains("aws.xml.extractAllBlocks"));
     }
     
     @Test
@@ -266,11 +266,11 @@ class RuntimeModuleCopierTest {
         String content = copier.getModuleContent(RuntimeModule.AWS_XML);
         
         // Error parsing
-        assertTrue(content.contains("Aws.Xml.ErrorResponse"),
+        assertTrue(content.contains("aws.xml.ErrorResponse"),
             "Module should have ErrorResponse type");
-        assertTrue(content.contains("Aws.Xml.parseError"),
+        assertTrue(content.contains("aws.xml.parseError"),
             "Module should have parseError function");
-        assertTrue(content.contains("Aws.Xml.isError"),
+        assertTrue(content.contains("aws.xml.isError"),
             "Module should have isError function");
     }
     
@@ -290,9 +290,9 @@ class RuntimeModuleCopierTest {
     void testXmlModuleHasNamespaceSupport() {
         String content = copier.getModuleContent(RuntimeModule.AWS_XML);
         
-        assertTrue(content.contains("Aws.Xml.s3Namespace"),
+        assertTrue(content.contains("aws.xml.s3Namespace"),
             "Module should have S3 namespace constant");
-        assertTrue(content.contains("Aws.Xml.s3Element"),
+        assertTrue(content.contains("aws.xml.s3Element"),
             "Module should have s3Element helper");
         assertTrue(content.contains("http://s3.amazonaws.com/doc/2006-03-01/"),
             "Module should have correct S3 namespace URL");
@@ -342,27 +342,27 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("Aws.Http.isSuccess"),
-            "Module should define Aws.Http.isSuccess function");
-        assertTrue(content.contains("Aws.Http.getHeader"),
-            "Module should define Aws.Http.getHeader function");
-        assertTrue(content.contains("Aws.Http.buildQueryString"),
-            "Module should define Aws.Http.buildQueryString function");
+        assertTrue(content.contains("aws.http.isSuccess"),
+            "Module should define aws.http.isSuccess function");
+        assertTrue(content.contains("aws.http.getHeader"),
+            "Module should define aws.http.getHeader function");
+        assertTrue(content.contains("aws.http.buildQueryString"),
+            "Module should define aws.http.buildQueryString function");
     }
     
     @Test
     void testHttpModuleHasStatusCodeHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
         
-        assertTrue(content.contains("Aws.Http.isSuccess"),
+        assertTrue(content.contains("aws.http.isSuccess"),
             "Module should have isSuccess function");
-        assertTrue(content.contains("Aws.Http.isClientError"),
+        assertTrue(content.contains("aws.http.isClientError"),
             "Module should have isClientError function");
-        assertTrue(content.contains("Aws.Http.isServerError"),
+        assertTrue(content.contains("aws.http.isServerError"),
             "Module should have isServerError function");
-        assertTrue(content.contains("Aws.Http.isError"),
+        assertTrue(content.contains("aws.http.isError"),
             "Module should have isError function");
-        assertTrue(content.contains("Aws.Http.isRetryable"),
+        assertTrue(content.contains("aws.http.isRetryable"),
             "Module should have isRetryable function");
     }
     
@@ -370,26 +370,26 @@ class RuntimeModuleCopierTest {
     void testHttpModuleHasHeaderHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
         
-        assertTrue(content.contains("Aws.Http.getHeader"));
-        assertTrue(content.contains("Aws.Http.getHeaderOrDefault"));
-        assertTrue(content.contains("Aws.Http.hasHeader"));
-        assertTrue(content.contains("Aws.Http.addHeader"));
-        assertTrue(content.contains("Aws.Http.setHeader"));
-        assertTrue(content.contains("Aws.Http.removeHeader"));
-        assertTrue(content.contains("Aws.Http.mergeHeaders"));
+        assertTrue(content.contains("aws.http.getHeader"));
+        assertTrue(content.contains("aws.http.getHeaderOrDefault"));
+        assertTrue(content.contains("aws.http.hasHeader"));
+        assertTrue(content.contains("aws.http.addHeader"));
+        assertTrue(content.contains("aws.http.setHeader"));
+        assertTrue(content.contains("aws.http.removeHeader"));
+        assertTrue(content.contains("aws.http.mergeHeaders"));
     }
     
     @Test
     void testHttpModuleHasQueryStringHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
         
-        assertTrue(content.contains("Aws.Http.buildQueryString"),
+        assertTrue(content.contains("aws.http.buildQueryString"),
             "Module should have buildQueryString function");
-        assertTrue(content.contains("Aws.Http.appendQueryString"),
+        assertTrue(content.contains("aws.http.appendQueryString"),
             "Module should have appendQueryString function");
-        assertTrue(content.contains("Aws.Http.urlEncode"),
+        assertTrue(content.contains("aws.http.urlEncode"),
             "Module should have urlEncode function");
-        assertTrue(content.contains("Aws.Http.urlDecode"),
+        assertTrue(content.contains("aws.http.urlDecode"),
             "Module should have urlDecode function");
     }
     
@@ -397,11 +397,11 @@ class RuntimeModuleCopierTest {
     void testHttpModuleHasUrlHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
         
-        assertTrue(content.contains("Aws.Http.buildUrl"),
+        assertTrue(content.contains("aws.http.buildUrl"),
             "Module should have buildUrl function");
-        assertTrue(content.contains("Aws.Http.extractHost"),
+        assertTrue(content.contains("aws.http.extractHost"),
             "Module should have extractHost function");
-        assertTrue(content.contains("Aws.Http.extractPath"),
+        assertTrue(content.contains("aws.http.extractPath"),
             "Module should have extractPath function");
     }
     
@@ -409,13 +409,13 @@ class RuntimeModuleCopierTest {
     void testHttpModuleHasContentTypeHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_HTTP);
         
-        assertTrue(content.contains("Aws.Http.contentTypeXml"),
+        assertTrue(content.contains("aws.http.contentTypeXml"),
             "Module should have contentTypeXml constant");
-        assertTrue(content.contains("Aws.Http.contentTypeJson"),
+        assertTrue(content.contains("aws.http.contentTypeJson"),
             "Module should have contentTypeJson constant");
-        assertTrue(content.contains("Aws.Http.isXmlContentType"),
+        assertTrue(content.contains("aws.http.isXmlContentType"),
             "Module should have isXmlContentType function");
-        assertTrue(content.contains("Aws.Http.isJsonContentType"),
+        assertTrue(content.contains("aws.http.isJsonContentType"),
             "Module should have isJsonContentType function");
     }
     
@@ -429,7 +429,7 @@ class RuntimeModuleCopierTest {
             "Module should have AWS date header");
         assertTrue(content.contains("x-amz-security-token"),
             "Module should have AWS security token header");
-        assertTrue(content.contains("Aws.Http.getRequestId"),
+        assertTrue(content.contains("aws.http.getRequestId"),
             "Module should have getRequestId function");
     }
     
@@ -489,23 +489,23 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("Aws.S3.buildUrl"),
-            "Module should define Aws.S3.buildUrl function");
-        assertTrue(content.contains("Aws.S3.isValidBucketName"),
-            "Module should define Aws.S3.isValidBucketName function");
-        assertTrue(content.contains("Aws.S3.urlEncodeKey"),
-            "Module should define Aws.S3.urlEncodeKey function");
+        assertTrue(content.contains("aws.s3.buildUrl"),
+            "Module should define aws.s3.buildUrl function");
+        assertTrue(content.contains("aws.s3.isValidBucketName"),
+            "Module should define aws.s3.isValidBucketName function");
+        assertTrue(content.contains("aws.s3.urlEncodeKey"),
+            "Module should define aws.s3.urlEncodeKey function");
     }
     
     @Test
     void testS3ModuleHasUrlBuilding() {
         String content = copier.getModuleContent(RuntimeModule.AWS_S3);
         
-        assertTrue(content.contains("Aws.S3.buildUrl"),
+        assertTrue(content.contains("aws.s3.buildUrl"),
             "Module should have buildUrl function");
-        assertTrue(content.contains("Aws.S3.buildUrlWithQuery"),
+        assertTrue(content.contains("aws.s3.buildUrlWithQuery"),
             "Module should have buildUrlWithQuery function");
-        assertTrue(content.contains("Aws.S3.buildBucketUrl"),
+        assertTrue(content.contains("aws.s3.buildBucketUrl"),
             "Module should have buildBucketUrl function");
         assertTrue(content.contains("usePathStyle"),
             "Module should support path-style addressing");
@@ -517,9 +517,9 @@ class RuntimeModuleCopierTest {
     void testS3ModuleHasBucketValidation() {
         String content = copier.getModuleContent(RuntimeModule.AWS_S3);
         
-        assertTrue(content.contains("Aws.S3.isValidBucketName"),
+        assertTrue(content.contains("aws.s3.isValidBucketName"),
             "Module should have isValidBucketName function");
-        assertTrue(content.contains("Aws.S3.isValidBucketChar"),
+        assertTrue(content.contains("aws.s3.isValidBucketChar"),
             "Module should have isValidBucketChar function");
         assertTrue(content.contains("xn--"),
             "Module should check for xn-- prefix");
@@ -531,13 +531,13 @@ class RuntimeModuleCopierTest {
     void testS3ModuleHasEndpointHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_S3);
         
-        assertTrue(content.contains("Aws.S3.defaultEndpoint"),
+        assertTrue(content.contains("aws.s3.defaultEndpoint"),
             "Module should have defaultEndpoint function");
-        assertTrue(content.contains("Aws.S3.accelerateEndpoint"),
+        assertTrue(content.contains("aws.s3.accelerateEndpoint"),
             "Module should have accelerateEndpoint constant");
-        assertTrue(content.contains("Aws.S3.dualStackEndpoint"),
+        assertTrue(content.contains("aws.s3.dualStackEndpoint"),
             "Module should have dualStackEndpoint function");
-        assertTrue(content.contains("Aws.S3.localStackEndpoint"),
+        assertTrue(content.contains("aws.s3.localStackEndpoint"),
             "Module should have localStackEndpoint function");
     }
     
@@ -545,13 +545,13 @@ class RuntimeModuleCopierTest {
     void testS3ModuleHasKeyHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_S3);
         
-        assertTrue(content.contains("Aws.S3.getFileName"),
+        assertTrue(content.contains("aws.s3.getFileName"),
             "Module should have getFileName function");
-        assertTrue(content.contains("Aws.S3.getDirectory"),
+        assertTrue(content.contains("aws.s3.getDirectory"),
             "Module should have getDirectory function");
-        assertTrue(content.contains("Aws.S3.getExtension"),
+        assertTrue(content.contains("aws.s3.getExtension"),
             "Module should have getExtension function");
-        assertTrue(content.contains("Aws.S3.joinKey"),
+        assertTrue(content.contains("aws.s3.joinKey"),
             "Module should have joinKey function");
     }
     
@@ -615,25 +615,25 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("Aws.Config.Credentials"),
-            "Module should define Aws.Config.Credentials type");
-        assertTrue(content.contains("Aws.Config.S3Config"),
-            "Module should define Aws.Config.S3Config type");
-        assertTrue(content.contains("Aws.Config.ServiceConfig"),
-            "Module should define Aws.Config.ServiceConfig type");
+        assertTrue(content.contains("aws.config.Credentials"),
+            "Module should define aws.config.Credentials type");
+        assertTrue(content.contains("aws.config.S3Config"),
+            "Module should define aws.config.S3Config type");
+        assertTrue(content.contains("aws.config.ServiceConfig"),
+            "Module should define aws.config.ServiceConfig type");
     }
     
     @Test
     void testConfigModuleHasCredentialsTypes() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
         
-        assertTrue(content.contains("Aws.Config.Credentials"),
+        assertTrue(content.contains("aws.config.Credentials"),
             "Module should have Credentials type");
-        assertTrue(content.contains("Aws.Config.basicCredentials"),
+        assertTrue(content.contains("aws.config.basicCredentials"),
             "Module should have basicCredentials function");
-        assertTrue(content.contains("Aws.Config.temporaryCredentials"),
+        assertTrue(content.contains("aws.config.temporaryCredentials"),
             "Module should have temporaryCredentials function");
-        assertTrue(content.contains("Aws.Config.hasSessionToken"),
+        assertTrue(content.contains("aws.config.hasSessionToken"),
             "Module should have hasSessionToken function");
     }
     
@@ -641,15 +641,15 @@ class RuntimeModuleCopierTest {
     void testConfigModuleHasS3Config() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
         
-        assertTrue(content.contains("Aws.Config.S3Config"),
+        assertTrue(content.contains("aws.config.S3Config"),
             "Module should have S3Config type");
-        assertTrue(content.contains("Aws.Config.s3Config"),
+        assertTrue(content.contains("aws.config.s3Config"),
             "Module should have s3Config function");
-        assertTrue(content.contains("Aws.Config.s3ConfigPathStyle"),
+        assertTrue(content.contains("aws.config.s3ConfigPathStyle"),
             "Module should have s3ConfigPathStyle function");
-        assertTrue(content.contains("Aws.Config.s3ConfigCustom"),
+        assertTrue(content.contains("aws.config.s3ConfigCustom"),
             "Module should have s3ConfigCustom function");
-        assertTrue(content.contains("Aws.Config.s3ConfigLocalStack"),
+        assertTrue(content.contains("aws.config.s3ConfigLocalStack"),
             "Module should have s3ConfigLocalStack function");
     }
     
@@ -657,13 +657,13 @@ class RuntimeModuleCopierTest {
     void testConfigModuleHasRegionHelpers() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
         
-        assertTrue(content.contains("Aws.Config.usEast1"),
+        assertTrue(content.contains("aws.config.usEast1"),
             "Module should have usEast1 constant");
-        assertTrue(content.contains("Aws.Config.euWest1"),
+        assertTrue(content.contains("aws.config.euWest1"),
             "Module should have euWest1 constant");
-        assertTrue(content.contains("Aws.Config.isValidRegion"),
+        assertTrue(content.contains("aws.config.isValidRegion"),
             "Module should have isValidRegion function");
-        assertTrue(content.contains("Aws.Config.defaultRegion"),
+        assertTrue(content.contains("aws.config.defaultRegion"),
             "Module should have defaultRegion constant");
     }
     
@@ -671,9 +671,9 @@ class RuntimeModuleCopierTest {
     void testConfigModuleHasDefaults() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
         
-        assertTrue(content.contains("Aws.Config.defaultTimeout"),
+        assertTrue(content.contains("aws.config.defaultTimeout"),
             "Module should have defaultTimeout constant");
-        assertTrue(content.contains("Aws.Config.defaultMaxRetries"),
+        assertTrue(content.contains("aws.config.defaultMaxRetries"),
             "Module should have defaultMaxRetries constant");
     }
     
@@ -739,11 +739,11 @@ class RuntimeModuleCopierTest {
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
         // Verify expected content
-        assertTrue(content.contains("Aws.Credentials.fromEnvironment"),
+        assertTrue(content.contains("aws.credentials.fromEnvironment"),
             "Module should define fromEnvironment function");
-        assertTrue(content.contains("Aws.Credentials.defaultCredentials"),
+        assertTrue(content.contains("aws.credentials.defaultCredentials"),
             "Module should define defaultCredentials function");
-        assertTrue(content.contains("Aws.Credentials.defaultRegion"),
+        assertTrue(content.contains("aws.credentials.defaultRegion"),
             "Module should define defaultRegion function");
     }
     
@@ -757,7 +757,7 @@ class RuntimeModuleCopierTest {
             "Module should reference AWS_SECRET_ACCESS_KEY");
         assertTrue(content.contains("AWS_SESSION_TOKEN"),
             "Module should reference AWS_SESSION_TOKEN");
-        assertTrue(content.contains("Aws.Credentials.fromEnvironment"),
+        assertTrue(content.contains("aws.credentials.fromEnvironment"),
             "Module should have fromEnvironment function");
     }
     
@@ -765,9 +765,9 @@ class RuntimeModuleCopierTest {
     void testCredentialsModuleHasFileLoading() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
         
-        assertTrue(content.contains("Aws.Credentials.defaultCredentialsFilePath"),
+        assertTrue(content.contains("aws.credentials.defaultCredentialsFilePath"),
             "Module should have defaultCredentialsFilePath function");
-        assertTrue(content.contains("Aws.Credentials.defaultConfigFilePath"),
+        assertTrue(content.contains("aws.credentials.defaultConfigFilePath"),
             "Module should have defaultConfigFilePath function");
         assertTrue(content.contains("/.aws/credentials"),
             "Module should reference credentials file path");
@@ -779,11 +779,11 @@ class RuntimeModuleCopierTest {
     void testCredentialsModuleHasProviderChain() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
         
-        assertTrue(content.contains("Aws.Credentials.defaultCredentials"),
+        assertTrue(content.contains("aws.credentials.defaultCredentials"),
             "Module should have defaultCredentials function");
-        assertTrue(content.contains("Aws.Credentials.lookupEntry"),
+        assertTrue(content.contains("aws.credentials.lookupEntry"),
             "Module should have lookupEntry function");
-        assertTrue(content.contains("Aws.Credentials.profileFromEnvironment"),
+        assertTrue(content.contains("aws.credentials.profileFromEnvironment"),
             "Module should have profileFromEnvironment function");
     }
     
@@ -795,9 +795,9 @@ class RuntimeModuleCopierTest {
             "Module should reference AWS_REGION");
         assertTrue(content.contains("AWS_DEFAULT_REGION"),
             "Module should reference AWS_DEFAULT_REGION");
-        assertTrue(content.contains("Aws.Credentials.regionFromEnvironment"),
+        assertTrue(content.contains("aws.credentials.regionFromEnvironment"),
             "Module should have regionFromEnvironment function");
-        assertTrue(content.contains("Aws.Credentials.defaultRegion"),
+        assertTrue(content.contains("aws.credentials.defaultRegion"),
             "Module should have defaultRegion function");
     }
     
@@ -805,11 +805,11 @@ class RuntimeModuleCopierTest {
     void testCredentialsModuleHasConvenienceFunctions() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CREDENTIALS);
         
-        assertTrue(content.contains("Aws.Credentials.envAccessKeyId"),
+        assertTrue(content.contains("aws.credentials.envAccessKeyId"),
             "Module should have envAccessKeyId constant");
-        assertTrue(content.contains("Aws.Credentials.envSecretAccessKey"),
+        assertTrue(content.contains("aws.credentials.envSecretAccessKey"),
             "Module should have envSecretAccessKey constant");
-        assertTrue(content.contains("Aws.Credentials.envSessionToken"),
+        assertTrue(content.contains("aws.credentials.envSessionToken"),
             "Module should have envSessionToken constant");
     }
     

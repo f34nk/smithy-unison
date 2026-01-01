@@ -27,7 +27,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.escape : Text -> Text"),
+        assertTrue(output.contains("aws.xml.escape : Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check escaping of XML special characters
@@ -45,7 +45,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.unescape : Text -> Text"),
+        assertTrue(output.contains("aws.xml.unescape : Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check unescaping patterns
@@ -60,7 +60,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.extractElement : Text -> Text -> Text"),
+        assertTrue(output.contains("aws.xml.extractElement : Text -> Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it looks for opening and closing tags
@@ -83,7 +83,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.extractAttribute : Text -> Text -> Text"),
+        assertTrue(output.contains("aws.xml.extractAttribute : Text -> Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it handles the case when attribute is not found
@@ -98,7 +98,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.encode : a -> Bytes"),
+        assertTrue(output.contains("aws.xml.encode : a -> Bytes"),
                 "Should generate correct signature. Got: " + output);
         
         // Should be a placeholder
@@ -113,7 +113,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.decode : Bytes -> a"),
+        assertTrue(output.contains("aws.xml.decode : Bytes -> a"),
                 "Should generate correct signature. Got: " + output);
         
         // Should indicate it's not fully implemented
@@ -128,7 +128,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.element : Text -> Text -> Text"),
+        assertTrue(output.contains("aws.xml.element : Text -> Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it creates open and close tags
@@ -147,7 +147,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.elementWithAttrs : Text -> [(Text, Text)] -> Text -> Text"),
+        assertTrue(output.contains("aws.xml.elementWithAttrs : Text -> [(Text, Text)] -> Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it handles attributes
@@ -162,7 +162,7 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check function signature
-        assertTrue(output.contains("Aws.Xml.optionalElement : Text -> Optional Text -> Text"),
+        assertTrue(output.contains("aws.xml.optionalElement : Text -> Optional Text -> Text"),
                 "Should generate correct signature. Got: " + output);
         
         // Check that it handles Some and None
@@ -181,15 +181,15 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check all core functions are generated
-        assertTrue(output.contains("Aws.Xml.escape :"),
+        assertTrue(output.contains("aws.xml.escape :"),
                 "Should generate escape. Got: " + output);
-        assertTrue(output.contains("Aws.Xml.extractElement :"),
+        assertTrue(output.contains("aws.xml.extractElement :"),
                 "Should generate extractElement. Got: " + output);
-        assertTrue(output.contains("Aws.Xml.extractAttribute :"),
+        assertTrue(output.contains("aws.xml.extractAttribute :"),
                 "Should generate extractAttribute. Got: " + output);
-        assertTrue(output.contains("Aws.Xml.encode :"),
+        assertTrue(output.contains("aws.xml.encode :"),
                 "Should generate encode. Got: " + output);
-        assertTrue(output.contains("Aws.Xml.decode :"),
+        assertTrue(output.contains("aws.xml.decode :"),
                 "Should generate decode. Got: " + output);
     }
     
@@ -200,15 +200,15 @@ public class XmlGeneratorTest {
         String output = writer.toString();
         
         // Check all functions including helpers
-        assertTrue(output.contains("Aws.Xml.escape :"), "Should generate escape");
-        assertTrue(output.contains("Aws.Xml.unescape :"), "Should generate unescape");
-        assertTrue(output.contains("Aws.Xml.element :"), "Should generate element");
-        assertTrue(output.contains("Aws.Xml.elementWithAttrs :"), "Should generate elementWithAttrs");
-        assertTrue(output.contains("Aws.Xml.optionalElement :"), "Should generate optionalElement");
-        assertTrue(output.contains("Aws.Xml.extractElement :"), "Should generate extractElement");
-        assertTrue(output.contains("Aws.Xml.extractAttribute :"), "Should generate extractAttribute");
-        assertTrue(output.contains("Aws.Xml.encode :"), "Should generate encode");
-        assertTrue(output.contains("Aws.Xml.decode :"), "Should generate decode");
+        assertTrue(output.contains("aws.xml.escape :"), "Should generate escape");
+        assertTrue(output.contains("aws.xml.unescape :"), "Should generate unescape");
+        assertTrue(output.contains("aws.xml.element :"), "Should generate element");
+        assertTrue(output.contains("aws.xml.elementWithAttrs :"), "Should generate elementWithAttrs");
+        assertTrue(output.contains("aws.xml.optionalElement :"), "Should generate optionalElement");
+        assertTrue(output.contains("aws.xml.extractElement :"), "Should generate extractElement");
+        assertTrue(output.contains("aws.xml.extractAttribute :"), "Should generate extractAttribute");
+        assertTrue(output.contains("aws.xml.encode :"), "Should generate encode");
+        assertTrue(output.contains("aws.xml.decode :"), "Should generate decode");
         
         // Check section comments
         assertTrue(output.contains("AWS XML Utilities"),
