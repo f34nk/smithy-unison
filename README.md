@@ -53,7 +53,7 @@ Check out [AWS_SDK_SUPPORT.md](https://github.com/f34nk/smithy-unison/blob/main/
 - Gradle 8.0+
 - Unison (UCM)
 - Smithy CLI
-- Docker Compose (for testing)
+- Docker and Terraform (for testing)
 
 ## Build
 
