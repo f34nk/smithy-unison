@@ -154,12 +154,12 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         // Extract service name for signing (lowercase, without version suffix)
         String signingServiceName = extractSigningServiceName(serviceName);
         writer.write("signingConfig = Aws.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
-        writer.write("signedHeaders = !(Aws.SigV4.signRequest signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("allHeaders = !(Aws.SigV4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
         
         // Make HTTP request
         writer.write("");
         writer.write("-- Make HTTP request");
-        writer.write("request = Http.Request.post url signedHeaders bodyBytes");
+        writer.write("request = Http.Request.post url allHeaders bodyBytes");
         writer.write("response = !(executeRequest request)");
         
         // Handle response - check status and parse
