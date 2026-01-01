@@ -3,7 +3,7 @@
 -- Note: These tests focus on text-based parsing functions to avoid
 -- {Throw XMLError} ability complexities in test code.
 
-namespace aws.xml.bridge.Test
+namespace aws.xml.bridge.test
 
 use aws.xml
 use Text ++

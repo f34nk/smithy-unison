@@ -1,6 +1,6 @@
 -- Unit tests for AWS JSON Runtime Module
 
-namespace aws.json.Test
+namespace aws.json.test
 
 use aws.json
 use Bytes

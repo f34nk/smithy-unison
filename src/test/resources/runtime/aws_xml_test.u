@@ -1,6 +1,6 @@
 -- Unit tests for AWS XML Runtime Module
 
-namespace aws.xml.Test
+namespace aws.xml.test
 
 use aws.xml
 use Text ++

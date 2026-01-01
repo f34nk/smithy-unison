@@ -1,6 +1,6 @@
 -- Unit tests for AWS JSON Bridge Module
 
-namespace aws.json.bridge.Test
+namespace aws.json.bridge.test
 
 use aws.json
 use Bytes
