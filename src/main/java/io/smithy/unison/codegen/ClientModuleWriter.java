@@ -149,7 +149,7 @@ public final class ClientModuleWriter {
         
         // Generate model types (structures, enums, errors) referenced by operations
         // Types are always needed - protocol generators use these types but don't generate them
-        generateModelTypes(writer);
+        generateModelTypes(writer, protocol);
         
         // Generate operations
         for (ShapeId opId : service.getOperations()) {
@@ -235,7 +235,7 @@ public final class ClientModuleWriter {
      * <p>Collects all shapes referenced by operations (input, output, errors, nested)
      * and generates Unison record types for structures and sum types for enums.
      */
-    private void generateModelTypes(UnisonWriter writer) {
+    private void generateModelTypes(UnisonWriter writer, AwsProtocol protocol) {
         Set<ShapeId> generatedTypes = new HashSet<>();
         Set<StructureShape> structures = new HashSet<>();
         Set<StructureShape> errors = new HashSet<>();
@@ -303,7 +303,10 @@ public final class ClientModuleWriter {
             }
             
             // Generate XML parsers for structures (used by response parsing)
-            generateXmlParsers(structures, writer);
+            // Only generate for XML-based protocols (REST-XML, AWS Query, EC2 Query)
+            if (protocol.isXml()) {
+                generateXmlParsers(structures, writer);
+            }
         }
         
         // Generate error types
@@ -382,13 +385,23 @@ public final class ClientModuleWriter {
         writer.write("$L err =", funcName);
         writer.indent();
         
-        // Check if there's a message field
-        boolean hasMessage = error.getAllMembers().values().stream()
-            .anyMatch(m -> m.getMemberName().equalsIgnoreCase("message"));
+        // Check if there's a message field and whether it's required
+        var messageField = error.getAllMembers().values().stream()
+            .filter(m -> m.getMemberName().equalsIgnoreCase("message"))
+            .findFirst();
         
-        if (hasMessage) {
-            writer.write("Failure (typeLink $L) err.message (Any err)", typeName);
+        if (messageField.isPresent()) {
+            boolean isRequired = messageField.get().isRequired();
+            if (isRequired) {
+                // Required message field - access directly
+                writer.write("Failure (typeLink $L) ($L.message err) (Any err)", typeName, typeName);
+            } else {
+                // Optional message field - use getOrElse with default
+                writer.write("Failure (typeLink $L) (Optional.getOrElse \"\" ($L.message err)) (Any err)", 
+                    typeName, typeName);
+            }
         } else {
+            // No message field - use type name as message
             writer.write("Failure (typeLink $L) \"$L error\" (Any err)", typeName, typeName);
         }
         

@@ -156,6 +156,18 @@ public class PaginationGenerator {
         // Config type with namespace
         String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
         
+        // Determine the token type from the input structure
+        String tokenType = "Text"; // default
+        if (operation.getInput().isPresent()) {
+            StructureShape inputShape = model.expectShape(operation.getInput().get(), StructureShape.class);
+            Optional<MemberShape> tokenMember = inputShape.getMember(inputToken);
+            if (tokenMember.isPresent()) {
+                Shape tokenTargetShape = model.expectShape(tokenMember.get().getTarget());
+                tokenType = getUnisonType(tokenTargetShape);
+                LOGGER.info("Token type for " + operation.getId().getName() + ": " + tokenType);
+            }
+        }
+        
         // Get the item type from the output structure
         String itemsField = UnisonSymbolProvider.toUnisonFunctionName(items);
         String itemType = "a"; // default to polymorphic
@@ -171,6 +183,21 @@ public class PaginationGenerator {
             if (itemsMember.isEmpty()) {
                 // Try lowercase version
                 itemsMember = outputShape.getMember(items.toLowerCase());
+            }
+            // If still not found, scan for the first list field in the output
+            if (itemsMember.isEmpty()) {
+                LOGGER.warning("Items field '" + items + "' not found in " + outputShape.getId() + 
+                             ", scanning for first list field");
+                for (MemberShape member : outputShape.getAllMembers().values()) {
+                    Shape memberTarget = model.expectShape(member.getTarget());
+                    if (memberTarget instanceof ListShape) {
+                        itemsMember = Optional.of(member);
+                        itemsField = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                        LOGGER.info("Found list field: " + member.getMemberName() + 
+                                  " (converted to " + itemsField + ")");
+                        break;
+                    }
+                }
             }
             if (itemsMember.isPresent()) {
                 Shape itemsShape = model.expectShape(itemsMember.get().getTarget());
@@ -189,7 +216,7 @@ public class PaginationGenerator {
         writer.writeDocComment(
             "Auto-paginating version of " + opName + ".\n\n" +
             "Automatically fetches all pages and collects all items from the '" + items + "' field.\n" +
-            "Uses '" + inputToken + "' as input token and '" + outputToken + "' as output token.");
+            "Uses '" + inputToken + "' (type: " + tokenType + ") as input token and '" + outputToken + "' as output token.");
         
         // Function signature with concrete item type and namespaced types
         // Note: HTTP operations use {IO, Http, Exception, Threads} abilities for real HTTP via @unison/http
@@ -201,9 +228,11 @@ public class PaginationGenerator {
         writer.write("let");
         writer.indent();
         
-        // Recursive helper function with concrete type
-        // In do blocks, bindings are scoped to the rest of the block (no need for inner 'let')
-        writer.write("go : Optional Text -> [" + itemType + "] -> '{IO, Http, Exception, Threads} [" + itemType + "]");
+        // Recursive helper function with concrete types for token and items
+        // Token type is determined from the input structure's pagination field
+        // Wrap complex types in parentheses for Optional
+        String wrappedTokenType = tokenType.contains(" ") ? "(" + tokenType + ")" : tokenType;
+        writer.write("go : Optional " + wrappedTokenType + " -> [" + itemType + "] -> '{IO, Http, Exception, Threads} [" + itemType + "]");
         writer.write("go token acc = do");
         writer.indent();
         
@@ -222,6 +251,7 @@ public class PaginationGenerator {
         String outputTokenField = UnisonSymbolProvider.toUnisonFunctionName(outputToken);
         writer.write("match ($L.$L response) with", outputType, outputTokenField);
         writer.indent();
+        // For non-Text tokens, we need to wrap them in Some
         writer.write("Some nextToken -> !(go (Some nextToken) allItems)");
         writer.write("None -> allItems");
         writer.dedent();
