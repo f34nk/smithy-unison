@@ -13,31 +13,31 @@ AWS credentials for signing requests.
 Contains the access key ID, secret access key, and optional session token
 for temporary credentials (e.g., from STS AssumeRole).
 }}
-type Aws.Credentials = {
+type aws.credentials = {
   accessKeyId : Text,
   secretAccessKey : Text,
   sessionToken : Optional Text
 }
 
 {{ Create credentials without a session token. }}
-Aws.Credentials.basic : Text -> Text -> Aws.Credentials
-Aws.Credentials.basic accessKey secretKey =
-  Aws.Credentials.Credentials accessKey secretKey None
+aws.credentials.basic : Text -> Text -> aws.credentials
+aws.credentials.basic accessKey secretKey =
+  aws.credentials.Credentials accessKey secretKey None
 
 {{ Create credentials with a session token (for temporary credentials). }}
-Aws.Credentials.withSessionToken : Text -> Text -> Text -> Aws.Credentials
-Aws.Credentials.withSessionToken accessKey secretKey token =
-  Aws.Credentials.Credentials accessKey secretKey (Some token)
+aws.credentials.withSessionToken : Text -> Text -> Text -> aws.credentials
+aws.credentials.withSessionToken accessKey secretKey token =
+  aws.credentials.Credentials accessKey secretKey (Some token)
 
 {{
 Configuration for signing AWS requests.
 
 Contains the region, service name, and credentials needed for signing.
 }}
-type Aws.SigningConfig = {
+type aws.signingconfig = {
   region : Text,
   service : Text,
-  credentials : Aws.Credentials
+  credentials : aws.credentials
 }
 
 {{
@@ -45,16 +45,16 @@ Credential scope for AWS SigV4 signing.
 
 Format: YYYYMMDD/region/service/aws4_request
 }}
-type Aws.CredentialScope = {
+type aws.credentialscope = {
   date : Text,
   region : Text,
   service : Text
 }
 
 {{ Convert credential scope to string format: YYYYMMDD/region/service/aws4_request }}
-Aws.CredentialScope.toText : Aws.CredentialScope -> Text
-Aws.CredentialScope.toText credScope =
-  (Aws.CredentialScope.date credScope) ++ "/" ++ (Aws.CredentialScope.region credScope) ++ "/" ++ (Aws.CredentialScope.service credScope) ++ "/aws4_request"
+aws.credentialscope.toText : aws.credentialscope -> Text
+aws.credentialscope.toText credScope =
+  (aws.credentialscope.date credScope) ++ "/" ++ (aws.credentialscope.region credScope) ++ "/" ++ (aws.credentialscope.service credScope) ++ "/aws4_request"
 
 -- =============================================================================
 -- Timestamp Functions
@@ -66,8 +66,8 @@ Get the current AWS-formatted timestamp.
 Returns timestamp in ISO 8601 basic format: YYYYMMDD'T'HHMMSS'Z'
 Example: "20231215T143052Z"
 }}
-Aws.SigV4.getTimestamp : '{IO} Text
-Aws.SigV4.getTimestamp _ =
+aws.sigv4.getTimestamp : '{IO} Text
+aws.sigv4.getTimestamp _ =
   -- Get current UTC time and format as AWS timestamp
   -- Format: YYYYMMDD'T'HHMMSS'Z' (ISO 8601 basic format)
   -- Note: This is a placeholder implementation. Full time formatting requires
@@ -76,8 +76,8 @@ Aws.SigV4.getTimestamp _ =
   "20240101T000000Z"
 
 {{ Extract the date stamp (YYYYMMDD) from an AWS timestamp. }}
-Aws.SigV4.getDateStamp : Text -> Text
-Aws.SigV4.getDateStamp timestamp =
+aws.sigv4.getDateStamp : Text -> Text
+aws.sigv4.getDateStamp timestamp =
   Text.take 8 timestamp
 
 -- =============================================================================
@@ -90,8 +90,8 @@ Hash the request payload using SHA-256.
 Returns the lowercase hex-encoded hash of the body.
 For GET requests with no body, use Bytes.empty.
 }}
-Aws.SigV4.hashPayload : Bytes -> Text
-Aws.SigV4.hashPayload body =
+aws.sigv4.hashPayload : Bytes -> Text
+aws.sigv4.hashPayload body =
   hashBytes Sha2_256 body |> Bytes.toHex
 
 -- =============================================================================
@@ -107,8 +107,8 @@ header-name:header-value\n
 Multiple values for the same header are joined with commas.
 Leading/trailing whitespace is trimmed from values.
 }}
-Aws.SigV4.canonicalHeaders : [(Text, Text)] -> Text
-Aws.SigV4.canonicalHeaders headers =
+aws.sigv4.canonicalHeaders : [(Text, Text)] -> Text
+aws.sigv4.canonicalHeaders headers =
   headers
     |> List.map (cases (name, value) -> (Text.toLowercase name, Text.trim value))
     |> List.sortBy Tuple.at1
@@ -122,8 +122,8 @@ Create the signed headers list.
 Returns a semicolon-separated list of lowercase header names.
 Example: "content-type;host;x-amz-date"
 }}
-Aws.SigV4.signedHeaders : [(Text, Text)] -> Text
-Aws.SigV4.signedHeaders headers =
+aws.sigv4.signedHeaders : [(Text, Text)] -> Text
+aws.sigv4.signedHeaders headers =
   headers
     |> List.map (cases (name, _) -> Text.toLowercase name)
     |> List.sort
@@ -141,12 +141,12 @@ in the signing process. Format:
   SignedHeaders\n
   HashedPayload
 }}
-Aws.SigV4.canonicalRequest : Text -> Text -> Text -> [(Text, Text)] -> Bytes -> Text
-Aws.SigV4.canonicalRequest method path queryString headers body =
+aws.sigv4.canonicalRequest : Text -> Text -> Text -> [(Text, Text)] -> Bytes -> Text
+aws.sigv4.canonicalRequest method path queryString headers body =
   let
-    canonicalHeaders = Aws.SigV4.canonicalHeaders headers
-    signedHeaders = Aws.SigV4.signedHeaders headers
-    hashedPayload = Aws.SigV4.hashPayload body
+    canonicalHeaders = aws.sigv4.canonicalHeaders headers
+    signedHeaders = aws.sigv4.signedHeaders headers
+    hashedPayload = aws.sigv4.hashPayload body
     Text.join "\n" [
       method,
       path,
@@ -170,11 +170,11 @@ and hashed canonical request. Format:
   CredentialScope\n
   HashedCanonicalRequest
 }}
-Aws.SigV4.stringToSign : Text -> Aws.CredentialScope -> Text -> Text
-Aws.SigV4.stringToSign timestamp scope canonicalRequest =
+aws.sigv4.stringToSign : Text -> aws.credentialscope -> Text -> Text
+aws.sigv4.stringToSign timestamp scope canonicalRequest =
   let
     hashedCanonicalRequest = hashBytes Sha2_256 (Text.toUtf8 canonicalRequest) |> Bytes.toHex
-    credentialScope = Aws.CredentialScope.toText scope
+    credentialScope = aws.credentialscope.toText scope
     Text.join "\n" [
       "AWS4-HMAC-SHA256",
       timestamp,
@@ -191,8 +191,8 @@ The signing key is derived by successively applying HMAC-SHA256:
   kService = HMAC(kRegion, service)
   kSigning = HMAC(kService, "aws4_request")
 }}
-Aws.SigV4.deriveSigningKey : Text -> Text -> Text -> Text -> Bytes
-Aws.SigV4.deriveSigningKey secretKey dateStamp region service =
+aws.sigv4.deriveSigningKey : Text -> Text -> Text -> Text -> Bytes
+aws.sigv4.deriveSigningKey secretKey dateStamp region service =
   let
     kSecret = Text.toUtf8 ("AWS4" ++ secretKey)
     kDate = hmacBytes Sha2_256 kSecret (Text.toUtf8 dateStamp)
@@ -207,8 +207,8 @@ Calculate the request signature.
 Uses HMAC-SHA256 with the signing key to sign the string to sign.
 Returns the lowercase hex-encoded signature.
 }}
-Aws.SigV4.signature : Bytes -> Text -> Text
-Aws.SigV4.signature signingKey stringToSign =
+aws.sigv4.signature : Bytes -> Text -> Text
+aws.sigv4.signature signingKey stringToSign =
   hmacBytes Sha2_256 signingKey (Text.toUtf8 stringToSign) |> Bytes.toHex
 
 {{
@@ -217,10 +217,10 @@ Build the Authorization header value.
 Format:
   AWS4-HMAC-SHA256 Credential=accessKey/scope,SignedHeaders=headers,Signature=sig
 }}
-Aws.SigV4.authorizationHeader : Text -> Aws.CredentialScope -> Text -> Text -> Text
-Aws.SigV4.authorizationHeader accessKeyId scope signedHeaders signature =
+aws.sigv4.authorizationHeader : Text -> aws.credentialscope -> Text -> Text -> Text
+aws.sigv4.authorizationHeader accessKeyId scope signedHeaders signature =
   let
-    credential = accessKeyId ++ "/" ++ Aws.CredentialScope.toText scope
+    credential = accessKeyId ++ "/" ++ aws.credentialscope.toText scope
     "AWS4-HMAC-SHA256 Credential=" ++ credential ++ ",SignedHeaders=" ++ signedHeaders ++ ",Signature=" ++ signature
 
 -- =============================================================================
@@ -245,33 +245,33 @@ Parameters:
 - headers: Request headers as name-value pairs
 - body: Request body bytes
 }}
-Aws.SigV4.signRequest : Aws.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
-Aws.SigV4.signRequest config method path queryString headers body _ =
+aws.sigv4.signRequest : aws.signingconfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+aws.sigv4.signRequest config method path queryString headers body _ =
   -- Get timestamp
-  timestamp = !Aws.SigV4.getTimestamp
-  dateStamp = Aws.SigV4.getDateStamp timestamp
+  timestamp = !aws.sigv4.getTimestamp
+  dateStamp = aws.sigv4.getDateStamp timestamp
   -- Build credential scope
-  scope = Aws.CredentialScope.CredentialScope dateStamp (Aws.SigningConfig.region config) (Aws.SigningConfig.service config)
+  scope = aws.credentialscope.CredentialScope dateStamp (aws.signingconfig.region config) (aws.signingconfig.service config)
   -- Hash payload
-  payloadHash = Aws.SigV4.hashPayload body
+  payloadHash = aws.sigv4.hashPayload body
   -- Add required headers for signing
   headersWithAmz = headers |> List.cons ("x-amz-date", timestamp) |> List.cons ("x-amz-content-sha256", payloadHash)
   -- Build canonical request
-  canonicalReq = Aws.SigV4.canonicalRequest method path queryString headersWithAmz body
+  canonicalReq = aws.sigv4.canonicalRequest method path queryString headersWithAmz body
   -- Build string to sign
-  strToSign = Aws.SigV4.stringToSign timestamp scope canonicalReq
+  strToSign = aws.sigv4.stringToSign timestamp scope canonicalReq
   -- Get credentials from config
-  creds = Aws.SigningConfig.credentials config
+  creds = aws.signingconfig.credentials config
   -- Derive signing key and calculate signature
-  signingKey = Aws.SigV4.deriveSigningKey (Aws.Credentials.secretAccessKey creds) dateStamp (Aws.SigningConfig.region config) (Aws.SigningConfig.service config)
-  sig = Aws.SigV4.signature signingKey strToSign
+  signingKey = aws.sigv4.deriveSigningKey (aws.credentials.secretAccessKey creds) dateStamp (aws.signingconfig.region config) (aws.signingconfig.service config)
+  sig = aws.sigv4.signature signingKey strToSign
   -- Build authorization header
-  signedHdrs = Aws.SigV4.signedHeaders headersWithAmz
-  authHeader = Aws.SigV4.authorizationHeader (Aws.Credentials.accessKeyId creds) scope signedHdrs sig
+  signedHdrs = aws.sigv4.signedHeaders headersWithAmz
+  authHeader = aws.sigv4.authorizationHeader (aws.credentials.accessKeyId creds) scope signedHdrs sig
   -- Build final headers list
   baseHeaders = [("Authorization", authHeader), ("X-Amz-Date", timestamp), ("X-Amz-Content-Sha256", payloadHash)]
   -- Add session token header if present
-  match Aws.Credentials.sessionToken creds with
+  match aws.credentials.sessionToken creds with
     Some token -> List.cons ("X-Amz-Security-Token", token) baseHeaders
     None -> baseHeaders
 
@@ -281,7 +281,7 @@ Add SigV4 signing headers to an existing header list.
 Convenience function that signs the request and merges the signing
 headers with the original headers.
 }}
-Aws.SigV4.addSigningHeaders : Aws.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
-Aws.SigV4.addSigningHeaders config method path queryString headers body _ =
-  signingHeaders = !(Aws.SigV4.signRequest config method path queryString headers body)
+aws.sigv4.addSigningHeaders : aws.signingconfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+aws.sigv4.addSigningHeaders config method path queryString headers body _ =
+  signingHeaders = !(aws.sigv4.signRequest config method path queryString headers body)
   headers ++ signingHeaders
