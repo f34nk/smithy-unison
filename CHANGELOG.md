@@ -4,6 +4,15 @@
 
 ### Added
 
+#### DynamoDB AttributeValue Type Support
+- Special handling for DynamoDB AttributeValue union type
+- Skip code generation for AttributeValue, use runtime type `Aws.Json.AttributeValue`
+- Automatic detection of `com.amazonaws.dynamodb#AttributeValue` shape
+- Map AttributeValue fields to runtime type in structure generation
+- Use `Aws.Json.attributeValueToJson` for request serialization
+- Use `Aws.Json.jsonToAttributeValue` for response deserialization
+- Support for AttributeValue in lists and maps (nested collections)
+
 #### AWS JSON Protocol Operation Generation
 - Enhanced operation generation for AWS JSON 1.0/1.1 protocols with complete implementation
 - Proper X-Amz-Target header formation using service name and operation name

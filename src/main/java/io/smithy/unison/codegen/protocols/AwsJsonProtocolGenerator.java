@@ -279,6 +279,22 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
     }
     
     /**
+     * Checks if a union shape is the DynamoDB AttributeValue type.
+     * 
+     * <p>DynamoDB's AttributeValue is a special union that should use the runtime
+     * type Aws.Json.AttributeValue with its special serialization/deserialization.
+     * 
+     * @param union The union shape to check
+     * @return true if this is DynamoDB's AttributeValue union
+     */
+    private boolean isDynamoDBAttributeValue(UnionShape union) {
+        String shapeId = union.getId().toString();
+        // Check if this is the DynamoDB AttributeValue union
+        // Pattern: com.amazonaws.dynamodb#AttributeValue
+        return shapeId.contains("dynamodb") && shapeId.endsWith("#AttributeValue");
+    }
+    
+    /**
      * Generates Unison code to convert a member value to JsonValue.
      */
     private String generateJsonValueForMember(MemberShape member, Model model, String clientNamespace, String inputVar) {
@@ -329,6 +345,16 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else if (shape.isStructureShape()) {
             // Nested structure - need recursive serialization
             String structType = UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
+            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            return serializerName + " " + varName;
+        } else if (shape.isUnionShape()) {
+            // Union - check if it's DynamoDB AttributeValue
+            UnionShape unionShape = shape.asUnionShape().get();
+            if (isDynamoDBAttributeValue(unionShape)) {
+                // Use runtime AttributeValue converter
+                return "Aws.Json.attributeValueToJson " + varName;
+            }
+            // Generic union - need serializer
             String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
             return serializerName + " " + varName;
         } else if (shape.isEnumShape()) {
@@ -466,6 +492,18 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
+        } else if (target.isUnionShape()) {
+            // Union - check if it's DynamoDB AttributeValue
+            UnionShape unionShape = target.asUnionShape().get();
+            if (isDynamoDBAttributeValue(unionShape)) {
+                // Use runtime AttributeValue converter
+                return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap Aws.Json.jsonToAttributeValue",
+                        fieldName, jsonVar);
+            }
+            // Generic union - need parser
+            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap %s",
+                    fieldName, jsonVar, parserName);
         } else if (target.isEnumShape()) {
             // Enum - parse from text
             String fromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(target.getId().getName() + "FromText", clientNamespace);
@@ -498,6 +536,16 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else if (target.isBlobShape()) {
             return String.format("(cases Aws.Json.JsonString s -> Bytes.fromBase64 s; _ -> None) %s", varName);
         } else if (target.isStructureShape()) {
+            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            return String.format("%s %s", parserName, varName);
+        } else if (target.isUnionShape()) {
+            // Union - check if it's DynamoDB AttributeValue
+            UnionShape unionShape = target.asUnionShape().get();
+            if (isDynamoDBAttributeValue(unionShape)) {
+                // Use runtime AttributeValue converter
+                return String.format("Aws.Json.jsonToAttributeValue %s", varName);
+            }
+            // Generic union - need parser
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
         } else if (target.isEnumShape()) {

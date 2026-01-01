@@ -276,10 +276,16 @@ public final class ClientModuleWriter {
                     generator.generate(writer);
                     writer.writeBlankLine();
                 } else if (enumShape instanceof UnionShape) {
-                    // Generate union types as sum types
-                    UnionGenerator generator = new UnionGenerator((UnionShape) enumShape, model, clientNamespace);
-                    generator.generate(writer);
-                    writer.writeBlankLine();
+                    // Check if this is DynamoDB AttributeValue - skip generation, use runtime type
+                    UnionShape unionShape = (UnionShape) enumShape;
+                    if (!isDynamoDBAttributeValue(unionShape)) {
+                        // Generate union types as sum types
+                        UnionGenerator generator = new UnionGenerator(unionShape, model, clientNamespace);
+                        generator.generate(writer);
+                        writer.writeBlankLine();
+                    } else {
+                        LOGGER.fine("Skipping AttributeValue union generation - using runtime type Aws.Json.AttributeValue");
+                    }
                 }
             }
         }
@@ -641,6 +647,22 @@ public final class ClientModuleWriter {
         }
         
         return copied;
+    }
+    
+    /**
+     * Checks if a union shape is the DynamoDB AttributeValue type.
+     * 
+     * <p>DynamoDB's AttributeValue is a special union that should use the runtime
+     * type Aws.Json.AttributeValue instead of generating a new type.
+     * 
+     * @param union The union shape to check
+     * @return true if this is DynamoDB's AttributeValue union
+     */
+    private boolean isDynamoDBAttributeValue(UnionShape union) {
+        String shapeId = union.getId().toString();
+        // Check if this is the DynamoDB AttributeValue union
+        // Pattern: com.amazonaws.dynamodb#AttributeValue
+        return shapeId.contains("dynamodb") && shapeId.endsWith("#AttributeValue");
     }
     
     /**
