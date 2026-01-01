@@ -23,7 +23,7 @@
 - Include original headers in signed requests (previously only signing headers were sent)
 
 #### Smithy Document Type Support
-- Map Smithy `document` shapes to `Aws.Json.JsonValue` runtime type
+- Map Smithy `document` shapes to `aws.json.JsonValue` runtime type
 - Pass-through serialization for document types in JSON protocols
 - Pass-through deserialization for document types in JSON protocols
 - Support for document types in nested structures, lists, and maps
@@ -31,11 +31,11 @@
 
 #### DynamoDB AttributeValue Type Support
 - Special handling for DynamoDB AttributeValue union type
-- Skip code generation for AttributeValue, use runtime type `Aws.Json.AttributeValue`
+- Skip code generation for AttributeValue, use runtime type `aws.json.AttributeValue`
 - Automatic detection of `com.amazonaws.dynamodb#AttributeValue` shape
 - Map AttributeValue fields to runtime type in structure generation
-- Use `Aws.Json.attributeValueToJson` for request serialization
-- Use `Aws.Json.jsonToAttributeValue` for response deserialization
+- Use `aws.json.attributeValueToJson` for request serialization
+- Use `aws.json.jsonToAttributeValue` for response deserialization
 - Support for AttributeValue in lists and maps (nested collections)
 
 #### AWS JSON Protocol Operation Generation
@@ -112,23 +112,23 @@
 - `Text.split` and `URI.parse` resolution when multiple base libraries in scope
 
 #### Retry Logic with Exponential Backoff
-- `Aws.Http.RetryConfig` type for configurable retry behavior
-- `Aws.Http.RetryResult` tracking attempts and delay times
-- `Aws.Http.calculateBackoff` for exponential backoff calculation
-- `Aws.Http.parseRetryAfter` to parse Retry-After headers
-- `Aws.Http.withRetry` and convenience retry functions
+- `aws.http.RetryConfig` type for configurable retry behavior
+- `aws.http.RetryResult` tracking attempts and delay times
+- `aws.http.calculateBackoff` for exponential backoff calculation
+- `aws.http.parseRetryAfter` to parse Retry-After headers
+- `aws.http.withRetry` and convenience retry functions
 
 #### AWS Error Classification and Parsing
 - Error classification helpers: `isNotFound`, `isAccessDenied`, `isThrottled`, `isRetryable`
-- `Aws.Http.Error.toText` for detailed error logging
-- `Aws.Http.parseErrorXml` and `Aws.Http.parseError` for structured error parsing
-- Try/catch helpers: `Aws.Http.try`, `Aws.Http.tryOptional`
-- Extended `Aws.Http.Error` with `hostId` field for S3 debugging
+- `aws.http.Error.toText` for detailed error logging
+- `aws.http.parseErrorXml` and `aws.http.parseError` for structured error parsing
+- Try/catch helpers: `aws.http.try`, `aws.http.tryOptional`
+- Extended `aws.http.Error` with `hostId` field for S3 debugging
 
 #### Improved HTTP Error Handling
-- `Aws.Http.Error` type for structured AWS error information
+- `aws.http.Error` type for structured AWS error information
 - `handleHttpResponse` now parses AWS XML error responses and raises proper exceptions
-- Helper functions: `Aws.Http.isSuccessResponse`, `Aws.Http.isEmptyResponse`
+- Helper functions: `aws.http.isSuccessResponse`, `aws.http.isEmptyResponse`
 - Proper handling of 204 No Content responses
 
 #### XML Response Parser Generation
