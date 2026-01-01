@@ -246,6 +246,9 @@ public final class StructureGenerator {
             return "Bytes";
         } else if (shape instanceof TimestampShape) {
             return "Text";
+        } else if (shape instanceof DocumentShape) {
+            // Document type for schema-less JSON - map to JsonValue
+            return "Aws.Json.JsonValue";
         } else if (shape instanceof ListShape) {
             ListShape list = (ListShape) shape;
             Shape memberShape = model.expectShape(list.getMember().getTarget());

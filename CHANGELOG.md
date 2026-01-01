@@ -4,6 +4,13 @@
 
 ### Added
 
+#### Smithy Document Type Support
+- Map Smithy `document` shapes to `Aws.Json.JsonValue` runtime type
+- Pass-through serialization for document types in JSON protocols
+- Pass-through deserialization for document types in JSON protocols
+- Support for document types in nested structures, lists, and maps
+- Enable schema-less JSON data in AWS services
+
 #### DynamoDB AttributeValue Type Support
 - Special handling for DynamoDB AttributeValue union type
 - Skip code generation for AttributeValue, use runtime type `Aws.Json.AttributeValue`

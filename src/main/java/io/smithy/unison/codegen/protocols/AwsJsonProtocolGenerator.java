@@ -365,6 +365,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else if (shape.isTimestampShape()) {
             // Timestamp as ISO-8601 string (AWS JSON default)
             return "Aws.Json.JsonString (Instant.toText " + varName + ")";
+        } else if (shape.isDocumentShape()) {
+            // Document type - pass through as-is (already JsonValue)
+            return varName;
         } else {
             // Fallback: convert to string
             return "Aws.Json.JsonString (Any.toText " + varName + ")";
@@ -513,6 +516,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             // Timestamp from ISO-8601 string
             return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> Instant.fromText s; _ -> None)",
                     fieldName, jsonVar);
+        } else if (target.isDocumentShape()) {
+            // Document type - pass through as JsonValue
+            return String.format("Aws.Json.getField \"%s\" %s", fieldName, jsonVar);
         } else {
             // Fallback: try to parse as string
             return String.format("Aws.Json.getField \"%s\" %s |> Optional.flatMap (cases Aws.Json.JsonString s -> Some s; _ -> None)",
@@ -553,6 +559,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("(cases Aws.Json.JsonString s -> %s s; _ -> None) %s", fromTextFn, varName);
         } else if (target.isTimestampShape()) {
             return String.format("(cases Aws.Json.JsonString s -> Instant.fromText s; _ -> None) %s", varName);
+        } else if (target.isDocumentShape()) {
+            // Document type - pass through as JsonValue
+            return String.format("Some %s", varName);
         } else {
             // Fallback
             return String.format("(cases Aws.Json.JsonString s -> Some s; _ -> None) %s", varName);

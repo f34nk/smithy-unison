@@ -36,7 +36,7 @@ Traits for serialization and protocol behavior.
 
 | Trait | Status | Notes |
 |-------|--------|-------|
-| [`smithy.api#jsonName`](https://smithy.io/2.0/spec/protocol-traits.html#smithy-api-jsonname-trait) | ❌ | Uses custom JSON key name in serialization |
+| [`smithy.api#jsonName`](https://smithy.io/2.0/spec/protocol-traits.html#smithy-api-jsonname-trait) | ✅ | Uses custom JSON key name in serialization - Implemented in AwsJsonProtocolGenerator |
 | [`smithy.api#xmlAttribute`](https://smithy.io/2.0/spec/protocol-traits.html#smithy-api-xmlattribute-trait) | ❌ | Serializes member as XML attribute |
 | [`smithy.api#xmlFlattened`](https://smithy.io/2.0/spec/protocol-traits.html#smithy-api-xmlflattened-trait) | ❌ | Flattens list/map in XML serialization |
 | [`smithy.api#xmlName`](https://smithy.io/2.0/spec/protocol-traits.html#smithy-api-xmlname-trait) | ❌ | Uses custom XML element name |
