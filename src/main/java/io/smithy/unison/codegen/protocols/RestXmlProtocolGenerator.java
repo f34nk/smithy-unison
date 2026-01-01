@@ -839,8 +839,20 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             List<MemberShape> bodyMembers = ProtocolUtils.getBodyMembers(outputShape.get());
             
             if (bodyMembers.isEmpty()) {
-                writer.writeComment("No body content expected - return empty response");
-                writer.write("{}");
+                writer.writeComment("No body members - construct output with None values");
+                String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
+                        outputShape.get().getId().getName());
+                
+                // Get all members in order
+                List<MemberShape> allMembers = new ArrayList<>(outputShape.get().getAllMembers().values());
+                
+                // Construct output with all fields as None
+                writer.write("$L", outputTypeName);
+                writer.indent();
+                for (MemberShape member : allMembers) {
+                    writer.write("None");
+                }
+                writer.dedent();
             } else {
                 writer.writeComment("Decode XML response body");
                 generateXmlResponseParsing(outputShape.get(), bodyMembers, model, clientNamespace, writer);
