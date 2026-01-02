@@ -237,7 +237,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         }
         
         String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "ToJson");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "ToJson");
         
         generateStructureSerializerWithName(structure, functionName, structType, model, clientNamespace, writer);
     }
@@ -517,7 +517,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                     valueConversion, varName);
         } else if (shape.isStructureShape()) {
             // Nested structure - need recursive serialization
-            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
             return serializerName + " " + varName;
         } else if (shape.isUnionShape()) {
             // Union - check if it's DynamoDB AttributeValue
@@ -527,7 +527,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 return "aws.json.attributeValueToJson " + varName;
             }
             // Generic union - need serializer
-            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
             return serializerName + " " + varName;
         } else if (shape.isDocumentShape()) {
             // Document type - pass through as-is (already JsonValue)
