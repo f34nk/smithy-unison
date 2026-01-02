@@ -82,7 +82,7 @@ Run demos:
 make demo/s3
 ```
 
-The [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) generates the `aws_s3_client` from the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01), compiles it locally and executes functions against a mocked S3 bucket in Docker Compose.
+The [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) generates the `aws_s3_client` from the official [AWS SDK S3 model](https://github.com/aws/api-models-aws/tree/main/models/s3/service/2006-03-01), compiles it locally and executes functions against a mocked S3 bucket in LocalStack.
 
 ```bash
 make demo/dynamodb
@@ -96,7 +96,7 @@ Run integration-test:
 make integration-test
 ```
 
-The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.sh#L11) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked S3 bucket in Docker Compose.
+The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.sh#L11) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked S3 bucket in LocalStack.
 
 ## Basic Usage
 
