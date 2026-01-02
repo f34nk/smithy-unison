@@ -191,7 +191,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         // Error - parse error and raise exception
         writer.write("-- Parse error response");
-        writer.write("serviceError = parseError response");
+        writer.write("serviceError = $L.parseError response", clientNamespace);
         // Remove "Service" suffix from service name to avoid "DynamoDBServiceServiceError"
         String errorServiceName = serviceName.endsWith("Service") 
                 ? serviceName.substring(0, serviceName.length() - 7)
@@ -767,8 +767,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.writeDocComment("Parse AWS JSON error response\n\n" +
                 "Extracts `__type` and `message` fields from JSON error response.\n" +
                 "Handles both full format (com.amazon.coral#ErrorName) and short format (ErrorName).");
-        writer.writeSignature("parseError", "Http.Response -> " + errorTypeName);
-        writer.write("parseError response =");
+        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
         writer.indent();
         
         // Parse error body
