@@ -104,7 +104,7 @@ extractErrorType json =
     Some fullType ->
       -- Extract error name from full format: "namespace#ErrorName" -> "ErrorName"
       if Text.contains "#" fullType then
-        parts = Text.split ?# fullType
+        parts = lib.unison_base_3_18_0.Text.split ?# fullType
         match List.last parts with
           Some errorName -> Some errorName
           None -> Some fullType

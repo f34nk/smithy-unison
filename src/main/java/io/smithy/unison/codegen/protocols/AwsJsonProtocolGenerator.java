@@ -1,16 +1,24 @@
 package io.smithy.unison.codegen.protocols;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
 import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
-import software.amazon.smithy.model.shapes.*;
+import software.amazon.smithy.model.shapes.ListShape;
+import software.amazon.smithy.model.shapes.MapShape;
+import software.amazon.smithy.model.shapes.MemberShape;
+import software.amazon.smithy.model.shapes.OperationShape;
+import software.amazon.smithy.model.shapes.ServiceShape;
+import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StructureShape;
+import software.amazon.smithy.model.shapes.UnionShape;
 import software.amazon.smithy.model.traits.DefaultTrait;
 import software.amazon.smithy.model.traits.JsonNameTrait;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Protocol generator for AWS JSON 1.0/1.1 protocols.
@@ -658,7 +666,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
+            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
                     fieldName, jsonVar, valueConversion);
         } else if (target.isStructureShape()) {
             // Nested structure - need recursive parser
@@ -720,7 +728,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
+            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
         } else if (target.isStructureShape()) {
             String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
