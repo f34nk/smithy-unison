@@ -1,3 +1,7 @@
+export AWS_ACCESS_KEY_ID=dummy
+export AWS_SECRET_ACCESS_KEY=dummy
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ENDPOINT=http://localhost:4566
 
 .PHONY: all
 all: clean generate
@@ -13,40 +17,18 @@ generate: model/dynamodb-2012-08-10.json
 .PHONY: clean
 clean:
 	rm -rf generated/*.u ./build .ucm *.output.md
-	rm -f compiled/main.uc
 	rm -f model/*.json
 	rm -rf terraform/.terraform
 	rm -f terraform/.terraform.lock.hcl
 	rm -f terraform/terraform.tfstate
 	rm -f terraform/terraform.tfstate.backup
 
-.PHONY: compile
-compile: generate
-	#
-	# Compile Unison code locally
-	#
-	../../scripts/run-transcript.sh compile.md
-
-.PHONY: compile-with-lib
-compile-with-lib:
-	#
-	# Fetch deps from Unison Share and compile locally
-	#
-	../../scripts/run-transcript.sh compile-with-lib.md
-
 .PHONY: test
-test: compiled/main.uc docker/start terraform
+test: generate docker/start terraform
 	#
-	# Run compiled Unison code against LocalStack
+	# Run Unison demo against LocalStack
 	#
-	../../scripts/run-compiled.sh compiled/main.uc
-
-.PHONY: integration-test
-integration-test: compile-with-lib docker/start terraform
-	#
-	# Run compiled code
-	#
-	../../scripts/run-compiled.sh compiled/main.uc
+	../../scripts/run-transcript.sh demo.md
 
 # make sure model/dynamodb-2012-08-10.json is available
 model/dynamodb-2012-08-10.json:
@@ -56,15 +38,12 @@ model/dynamodb-2012-08-10.json:
 	wget https://raw.githubusercontent.com/aws/api-models-aws/refs/heads/main/models/dynamodb/service/2012-08-10/dynamodb-2012-08-10.json
 	mv dynamodb-2012-08-10.json model/
 
-# make sure compiled/main.uc is up to date
-compiled/main.uc: 
-	make compile
-
 .PHONY: terraform
 terraform:
 	#
 	# Run Terraform to create infrastructure
 	#
+	@echo "AWS_DEFAULT_REGION is $$AWS_DEFAULT_REGION"
 	cd terraform && terraform init && terraform apply -auto-approve
 
 .PHONY: docker/start

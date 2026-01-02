@@ -1,3 +1,7 @@
+export AWS_ACCESS_KEY_ID=dummy
+export AWS_SECRET_ACCESS_KEY=dummy
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ENDPOINT=http://localhost:4566
 
 .PHONY: all
 all: clean generate
@@ -35,11 +39,11 @@ compile-with-lib:
 	../../scripts/run-transcript.sh compile-with-lib.md
 
 .PHONY: test
-test: compiled/main.uc docker/start terraform
+test: generate docker/start terraform
 	#
-	# Run compiled Unison code against LocalStack
+	# Run Unison demo against LocalStack
 	#
-	../../scripts/run-compiled.sh compiled/main.uc
+	../../scripts/run-transcript.sh demo.md
 
 .PHONY: integration-test
 integration-test: compile-with-lib docker/start terraform
@@ -65,6 +69,7 @@ terraform:
 	#
 	# Run Terraform to create infrastructure
 	#
+	@echo "AWS_DEFAULT_REGION is $$AWS_DEFAULT_REGION"
 	cd terraform && terraform init && terraform apply -auto-approve
 
 .PHONY: docker/start

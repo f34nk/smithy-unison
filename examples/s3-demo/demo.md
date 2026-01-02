@@ -31,5 +31,5 @@ scratch/main> add
 scratch/main> load src/main.u
 scratch/main> add
 
-scratch/main> compile main compiled/main
+scratch/main> run main
 ```

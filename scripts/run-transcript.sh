@@ -20,7 +20,6 @@ fi
 
 # Create temporary codebase
 CODEBASE=$(mktemp -d)
-echo "Using temporary codebase: $CODEBASE"
 
 cleanup() {
     rm -rf "$CODEBASE"
@@ -33,6 +32,6 @@ export TERM=dumb
 export NO_COLOR=1
 export LESS="-F -X"
 
-echo "Running transcript: $FILE_PATH"
+echo "Run transcript: $FILE_PATH"
 
 yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript $FILE_PATH 2>&1 | cat
