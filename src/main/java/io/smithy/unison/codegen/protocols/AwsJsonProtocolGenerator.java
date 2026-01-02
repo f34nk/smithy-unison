@@ -140,7 +140,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
         String bodyVar;
         if (inputShape.isPresent() && !inputShape.get().getAllMembers().isEmpty()) {
-            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
             writer.write("bodyJson = $L input", serializerName);
             writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
             bodyVar = "bodyText";
@@ -179,7 +179,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         // Success - parse response (force the delayed computation with !)
         if (operation.getOutput().isPresent()) {
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
             writer.write("!($L response)", parserName);
         } else {
             writer.write("()");
@@ -191,7 +191,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         // Error - parse error and raise exception
         writer.write("-- Parse error response");
-        writer.write("serviceError = parseError response");
+        writer.write("serviceError = $L.parseError response", clientNamespace);
         // Remove "Service" suffix from service name to avoid "DynamoDBServiceServiceError"
         String errorServiceName = serviceName.endsWith("Service") 
                 ? serviceName.substring(0, serviceName.length() - 7)
@@ -219,7 +219,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         StructureShape input = inputShape.get();
         String inputType = UnisonSymbolProvider.toNamespacedTypeName(input.getId().getName(), clientNamespace);
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
         
         generateStructureSerializerWithName(input, functionName, inputType, model, clientNamespace, writer);
     }
@@ -237,7 +237,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         }
         
         String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "ToJson");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "ToJson");
         
         generateStructureSerializerWithName(structure, functionName, structType, model, clientNamespace, writer);
     }
@@ -252,7 +252,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
         String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "FromJson");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "FromJson");
         
         writer.writeComment("Parse " + structure.getId().getName() + " from JSON");
         writer.writeSignature(functionName, "aws.json.JsonValue -> Optional " + structType);
@@ -517,7 +517,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                     valueConversion, varName);
         } else if (shape.isStructureShape()) {
             // Nested structure - need recursive serialization
-            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
             return serializerName + " " + varName;
         } else if (shape.isUnionShape()) {
             // Union - check if it's DynamoDB AttributeValue
@@ -527,7 +527,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 return "aws.json.attributeValueToJson " + varName;
             }
             // Generic union - need serializer
-            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
             return serializerName + " " + varName;
         } else if (shape.isDocumentShape()) {
             // Document type - pass through as-is (already JsonValue)
@@ -550,7 +550,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         StructureShape output = outputShape.get();
         String outputType = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
         
         writer.writeComment("Parse " + output.getId().getName() + " from AWS JSON response");
         writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
@@ -666,11 +666,11 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
+            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
                     fieldName, jsonVar, valueConversion);
         } else if (target.isStructureShape()) {
             // Nested structure - need recursive parser
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
         } else if (target.isUnionShape()) {
@@ -682,7 +682,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                         fieldName, jsonVar);
             }
             // Generic union - need parser
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
         } else if (target.isDocumentShape()) {
@@ -728,9 +728,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
+            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
         } else if (target.isStructureShape()) {
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
         } else if (target.isUnionShape()) {
             // Union - check if it's DynamoDB AttributeValue
@@ -740,7 +740,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 return String.format("aws.json.jsonToAttributeValue %s", varName);
             }
             // Generic union - need parser
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
         } else if (target.isDocumentShape()) {
             // Document type - pass through as JsonValue
@@ -767,8 +767,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.writeDocComment("Parse AWS JSON error response\n\n" +
                 "Extracts `__type` and `message` fields from JSON error response.\n" +
                 "Handles both full format (com.amazon.coral#ErrorName) and short format (ErrorName).");
-        writer.writeSignature("parseError", "Http.Response -> " + errorTypeName);
-        writer.write("parseError response =");
+        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
         writer.indent();
         
         // Parse error body
