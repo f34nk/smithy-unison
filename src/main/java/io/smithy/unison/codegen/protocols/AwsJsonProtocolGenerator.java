@@ -666,7 +666,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
+            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
                     fieldName, jsonVar, valueConversion);
         } else if (target.isStructureShape()) {
             // Nested structure - need recursive parser
@@ -728,7 +728,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             MapShape mapShape = target.asMapShape().get();
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
+            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
         } else if (target.isStructureShape()) {
             String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
