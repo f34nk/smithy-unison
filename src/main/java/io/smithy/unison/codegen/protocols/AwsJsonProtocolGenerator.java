@@ -140,7 +140,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
         String bodyVar;
         if (inputShape.isPresent() && !inputShape.get().getAllMembers().isEmpty()) {
-            String serializerName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
             writer.write("bodyJson = $L input", serializerName);
             writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
             bodyVar = "bodyText";
@@ -219,7 +219,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         StructureShape input = inputShape.get();
         String inputType = UnisonSymbolProvider.toNamespacedTypeName(input.getId().getName(), clientNamespace);
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "RequestBody");
         
         generateStructureSerializerWithName(input, functionName, inputType, model, clientNamespace, writer);
     }
