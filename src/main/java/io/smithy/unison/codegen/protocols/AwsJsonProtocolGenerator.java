@@ -179,7 +179,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         // Success - parse response (force the delayed computation with !)
         if (operation.getOutput().isPresent()) {
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
             writer.write("!($L response)", parserName);
         } else {
             writer.write("()");
@@ -550,7 +550,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         StructureShape output = outputShape.get();
         String outputType = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
         
         writer.writeComment("Parse " + output.getId().getName() + " from AWS JSON response");
         writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
