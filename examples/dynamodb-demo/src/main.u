@@ -8,18 +8,18 @@
 --   load aws_http_bridge.u
 --   add
 
--- Import AttributeValue constructors from Aws.Json namespace
-use Aws.Json AttributeValue
-use Aws.Json.AttributeValue'S
-use Aws.Json.AttributeValue'N
-use Aws.Json.AttributeValue'B
-use Aws.Json.AttributeValue'SS
-use Aws.Json.AttributeValue'NS
-use Aws.Json.AttributeValue'BS
-use Aws.Json.AttributeValue'M
-use Aws.Json.AttributeValue'L
-use Aws.Json.AttributeValue'NULL
-use Aws.Json.AttributeValue'BOOL
+-- Import AttributeValue constructors from aws.json namespace
+use aws.json AttributeValue
+use aws.json.AttributeValue'S
+use aws.json.AttributeValue'N
+use aws.json.AttributeValue'B
+use aws.json.AttributeValue'SS
+use aws.json.AttributeValue'NS
+use aws.json.AttributeValue'BS
+use aws.json.AttributeValue'M
+use aws.json.AttributeValue'L
+use aws.json.AttributeValue'NULL
+use aws.json.AttributeValue'BOOL
 
 -- =============================================================================
 -- Helpers
