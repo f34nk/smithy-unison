@@ -17,8 +17,12 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    dynamodb = "http://localhost:4566"
+    dynamodb = var.endpoint
   }
+}
+
+variable "endpoint" {
+  type = string
 }
 
 resource "aws_dynamodb_table" "example" {
