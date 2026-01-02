@@ -33,7 +33,7 @@ test/runtime:
 	# Run runtime tests
 	#
 	cd src && \
-	../scripts/run-transcript.sh test.md
+	ucm transcript test.md
 
 .PHONY: clean
 clean:

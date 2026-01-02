@@ -32,21 +32,21 @@ test: generate docker/start terraform
 	#
 	# Run Unison demo against LocalStack
 	#
-	../../scripts/run-transcript.sh demo.md
+	ucm transcript demo.md
 
 .PHONY: compile-with-lib
 compile-with-lib:
 	#
 	# Fetch deps from Unison Share and compile locally
 	#
-	../../scripts/run-transcript.sh compile-with-lib.md
+	ucm transcript compile-with-lib.md
 	
 .PHONY: integration-test
 integration-test: compile-with-lib docker/start terraform
 	#
 	# Run compiled code
 	#
-	../../scripts/run-compiled.sh compiled/main.uc
+	ucm run.compiled compiled/main.uc
 
 # make sure model/dynamodb-2012-08-10.json is available
 model/dynamodb-2012-08-10.json:
