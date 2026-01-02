@@ -252,7 +252,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         
         String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
         String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
-        String functionName = UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "FromJson");
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(structure.getId().getName() + "FromJson");
         
         writer.writeComment("Parse " + structure.getId().getName() + " from JSON");
         writer.writeSignature(functionName, "aws.json.JsonValue -> Optional " + structType);
@@ -670,7 +670,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                     fieldName, jsonVar, valueConversion);
         } else if (target.isStructureShape()) {
             // Nested structure - need recursive parser
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
         } else if (target.isUnionShape()) {
@@ -682,7 +682,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                         fieldName, jsonVar);
             }
             // Generic union - need parser
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("aws.json.getField \"%s\" %s |> Optional.flatMap %s",
                     fieldName, jsonVar, parserName);
         } else if (target.isDocumentShape()) {
@@ -730,7 +730,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
             return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> base.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
         } else if (target.isStructureShape()) {
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
         } else if (target.isUnionShape()) {
             // Union - check if it's DynamoDB AttributeValue
@@ -740,7 +740,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 return String.format("aws.json.jsonToAttributeValue %s", varName);
             }
             // Generic union - need parser
-            String parserName = UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);
         } else if (target.isDocumentShape()) {
             // Document type - pass through as JsonValue
