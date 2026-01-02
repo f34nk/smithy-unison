@@ -8,18 +8,18 @@
 --   load aws_http_bridge.u
 --   add
 
--- Import AttributeValue constructors from Aws.Json namespace
-use Aws.Json AttributeValue
-use Aws.Json.AttributeValue'S
-use Aws.Json.AttributeValue'N
-use Aws.Json.AttributeValue'B
-use Aws.Json.AttributeValue'SS
-use Aws.Json.AttributeValue'NS
-use Aws.Json.AttributeValue'BS
-use Aws.Json.AttributeValue'M
-use Aws.Json.AttributeValue'L
-use Aws.Json.AttributeValue'NULL
-use Aws.Json.AttributeValue'BOOL
+-- Import AttributeValue constructors from aws.json namespace
+use aws.json AttributeValue
+use aws.json.AttributeValue'S
+use aws.json.AttributeValue'N
+use aws.json.AttributeValue'B
+use aws.json.AttributeValue'SS
+use aws.json.AttributeValue'NS
+use aws.json.AttributeValue'BS
+use aws.json.AttributeValue'M
+use aws.json.AttributeValue'L
+use aws.json.AttributeValue'NULL
+use aws.json.AttributeValue'BOOL
 
 -- =============================================================================
 -- Helpers
@@ -36,14 +36,14 @@ envOrDefault name default = do
 -- =============================================================================
 
 -- Create DynamoDB client configuration for LocalStack
-defaultConfig : '{IO, Exception} Aws.Dynamodb.Config
+defaultConfig : '{IO, Exception} aws.dynamodb.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
   creds = Credentials.Credentials key secret None
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
   region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  Aws.Dynamodb.Config.Config endpoint region creds false
+  aws.dynamodb.Config.Config endpoint region creds false
 
 -- Test table name - created by terraform provisioner
 testTable : Text
@@ -131,20 +131,20 @@ runDemo = do
 List all tables in the account.
 The terraform provisioner creates 'example' table.
 }}
-listTablesDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+listTablesDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
 listTablesDemo config = do
   printLine "  → Creating ListTablesRequest..."
   
   -- Create request with optional fields
-  request = Aws.Dynamodb.ListTablesInput.ListTablesInput None (Some +100)
+  request = aws.dynamodb.ListTablesInput.ListTablesInput None (Some +100)
   
   -- Call the DynamoDB client
   printLine "  → Calling listTables..."
-  result = !(Aws.Dynamodb.listTables config request)
+  result = !(aws.dynamodb.listTables config request)
   
   -- Extract and print tables
   printLine "  ✓ SUCCESS: ListTables returned"
-  match Aws.Dynamodb.ListTablesOutput.tableNames result with
+  match aws.dynamodb.ListTablesOutput.tableNames result with
     Some tables -> 
       count = List.size tables
       printLine ("  → Found " ++ Nat.toText count ++ " table(s):")
@@ -156,7 +156,7 @@ listTablesDemo config = do
 Put a test item into the example table.
 Uses the hash key "TestTableHashKey" as defined in terraform.
 }}
-putItemDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+putItemDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
 putItemDemo config = do
   printLine "  → Creating PutItemRequest..."
   printLine ("    Table: " ++ testTable)
@@ -181,14 +181,14 @@ putItemDemo config = do
   
   -- Call the DynamoDB client
   printLine "  → Calling putItem..."
-  result = !(Aws.Dynamodb.putItem config request)
+  result = !(aws.dynamodb.putItem config request)
   
   printLine "  ✓ SUCCESS: PutItem completed"
 
 {{
 Get the test item we just uploaded.
 }}
-getItemDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+getItemDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
 getItemDemo config = do
   printLine "  → Creating GetItemRequest..."
   printLine ("    Table: " ++ testTable)
@@ -204,12 +204,12 @@ getItemDemo config = do
   
   -- Call the DynamoDB client
   printLine "  → Calling getItem..."
-  result = !(Aws.Dynamodb.getItem config request)
+  result = !(aws.dynamodb.getItem config request)
   
   printLine "  ✓ SUCCESS: GetItem returned"
   
   -- Extract and print item
-  match Aws.Dynamodb.GetItemOutput.item result with
+  match aws.dynamodb.GetItemOutput.item result with
     Some itemMap ->
       printLine "  → Retrieved item:"
       printLine ("      TestTableHashKey: " ++ extractStringAttribute "TestTableHashKey" itemMap)
@@ -227,7 +227,7 @@ getItemDemo config = do
 {{
 Delete the test item (cleanup).
 }}
-deleteItemDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+deleteItemDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
 deleteItemDemo config = do
   printLine "  → Creating DeleteItemRequest..."
   printLine ("    Table: " ++ testTable)
@@ -244,14 +244,14 @@ deleteItemDemo config = do
   
   -- Call the DynamoDB client
   printLine "  → Calling deleteItem..."
-  result = !(Aws.Dynamodb.deleteItem config request)
+  result = !(aws.dynamodb.deleteItem config request)
   
   printLine "  ✓ SUCCESS: DeleteItem completed"
 
 {{
 Verify the test item was deleted by trying to get it again.
 }}
-verifyDeletionDemo : Aws.Dynamodb.Config -> '{IO, Exception, Threads} ()
+verifyDeletionDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
 verifyDeletionDemo config = do
   printLine "  → Attempting to get deleted item..."
   printLine ("    Table: " ++ testTable)
@@ -265,12 +265,12 @@ verifyDeletionDemo config = do
   request = GetItemInput.GetItemInput None (Some true) None key None None testTable
   
   -- Call the DynamoDB client
-  result = !(Aws.Dynamodb.getItem config request)
+  result = !(aws.dynamodb.getItem config request)
   
   printLine "  ✓ SUCCESS: GetItem returned"
   
   -- Check if item exists
-  match Aws.Dynamodb.GetItemOutput.item result with
+  match aws.dynamodb.GetItemOutput.item result with
     Some _ ->
       printLine ("    ✗ Item " ++ testItemKey ++ " still exists!")
     None -> 

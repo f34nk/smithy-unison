@@ -23,14 +23,14 @@ envOrDefault name default = do
 -- =============================================================================
 
 -- Create S3 client configuration for LocalStack
-defaultConfig : '{IO, Exception} Aws.S3.Config
+defaultConfig : '{IO, Exception} aws.s3.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
   creds = Credentials.Credentials key secret None
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
   region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  Aws.S3.Config.Config endpoint region creds true
+  aws.s3.Config.Config endpoint region creds true
 
 -- Test bucket name - created by terraform provisioner in docker-compose
 testBucket : Text
@@ -125,20 +125,20 @@ runDemo = do
 List all buckets in the account.
 The terraform provisioner creates 'us-east-1-nonprod-configs' bucket.
 }}
-listBucketsDemo : Aws.S3.Config -> '{IO, Exception, Threads} ()
+listBucketsDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
 listBucketsDemo config = do
   printLine "  → Creating ListBucketsRequest..."
   
   -- Create request with all optional fields as None
-  request = Aws.S3.ListBucketsRequest.ListBucketsRequest None None None None
+  request = aws.s3.ListBucketsRequest.ListBucketsRequest None None None None
   
   -- Call the S3 client
   printLine "  → Calling listBuckets..."
-  result = !(Aws.S3.listBuckets config request)
+  result = !(aws.s3.listBuckets config request)
   
   -- Extract and print buckets
   printLine "  ✓ SUCCESS: ListBuckets returned"
-  match Aws.S3.ListBucketsOutput.buckets result with
+  match aws.s3.ListBucketsOutput.buckets result with
     Some buckets -> 
       count = List.size buckets
       printLine ("  → Found " ++ Nat.toText count ++ " bucket(s):")
@@ -149,7 +149,7 @@ listBucketsDemo config = do
 {{
 Upload a test object to the configs bucket.
 }}
-putObjectDemo : Aws.S3.Config -> '{IO, Exception, Threads} ()
+putObjectDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
 putObjectDemo config = do
   printLine ("  → Creating PutObjectRequest...")
   printLine ("    Bucket: " ++ testBucket)
@@ -161,37 +161,37 @@ putObjectDemo config = do
   -- PutObjectRequest with minimal required fields (41 fields)
   -- Field order: aCL body bucket bucketKeyEnabled cacheControl checksumAlgorithm ...
   -- Set ACL to public-read so we can read the object back
-  acl = Aws.S3.objectCannedACLFromText "public-read"
+  acl = aws.s3.objectCannedACLFromText "public-read"
   request = PutObjectRequest.PutObjectRequest acl body testBucket None None None None None None None None None None None None None (Some "text/plain") None None None None None None None None testObjectKey None None None None None None None None None None None None None None None
   
   -- Call the S3 client
   printLine "  → Calling putObject..."
-  result = !(Aws.S3.putObject config request)
+  result = !(aws.s3.putObject config request)
   
   printLine "  ✓ SUCCESS: PutObject completed"
   -- Print ETag if available
-  match Aws.S3.PutObjectOutput.eTag result with
+  match aws.s3.PutObjectOutput.eTag result with
     Some etag -> printLine ("    ETag: " ++ etag)
     None -> ()
 
 {{
 List objects in the configs prefix.
 }}
-listObjectsV2Demo : Aws.S3.Config -> '{IO, Exception, Threads} ()
+listObjectsV2Demo : aws.s3.Config -> '{IO, Exception, Threads} ()
 listObjectsV2Demo config = do
   printLine "  → Creating ListObjectsV2Request..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Prefix: configs/")
   
   -- ListObjectsV2Request (11 fields)
-  request = Aws.S3.ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
+  request = aws.s3.ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
   
   -- Call the S3 client
   printLine "  → Calling listObjectsV2..."
-  result = !(Aws.S3.listObjectsV2 config request)
+  result = !(aws.s3.listObjectsV2 config request)
   
   printLine "  ✓ SUCCESS: ListObjectsV2 returned"
-  match Aws.S3.ListObjectsV2Output.contents result with
+  match aws.s3.ListObjectsV2Output.contents result with
     Some objects ->
       count = List.size objects
       printLine ("  → Found " ++ Nat.toText count ++ " object(s):")
@@ -202,21 +202,21 @@ listObjectsV2Demo config = do
 {{
 Get the test object we uploaded.
 }}
-getObjectDemo : Aws.S3.Config -> '{IO, Exception, Threads} ()
+getObjectDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
 getObjectDemo config = do
   printLine "  → Creating GetObjectRequest..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Key: " ++ testObjectKey)
   
   -- GetObjectRequest (21 fields)
-  request = Aws.S3.GetObjectRequest.GetObjectRequest testBucket None None None None None None testObjectKey None None None None None None None None None None None None None
+  request = aws.s3.GetObjectRequest.GetObjectRequest testBucket None None None None None None testObjectKey None None None None None None None None None None None None None
   
   -- Call the S3 client
   printLine "  → Calling getObject..."
-  result = !(Aws.S3.getObject config request)
+  result = !(aws.s3.getObject config request)
   
   -- Extract and print body
-  body = Aws.S3.GetObjectOutput.body result
+  body = aws.s3.GetObjectOutput.body result
   bodyText = fromUtf8 body
   
   printLine "  ✓ SUCCESS: GetObject returned"
@@ -231,42 +231,42 @@ getObjectDemo config = do
 {{
 Delete the test object (cleanup).
 }}
-deleteObjectDemo : Aws.S3.Config -> '{IO, Exception, Threads} ()
+deleteObjectDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
 deleteObjectDemo config = do
   printLine "  → Creating DeleteObjectRequest..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Key: " ++ testObjectKey)
   
   -- DeleteObjectRequest (10 fields)
-  request = Aws.S3.DeleteObjectRequest.DeleteObjectRequest testBucket None None None None None testObjectKey None None None
+  request = aws.s3.DeleteObjectRequest.DeleteObjectRequest testBucket None None None None None testObjectKey None None None
   
   -- Call the S3 client
   printLine "  → Calling deleteObject..."
-  result = !(Aws.S3.deleteObject config request)
+  result = !(aws.s3.deleteObject config request)
   
   printLine "  ✓ SUCCESS: DeleteObject completed"
   -- Print delete marker if versioned
-  match Aws.S3.DeleteObjectOutput.deleteMarker result with
+  match aws.s3.DeleteObjectOutput.deleteMarker result with
     Some true -> printLine "    Delete marker created (versioned bucket)"
     _ -> ()
 
 {{
 Verify the test object was deleted by listing objects.
 }}
-verifyDeletionDemo : Aws.S3.Config -> '{IO, Exception, Threads} ()
+verifyDeletionDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
 verifyDeletionDemo config = do
   printLine "  → Listing objects after deletion..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Prefix: configs/")
   
   -- ListObjectsV2Request (11 fields)
-  request = Aws.S3.ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
+  request = aws.s3.ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
   
   -- Call the S3 client
-  result = !(Aws.S3.listObjectsV2 config request)
+  result = !(aws.s3.listObjectsV2 config request)
   
   printLine "  ✓ SUCCESS: ListObjectsV2 returned"
-  match Aws.S3.ListObjectsV2Output.contents result with
+  match aws.s3.ListObjectsV2Output.contents result with
     Some objects ->
       count = List.size objects
       printLine ("  → Found " ++ Nat.toText count ++ " object(s):")

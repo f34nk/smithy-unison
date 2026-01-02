@@ -18,18 +18,14 @@ if [ ! -f "$FILE_PATH" ]; then
     exit 1
 fi
 
-export AWS_ACCESS_KEY_ID=dummy
-export AWS_SECRET_ACCESS_KEY=dummy
-export AWS_DEFAULT_REGION=us-east-1
-export AWS_ENDPOINT=http://localhost:4566
-
-echo "Waiting for LocalStack ..."
-until curl --silent --fail http://localhost:4566 > /dev/null 2>&1; do
-    echo "Waiting for LocalStack..."
-    sleep 2
-done
-echo "LocalStack is ready!"
-
-echo "Running compiled: $FILE_PATH"
+echo "Run compiled: $FILE_PATH"
 
 ucm run.compiled $FILE_PATH
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "ERROR: failed to run compiled: $FILE_PATH"
+    exit 1
+fi
+
+exit 0
