@@ -27,13 +27,6 @@ clean:
 	rm -f terraform/terraform.tfstate
 	rm -f terraform/terraform.tfstate.backup
 
-.PHONY: compile
-compile: generate
-	#
-	# Compile Unison code locally
-	#
-	../../scripts/run-transcript.sh compile.md
-
 .PHONY: compile-with-lib
 compile-with-lib:
 	#
@@ -62,10 +55,6 @@ model/s3-2006-03-01.json:
 	#
 	wget https://raw.githubusercontent.com/aws/api-models-aws/refs/heads/main/models/s3/service/2006-03-01/s3-2006-03-01.json
 	mv s3-2006-03-01.json model/
-
-# make sure compiled/main.uc is up to date
-compiled/main.uc: 
-	make compile
 
 .PHONY: terraform
 terraform:

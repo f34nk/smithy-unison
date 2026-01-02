@@ -88,11 +88,12 @@ demo/%:
 	make test
 
 .PHONY: integration-test
-integration-test:
+integration-test/%:
 	#
 	# Install the AWS SDK from Unison Share and 
-	# run the examples/aws-demo against a mocked S3 bucket
+	# run the demo against mocked infrastructure
 	#
-	cd examples/s3-demo && \
+	name=$(shell echo $@|sed 's/integration-test\///g') && \
+	cd examples/$$name-demo && \
 	make clean && \
 	make integration-test

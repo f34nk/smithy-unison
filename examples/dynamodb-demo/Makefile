@@ -19,7 +19,8 @@ generate: model/dynamodb-2012-08-10.json
 
 .PHONY: clean
 clean:
-	rm -rf generated/*.u ./build .ucm *.output.md
+	rm -rf generated/*.u ./build .ucm *.output.md 
+	rm -f compiled/main.uc
 	rm -f model/*.json
 	rm -rf terraform/.terraform
 	rm -f terraform/.terraform.lock.hcl
@@ -32,6 +33,20 @@ test: generate docker/start terraform
 	# Run Unison demo against LocalStack
 	#
 	../../scripts/run-transcript.sh demo.md
+
+.PHONY: compile-with-lib
+compile-with-lib:
+	#
+	# Fetch deps from Unison Share and compile locally
+	#
+	../../scripts/run-transcript.sh compile-with-lib.md
+	
+.PHONY: integration-test
+integration-test: compile-with-lib docker/start terraform
+	#
+	# Run compiled code
+	#
+	../../scripts/run-compiled.sh compiled/main.uc
 
 # make sure model/dynamodb-2012-08-10.json is available
 model/dynamodb-2012-08-10.json:

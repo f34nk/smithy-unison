@@ -93,10 +93,17 @@ The [DynamoDB demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dy
 Run integration-test:
 
 ```bash
-make integration-test
+make integration-test/s3
 ```
 
-The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.sh#L11) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked S3 bucket in LocalStack.
+The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.md) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked infrastructure.
+
+```bash
+make integration-test/dynamodb
+```
+
+This **integration-test** does the above with the [DynamoDB demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u)
+
 
 ## Basic Usage
 
