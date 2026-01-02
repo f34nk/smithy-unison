@@ -157,8 +157,8 @@ public class RestXmlProtocolGeneratorTest {
         String output = writer.toString();
         
         // Check that the function signature is generated (includes Threads for @unison/http)
-        // With namespace "com.example", types are prefixed with "Com.Example."
-        assertTrue(output.contains("Com.Example.getObject : Com.Example.Config -> Com.Example.GetObjectInput -> '{IO, Exception, Threads} Com.Example.GetObjectOutput"),
+        // With namespace "com.example", types are prefixed with "com.example."
+        assertTrue(output.contains("com.example.getObject : com.example.Config -> com.example.GetObjectInput -> '{IO, Exception, Threads} com.example.GetObjectOutput"),
                 "Should generate correct function signature with namespace. Got: " + output);
         
         // Check that HTTP method is set
