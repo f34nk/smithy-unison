@@ -1,9 +1,0 @@
-# Local UCM installation (downloaded by compile.sh)
-.ucm/
-
-# Build artifacts
-build/
-model/*.json
-
-.terraform*
-terraform.tfstate*
