@@ -34,4 +34,12 @@ export LESS="-F -X"
 
 echo "Run transcript: $FILE_PATH"
 
-yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript $FILE_PATH 2>&1 | cat
+yes "" 2>/dev/null | ucm -C "$CODEBASE" transcript $FILE_PATH
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "ERROR: failed to run transcript: $FILE_PATH"
+    exit 1
+fi
+
+exit 0

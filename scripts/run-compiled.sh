@@ -21,3 +21,11 @@ fi
 echo "Run compiled: $FILE_PATH"
 
 ucm run.compiled $FILE_PATH
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "ERROR: failed to run compiled: $FILE_PATH"
+    exit 1
+fi
+
+exit 0
