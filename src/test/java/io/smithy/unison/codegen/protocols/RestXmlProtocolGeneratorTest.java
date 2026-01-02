@@ -450,6 +450,55 @@ public class RestXmlProtocolGeneratorTest {
     }
     
     @Test
+    void testErrorParserHasNamespacePrefix() {
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+        
+        StructureShape inputShape = StructureShape.builder()
+                .id("com.example#GetObjectInput")
+                .build();
+        
+        StructureShape outputShape = StructureShape.builder()
+                .id("com.example#GetObjectOutput")
+                .build();
+        
+        OperationShape operation = OperationShape.builder()
+                .id("com.example#GetObject")
+                .input(inputShape.getId())
+                .output(outputShape.getId())
+                .addTrait(HttpTrait.builder()
+                        .method("GET")
+                        .uri(UriPattern.parse("/"))
+                        .code(200)
+                        .build())
+                .build();
+        
+        ServiceShape service = ServiceShape.builder()
+                .id("com.example#S3Service")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+        
+        Model model = Model.builder()
+                .addShape(stringShape)
+                .addShape(inputShape)
+                .addShape(outputShape)
+                .addShape(operation)
+                .addShape(service)
+                .build();
+        
+        UnisonContext context = createTestContext(model, service);
+        
+        generator.generateErrorParser(operation, writer, context);
+        
+        String output = writer.toString();
+        
+        assertTrue(output.contains("com.example.parseError"),
+                "Error parser should have namespace prefix. Got: " + output);
+    }
+    
+    @Test
     void testAppliesToServiceWithRestXml() {
         // Service with REST-XML protocol trait
         ServiceShape service = ServiceShape.builder()
