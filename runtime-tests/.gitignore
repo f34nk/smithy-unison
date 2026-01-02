@@ -1,8 +1,0 @@
-# Local UCM installation (downloaded by compile.sh)
-.ucm/
-
-# Build artifacts
-build/
-
-src/*.u
-*.output.md

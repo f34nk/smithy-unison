@@ -32,8 +32,8 @@ test/runtime:
 	#
 	# Run runtime tests
 	#
-	cd runtime-tests && \
-	make
+	cd src && \
+	../scripts/run-transcript.sh test.md
 
 .PHONY: clean
 clean:
@@ -42,7 +42,6 @@ clean:
 	#
 	rm -rf build bin test-errors.log build-errors.log
 	rm -rf ~/.m2/repository/io/smithy/unison/smithy-unison
-	cd runtime-tests && make clean
 
 # Usage: make examples
 .PHONY: examples
