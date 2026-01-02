@@ -873,8 +873,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 serviceName + "ServiceError", clientNamespace);
         
         writer.writeDocComment("Parse REST-XML error response");
-        writer.write("parseError : Response -> $L", errorTypeName);
-        writer.write("parseError response =");
+        writer.write("$L.parseError : Response -> $L", clientNamespace, errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
         writer.indent();
         writer.write("errorBody = aws.http.bytesToText (Response.body response)");
         writer.write("-- Parse XML error: <Error><Code>...</Code><Message>...</Message></Error>");
