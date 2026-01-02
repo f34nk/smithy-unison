@@ -2,7 +2,7 @@ X:=$(shell find examples -type d -not -name examples -maxdepth 1 -exec basename 
 EXAMPLES:=$(foreach x,$(X),examples/$(x)/)
 
 .PHONY: all
-all: clean build test
+all: clean build examples test
 
 .PHONY: build
 build:
