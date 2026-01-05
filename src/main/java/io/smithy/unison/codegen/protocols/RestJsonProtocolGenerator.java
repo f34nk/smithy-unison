@@ -4,15 +4,19 @@ import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.shapes.ListShape;
+import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
+import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.HttpHeaderTrait;
 import software.amazon.smithy.model.traits.HttpLabelTrait;
 import software.amazon.smithy.model.traits.HttpPayloadTrait;
 import software.amazon.smithy.model.traits.HttpQueryTrait;
+import software.amazon.smithy.model.traits.HttpResponseCodeTrait;
 import software.amazon.smithy.model.traits.HttpTrait;
 
 import java.util.HashSet;
@@ -1134,7 +1138,205 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     
     @Override
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement response deserialization (Step 1.7)
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        Optional<StructureShape> outputShape = ProtocolUtils.getOutputShape(operation, model);
+        if (outputShape.isEmpty()) {
+            // No output - no parser needed
+            return;
+        }
+        
+        StructureShape output = outputShape.get();
+        String outputType = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                operation.getId().getName() + "ResponseParser");
+        
+        writer.writeComment("Parse " + output.getId().getName() + " from REST-JSON response");
+        writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
+        writer.write("$L response = do", functionName);
+        writer.indent();
+        
+        // Check if there are body members to parse
+        List<MemberShape> bodyMembers = getResponseBodyMembers(output);
+        boolean hasBodyMembers = !bodyMembers.isEmpty();
+        
+        if (hasBodyMembers) {
+            // Parse JSON from response body
+            writer.write("-- Parse JSON response body");
+            writer.write("bodyText = aws.http.bytesToText (Http.Response.body response)");
+            writer.write("json = !(aws.json.parseJson bodyText)");
+            writer.write("");
+        }
+        
+        // Build output structure
+        writer.write("-- Build output structure");
+        writer.write("{");
+        writer.indent();
+        
+        List<MemberShape> members = output.getAllMembers().values().stream().toList();
+        for (int i = 0; i < members.size(); i++) {
+            MemberShape member = members.get(i);
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            boolean isLast = (i == members.size() - 1);
+            
+            // Check if member is HTTP-bound
+            if (member.hasTrait(HttpHeaderTrait.class)) {
+                // Extract from response header
+                generateResponseHeaderExtraction(member, model, writer, context);
+            } else if (member.hasTrait(HttpResponseCodeTrait.class)) {
+                // Extract status code
+                writer.write("$L = Http.Response.statusCode response$L", memberName, isLast ? "" : ",");
+            } else if (member.hasTrait(HttpPayloadTrait.class)) {
+                // Extract raw payload
+                generateResponsePayloadExtraction(member, model, writer, context, isLast);
+            } else {
+                // Extract from JSON body
+                String jsonName = getJsonName(member);
+                String deserializer = getJsonDeserializer(member, model, clientNamespace);
+                writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)$L",
+                        memberName, jsonName, deserializer, isLast ? "" : ",");
+            }
+        }
+        
+        writer.dedent();
+        writer.write("}");
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Gets body members from output (not HTTP-bound).
+     * 
+     * @param output The output structure
+     * @return List of body members
+     */
+    private List<MemberShape> getResponseBodyMembers(StructureShape output) {
+        return output.getAllMembers().values().stream()
+                .filter(m -> !m.hasTrait(HttpHeaderTrait.class) 
+                        && !m.hasTrait(HttpResponseCodeTrait.class)
+                        && !m.hasTrait(HttpPayloadTrait.class))
+                .toList();
+    }
+    
+    /**
+     * Generates response header extraction code.
+     * 
+     * @param member The member with @httpHeader
+     * @param model The Smithy model
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    private void generateResponseHeaderExtraction(MemberShape member, Model model, 
+                                                   UnisonWriter writer, UnisonContext context) {
+        String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+        String headerName = getHeaderName(member);
+        Shape targetShape = model.expectShape(member.getTarget());
+        
+        // Get the header value as Text
+        writer.write("-- Extract @httpHeader: $L", headerName);
+        writer.write("$L = aws.http.getHeader \"$L\" (Http.Response.headers response)", memberName, headerName);
+    }
+    
+    /**
+     * Generates response payload extraction code.
+     * 
+     * @param member The member with @httpPayload
+     * @param model The Smithy model
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     * @param isLast Whether this is the last member
+     */
+    private void generateResponsePayloadExtraction(MemberShape member, Model model,
+                                                     UnisonWriter writer, UnisonContext context, boolean isLast) {
+        String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+        Shape targetShape = model.expectShape(member.getTarget());
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        if (targetShape.isBlobShape()) {
+            // Blob payload - use response body directly
+            writer.write("$L = Http.Response.body response$L", memberName, isLast ? "" : ",");
+        } else if (targetShape.isStringShape()) {
+            // String payload - convert from bytes
+            writer.write("$L = aws.http.bytesToText (Http.Response.body response)$L", memberName, isLast ? "" : ",");
+        } else if (targetShape.isStructureShape() || targetShape.isUnionShape()) {
+            // Structure/Union payload - parse as JSON
+            String deserializer = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    targetShape.getId().getName() + "FromJson");
+            writer.write("payloadText = aws.http.bytesToText (Http.Response.body response)");
+            writer.write("payloadJson = !(aws.json.parseJson payloadText)");
+            writer.write("$L = !($L payloadJson)$L", memberName, deserializer, isLast ? "" : ",");
+        } else {
+            // Fallback - treat as text
+            writer.write("$L = aws.http.bytesToText (Http.Response.body response)$L", memberName, isLast ? "" : ",");
+        }
+    }
+    
+    /**
+     * Gets the JSON deserializer for a member.
+     * 
+     * @param member The member shape
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace
+     * @return The deserializer function
+     */
+    private String getJsonDeserializer(MemberShape member, Model model, String clientNamespace) {
+        boolean isOptional = !member.isRequired();
+        Shape targetShape = model.expectShape(member.getTarget());
+        String baseDeserializer = getDeserializerForType(targetShape, model, clientNamespace);
+        
+        if (isOptional) {
+            return "(aws.json.bridge.optionalField " + baseDeserializer + ")";
+        }
+        return baseDeserializer;
+    }
+    
+    /**
+     * Gets the deserializer function for a type.
+     * 
+     * @param shape The target shape
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace
+     * @return The deserializer function name
+     */
+    private String getDeserializerForType(Shape shape, Model model, String clientNamespace) {
+        if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    shape.getId().getName() + "FromJson");
+        } else if (shape.isStringShape()) {
+            return "aws.json.bridge.expectString";
+        } else if (shape.isIntegerShape() || shape.isLongShape() || shape.isShortShape() || shape.isByteShape()) {
+            return "aws.json.bridge.expectInt";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "aws.json.bridge.expectFloat";
+        } else if (shape.isBooleanShape()) {
+            return "aws.json.bridge.expectBoolean";
+        } else if (shape.isBlobShape()) {
+            return "aws.json.bridge.expectBase64Bytes";
+        } else if (shape.isTimestampShape()) {
+            return "aws.json.bridge.expectString"; // Timestamps are Text
+        } else if (shape.isListShape()) {
+            ListShape listShape = shape.asListShape().get();
+            String elementDeserializer = getDeserializerForType(
+                    model.expectShape(listShape.getMember().getTarget()), model, clientNamespace);
+            return "(aws.json.bridge.expectArray " + elementDeserializer + ")";
+        } else if (shape.isMapShape()) {
+            MapShape mapShape = shape.asMapShape().get();
+            String valueDeserializer = getDeserializerForType(
+                    model.expectShape(mapShape.getValue().getTarget()), model, clientNamespace);
+            return "(aws.json.bridge.expectObject " + valueDeserializer + ")";
+        } else if (shape.isStructureShape()) {
+            return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    shape.getId().getName() + "FromJson");
+        } else if (shape.isUnionShape()) {
+            return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    shape.getId().getName() + "FromJson");
+        } else if (shape.isDocumentShape()) {
+            return "(x -> x)"; // Document is already JsonValue
+        } else {
+            return "aws.json.bridge.expectString"; // Fallback
+        }
     }
     
     @Override
