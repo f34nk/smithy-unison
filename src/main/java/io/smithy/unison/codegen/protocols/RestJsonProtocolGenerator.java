@@ -1341,6 +1341,68 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     
     @Override
     public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement error parsing (Step 1.8)
+        ServiceShape service = context.serviceShape();
+        String clientNamespace = context.settings().getClientNamespace();
+        String serviceName = service.getId().getName();
+        
+        // Remove "Service" suffix if present to avoid "DynamoDBServiceServiceError"
+        if (serviceName.endsWith("Service")) {
+            serviceName = serviceName.substring(0, serviceName.length() - 7);
+        }
+        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                serviceName + "ServiceError", clientNamespace);
+        
+        writer.writeDocComment("Parse REST-JSON error response\n\n" +
+                "REST-JSON has multiple error formats:\n" +
+                "- Format 1: {\"__type\": \"ErrorName\", \"message\": \"...\"}\n" +
+                "- Format 2: {\"Type\": \"Sender\", \"message\": \"...\"}\n" +
+                "- Format 3: {\"code\": \"ErrorName\", \"message\": \"...\"}\n\n" +
+                "This parser checks all possible error code locations.");
+        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
+        writer.indent();
+        
+        // Parse error body
+        writer.write("errorBody = aws.http.bytesToText (Http.Response.body response)");
+        writer.write("json = match catch do !(aws.json.parseJson errorBody) with");
+        writer.indent();
+        writer.write("Right j -> j");
+        writer.write("Left _ -> aws.json.jsonObject []");
+        writer.dedent();
+        writer.write("");
+        
+        // Extract error code from multiple possible locations
+        writer.write("-- Extract error code (try multiple locations)");
+        writer.write("-- Format 1: __type field");
+        writer.write("errorType1 = aws.json.bridge.extractOptionalField \"__type\" json aws.json.bridge.expectString");
+        writer.write("-- Format 2: Type field");
+        writer.write("errorType2 = aws.json.bridge.extractOptionalField \"Type\" json aws.json.bridge.expectString");
+        writer.write("-- Format 3: code/Code field");
+        writer.write("errorType3 = aws.json.bridge.extractOptionalField \"code\" json aws.json.bridge.expectString");
+        writer.write("errorType4 = aws.json.bridge.extractOptionalField \"Code\" json aws.json.bridge.expectString");
+        writer.write("");
+        writer.write("-- Use first non-None error type");
+        writer.write("errorType = errorType1");
+        writer.write("  |> Optional.orElse errorType2");
+        writer.write("  |> Optional.orElse errorType3");
+        writer.write("  |> Optional.orElse errorType4");
+        writer.write("  |> Optional.getOrElse \"UnknownError\"");
+        writer.write("");
+        
+        // Extract error message
+        writer.write("-- Extract error message (try both cases)");
+        writer.write("errorMsg1 = aws.json.bridge.extractOptionalField \"message\" json aws.json.bridge.expectString");
+        writer.write("errorMsg2 = aws.json.bridge.extractOptionalField \"Message\" json aws.json.bridge.expectString");
+        writer.write("errorMessage = errorMsg1");
+        writer.write("  |> Optional.orElse errorMsg2");
+        writer.write("  |> Optional.getOrElse \"\"");
+        writer.write("");
+        
+        // Map to service error
+        writer.write("-- Map error type to service error");
+        writer.write("$L.errorFromCodeAndMessage errorType errorMessage", clientNamespace);
+        
+        writer.dedent();
+        writer.writeBlankLine();
     }
 }
