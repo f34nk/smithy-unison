@@ -3,10 +3,23 @@ package io.smithy.unison.codegen.protocols;
 import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
+import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StructureShape;
+import software.amazon.smithy.model.traits.HttpHeaderTrait;
+import software.amazon.smithy.model.traits.HttpLabelTrait;
+import software.amazon.smithy.model.traits.HttpPayloadTrait;
+import software.amazon.smithy.model.traits.HttpQueryTrait;
 import software.amazon.smithy.model.traits.HttpTrait;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Protocol generator for REST-JSON protocol (aws.protocols#restJson1).
@@ -110,6 +123,116 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      */
     private String getHttpUri(OperationShape operation) {
         return getHttpTrait(operation).getUri().toString();
+    }
+    
+    // ========== HTTP Binding Detection ==========
+    
+    /**
+     * Gets the set of member names that are bound to HTTP (not in the body).
+     * 
+     * <p>HTTP-bound members are those with:
+     * <ul>
+     *   <li>{@code @httpLabel} - Path parameters</li>
+     *   <li>{@code @httpQuery} - Query string parameters</li>
+     *   <li>{@code @httpHeader} - HTTP headers</li>
+     *   <li>{@code @httpPayload} - Raw payload (entire body)</li>
+     * </ul>
+     * 
+     * <p>These members are NOT serialized into the JSON body. Only unbound
+     * members are included in the JSON request/response body.
+     * 
+     * @param input The input structure shape
+     * @return Set of member names that are HTTP-bound
+     */
+    private Set<String> getHttpBoundMembers(StructureShape input) {
+        Set<String> bound = new HashSet<>();
+        
+        for (MemberShape member : input.getAllMembers().values()) {
+            if (isHttpBound(member)) {
+                bound.add(member.getMemberName());
+            }
+        }
+        
+        return bound;
+    }
+    
+    /**
+     * Checks if a member is bound to HTTP (not in the JSON body).
+     * 
+     * @param member The member shape to check
+     * @return true if the member has an HTTP binding trait
+     */
+    private boolean isHttpBound(MemberShape member) {
+        return member.hasTrait(HttpLabelTrait.class) ||
+               member.hasTrait(HttpQueryTrait.class) ||
+               member.hasTrait(HttpHeaderTrait.class) ||
+               member.hasTrait(HttpPayloadTrait.class);
+    }
+    
+    /**
+     * Gets members with {@code @httpLabel} trait (path parameters).
+     * 
+     * <p>These members are substituted into the URI path template.
+     * Example: For URI "/resources/{ResourceId}", the input member
+     * with {@code @httpLabel} named "ResourceId" provides the value.
+     * 
+     * @param input The input structure shape
+     * @return List of members with {@code @httpLabel} trait
+     */
+    private List<MemberShape> getPathParameterMembers(StructureShape input) {
+        return input.getAllMembers().values().stream()
+            .filter(m -> m.hasTrait(HttpLabelTrait.class))
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Gets members with {@code @httpQuery} trait (query string parameters).
+     * 
+     * <p>These members are serialized as query string parameters.
+     * Example: Member with {@code @httpQuery("maxResults")} becomes "?maxResults=10"
+     * 
+     * @param input The input structure shape
+     * @return List of members with {@code @httpQuery} trait
+     */
+    private List<MemberShape> getQueryParameterMembers(StructureShape input) {
+        return input.getAllMembers().values().stream()
+            .filter(m -> m.hasTrait(HttpQueryTrait.class))
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Gets members with {@code @httpHeader} trait (HTTP headers).
+     * 
+     * <p>These members are serialized as HTTP request headers.
+     * Example: Member with {@code @httpHeader("X-Custom-Header")} becomes
+     * an HTTP header "X-Custom-Header: value"
+     * 
+     * @param input The input structure shape
+     * @return List of members with {@code @httpHeader} trait
+     */
+    private List<MemberShape> getHeaderMembers(StructureShape input) {
+        return input.getAllMembers().values().stream()
+            .filter(m -> m.hasTrait(HttpHeaderTrait.class))
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Gets body members (not bound to HTTP).
+     * 
+     * <p>Body members are those WITHOUT HTTP binding traits. These members
+     * are serialized into the JSON request/response body.
+     * 
+     * <p>This is a key difference from AWS JSON protocol, which includes
+     * ALL members in the JSON body.
+     * 
+     * @param input The input structure shape
+     * @return List of members to be serialized in the JSON body
+     */
+    private List<MemberShape> getBodyMembers(StructureShape input) {
+        Set<String> httpBound = getHttpBoundMembers(input);
+        return input.getAllMembers().values().stream()
+            .filter(m -> !httpBound.contains(m.getMemberName()))
+            .collect(Collectors.toList());
     }
     
     // ========== Operation Signature Generation ==========
