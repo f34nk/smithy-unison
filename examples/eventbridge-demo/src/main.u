@@ -1,0 +1,38 @@
+-- Minimal EventBridge Demo with Threads
+
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
+
+defaultConfig : '{IO, Exception} aws.eventbridge.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = aws.eventbridge.Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  aws.eventbridge.Config.Config endpoint region creds false
+
+testEventBus : Text
+testEventBus = "unison-demo-bus"
+
+main : '{IO, Exception} ()
+main = do
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║  EventBridge Demo (LocalStack Backend)       ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  printLine ("Test Bus: " ++ testEventBus)
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ aws.eventbridge.Config.endpoint config)
+  printLine "Done"
