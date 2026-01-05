@@ -270,7 +270,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         if (!members.isEmpty()) {
             for (MemberShape member : members) {
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                String varName = memberName + "Opt";
+                String varName = io.smithy.unison.codegen.symbol.UnisonReservedWords.appendSuffix(memberName, "Opt");
                 String jsonName = getJsonName(member);
                 
                 Shape target = model.expectShape(member.getTarget());
@@ -294,7 +294,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             List<String> args = new ArrayList<>();
             for (MemberShape member : members) {
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                args.add(memberName + "Opt");
+                args.add(io.smithy.unison.codegen.symbol.UnisonReservedWords.appendSuffix(memberName, "Opt"));
             }
             
             if (args.isEmpty()) {
@@ -314,12 +314,13 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
                 
                 if (isNonOptional) {
-                    String unwrappedName = memberName + "Unwrapped";
+                    String unwrappedName = io.smithy.unison.codegen.symbol.UnisonReservedWords.appendSuffix(memberName, "Unwrapped");
+                    String optName = io.smithy.unison.codegen.symbol.UnisonReservedWords.appendSuffix(memberName, "Opt");
                     matchPatterns.add("Some " + unwrappedName);
-                    unwrappedNames.add(memberName + "Opt");
+                    unwrappedNames.add(optName);
                     constructorArgs.add(unwrappedName);
                 } else {
-                    constructorArgs.add(memberName + "Opt");
+                    constructorArgs.add(io.smithy.unison.codegen.symbol.UnisonReservedWords.appendSuffix(memberName, "Opt"));
                 }
             }
             
@@ -330,7 +331,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             
             for (int i = 0; i < requiredVars.size(); i++) {
                 String varName = requiredVars.get(i);
-                String unwrappedName = varName.replace("Opt", "");
+                String unwrappedName = io.smithy.unison.codegen.symbol.UnisonReservedWords.escape(
+                        varName.replace("Opt", ""));
                 
                 if (i == 0) {
                     nested.append(varName).append(" |> Optional.flatMap (").append(unwrappedName).append(" ->");
@@ -347,9 +349,9 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
                 
                 if (isNonOptional) {
-                    finalArgs.add(memberName);  // unwrapped name (without Opt)
+                    finalArgs.add(memberName);  // already escaped by toUnisonFunctionName
                 } else {
-                    finalArgs.add(memberName + "Opt");  // keep Optional
+                    finalArgs.add(io.smithy.unison.codegen.symbol.UnisonReservedWords.appendSuffix(memberName, "Opt"));  // keep Optional
                 }
             }
             

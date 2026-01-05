@@ -131,7 +131,9 @@ public final class UnisonSymbolProvider implements SymbolProvider {
             return name;
         }
         // Convert PascalCase to camelCase
-        return Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        String camelCase = Character.toLowerCase(name.charAt(0)) + name.substring(1);
+        // Escape if it's a reserved word
+        return UnisonReservedWords.escape(camelCase);
     }
     
     /**
