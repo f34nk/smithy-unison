@@ -590,20 +590,90 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     /**
      * Generates request body serialization code.
      * 
-     * <p>TODO: Step 1.4 will implement:
-     * <ul>
-     *   <li>Identification of body members (not HTTP-bound)</li>
-     *   <li>JSON serialization of body members</li>
-     *   <li>Optional field handling</li>
-     *   <li>@httpPayload support</li>
-     * </ul>
+     * <p>Serializes body members (not HTTP-bound) to JSON.
+     * Key difference from AWS JSON: Only unbound members are serialized.
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
      */
     private void generateRequestBody(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // Basic empty body - Step 1.4 will add JSON body serialization
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        String inputType = getInputTypeName(operation, context);
+        
+        Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
+        if (inputShape.isEmpty()) {
+            // No input - empty body
+            writer.write("");
+            writer.write("-- No input structure - empty body");
+            writer.write("bodyText = \"{}\"");
+            writer.write("bodyBytes = Text.toUtf8 bodyText");
+            return;
+        }
+        
+        // Check for @httpPayload member
+        Optional<MemberShape> payloadMember = ProtocolUtils.getPayloadMember(inputShape.get());
+        if (payloadMember.isPresent()) {
+            // @httpPayload present - use the payload member directly
+            generatePayloadSerialization(payloadMember.get(), inputType, model, writer, context);
+            return;
+        }
+        
+        // Get body members (not HTTP-bound)
+        List<MemberShape> bodyMembers = getBodyMembers(inputShape.get());
+        
+        if (bodyMembers.isEmpty()) {
+            // No body members - empty JSON body
+            writer.write("");
+            writer.write("-- No body members - empty JSON body");
+            writer.write("bodyText = \"{}\"");
+            writer.write("bodyBytes = Text.toUtf8 bodyText");
+        } else {
+            // Has body members - serialize to JSON
+            writer.write("");
+            writer.write("-- Serialize request body to JSON (only unbound members)");
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    operation.getId().getName() + "RequestBody");
+            writer.write("bodyJson = $L input", serializerName);
+            writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
+            writer.write("bodyBytes = Text.toUtf8 bodyText");
+        }
+    }
+    
+    /**
+     * Generates serialization for @httpPayload member.
+     * 
+     * @param payloadMember The payload member
+     * @param inputType The input type name
+     * @param model The Smithy model
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    private void generatePayloadSerialization(MemberShape payloadMember, String inputType,
+                                               Model model, UnisonWriter writer, UnisonContext context) {
+        String memberName = UnisonSymbolProvider.toUnisonFunctionName(payloadMember.getMemberName());
+        software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(payloadMember.getTarget());
+        
         writer.write("");
-        writer.write("-- Serialize request body to JSON");
-        writer.write("bodyText = \"{}\"");
-        writer.write("bodyBytes = Text.toUtf8 bodyText");
+        writer.write("-- @httpPayload: use payload member directly");
+        
+        if (targetShape.isBlobShape()) {
+            // Blob payload - use as-is
+            writer.write("bodyBytes = $L.$L input", inputType, memberName);
+        } else if (targetShape.isStringShape()) {
+            // String payload - convert to UTF8
+            writer.write("bodyText = $L.$L input", inputType, memberName);
+            writer.write("bodyBytes = Text.toUtf8 bodyText");
+        } else {
+            // Structure payload - serialize as JSON
+            String clientNamespace = context.settings().getClientNamespace();
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    targetShape.getId().getName() + "ToJson");
+            writer.write("bodyJson = $L ($L.$L input)", serializerName, inputType, memberName);
+            writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
+            writer.write("bodyBytes = Text.toUtf8 bodyText");
+        }
     }
     
     // ========== HTTP Call (Step 1.6) ==========
@@ -716,7 +786,264 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     
     @Override
     public void generateRequestSerializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement request serialization (Step 1.4)
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
+        if (inputShape.isEmpty()) {
+            return; // No request body needed
+        }
+        
+        // Check for @httpPayload member
+        Optional<MemberShape> payloadMember = ProtocolUtils.getPayloadMember(inputShape.get());
+        if (payloadMember.isPresent()) {
+            // @httpPayload present - may need structure serializer
+            software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(payloadMember.get().getTarget());
+            if (targetShape.isStructureShape()) {
+                generateStructureSerializer((StructureShape) targetShape, writer, context);
+            }
+            return;
+        }
+        
+        // Get body members (not HTTP-bound)
+        List<MemberShape> bodyMembers = getBodyMembers(inputShape.get());
+        if (bodyMembers.isEmpty()) {
+            return; // No request body needed
+        }
+        
+        StructureShape input = inputShape.get();
+        String inputType = UnisonSymbolProvider.toNamespacedTypeName(input.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                operation.getId().getName() + "RequestBody");
+        
+        // Generate serializer for body members only
+        generateBodyMembersSerializer(input, bodyMembers, functionName, inputType, model, clientNamespace, writer);
+    }
+    
+    /**
+     * Generates a JSON serializer for body members only (not HTTP-bound members).
+     * 
+     * <p>This is the key difference from AWS JSON: Only unbound members are serialized.
+     * 
+     * @param input The input structure
+     * @param bodyMembers The list of body members (not HTTP-bound)
+     * @param functionName The function name
+     * @param inputType The input type name
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace
+     * @param writer The Unison code writer
+     */
+    private void generateBodyMembersSerializer(StructureShape input, List<MemberShape> bodyMembers,
+                                                String functionName, String inputType, 
+                                                Model model, String clientNamespace, UnisonWriter writer) {
+        writer.writeComment("Serialize " + input.getId().getName() + " body members to JSON");
+        writer.writeSignature(functionName, inputType + " -> aws.json.JsonValue");
+        writer.write("$L input =", functionName);
+        writer.indent();
+        writer.write("let");
+        writer.indent();
+        
+        // Generate field list for body members only
+        writer.write("fields = [");
+        writer.indent();
+        
+        for (int i = 0; i < bodyMembers.size(); i++) {
+            MemberShape member = bodyMembers.get(i);
+            String jsonName = getJsonName(member);
+            boolean isLast = (i == bodyMembers.size() - 1);
+            
+            // Generate serialization for this field
+            writer.write("(\"$L\", $L)$L",
+                    jsonName,
+                    generateJsonValueForMember(member, model, clientNamespace, "input"),
+                    isLast ? "" : ",");
+        }
+        
+        writer.dedent();
+        writer.write("]");
+        
+        // Filter out null values for optional fields
+        writer.write("isNotNull = cases");
+        writer.indent();
+        writer.write("(_, aws.json.JsonValue.JsonNull) -> false");
+        writer.write("_ -> true");
+        writer.dedent();
+        writer.write("filteredFields = List.filter isNotNull fields");
+        
+        // Create JSON object
+        writer.write("aws.json.jsonObject filteredFields");
+        
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Gets the JSON field name for a member, respecting @jsonName trait.
+     * 
+     * @param member The member shape
+     * @return The JSON field name
+     */
+    private String getJsonName(MemberShape member) {
+        return member.getTrait(software.amazon.smithy.model.traits.JsonNameTrait.class)
+                .map(software.amazon.smithy.model.traits.JsonNameTrait::getValue)
+                .orElse(member.getMemberName());
+    }
+    
+    /**
+     * Generates Unison code to convert a member value to JsonValue.
+     * 
+     * <p>Adapted from AwsJsonProtocolGenerator.
+     * 
+     * @param member The member shape
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace
+     * @param inputVar The input variable name
+     * @return Unison expression to convert member to JsonValue
+     */
+    private String generateJsonValueForMember(MemberShape member, Model model, String clientNamespace, String inputVar) {
+        String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+        String inputType = UnisonSymbolProvider.toNamespacedTypeName(
+                model.expectShape(member.getContainer()).asStructureShape().get().getId().getName(),
+                clientNamespace);
+        String accessor = "(" + inputType + "." + memberName + " " + inputVar + ")";
+        
+        software.amazon.smithy.model.shapes.Shape target = model.expectShape(member.getTarget());
+        
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || 
+                member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
+        
+        if (isNonOptional) {
+            return generateJsonValue(target, accessor, model, clientNamespace);
+        } else {
+            // Optional field - map to JsonValue, defaulting to JsonNull
+            String conversion = generateJsonValue(target, "x", model, clientNamespace);
+            return String.format("Optional.map (x -> %s) %s |> Optional.getOrElse aws.json.JsonValue.JsonNull",
+                    conversion, accessor);
+        }
+    }
+    
+    /**
+     * Generates Unison expression to convert a shape value to JsonValue.
+     * 
+     * <p>Adapted from AwsJsonProtocolGenerator.
+     * 
+     * @param shape The shape
+     * @param varName The variable name
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace
+     * @return Unison expression to convert to JsonValue
+     */
+    private String generateJsonValue(software.amazon.smithy.model.shapes.Shape shape, String varName, 
+                                       Model model, String clientNamespace) {
+        // Check enum FIRST (before string check)
+        if (shape.isEnumShape() || 
+            (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            String toTextFn = UnisonSymbolProvider.toNamespacedFunctionName(
+                    shape.getId().getName() + "ToText", clientNamespace);
+            return "aws.json.JsonValue.JsonString (" + toTextFn + " " + varName + ")";
+        } else if (shape.isStringShape()) {
+            return "aws.json.JsonValue.JsonString " + varName;
+        } else if (shape.isBooleanShape()) {
+            return "aws.json.JsonValue.JsonBoolean " + varName;
+        } else if (shape.isIntegerShape() || shape.isLongShape() || 
+                   shape.isShortShape() || shape.isByteShape()) {
+            return "aws.json.JsonValue.JsonNumber (Float.fromInt " + varName + ")";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "aws.json.JsonValue.JsonNumber " + varName;
+        } else if (shape.isBlobShape()) {
+            return "aws.json.JsonValue.JsonString (Bytes.toBase64 " + varName + ")";
+        } else if (shape.isTimestampShape()) {
+            return "aws.json.JsonValue.JsonString " + varName;
+        } else if (shape.isListShape()) {
+            software.amazon.smithy.model.shapes.ListShape listShape = shape.asListShape().get();
+            software.amazon.smithy.model.shapes.Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            String elemConversion = generateJsonValue(memberTarget, "elem", model, clientNamespace);
+            return String.format("aws.json.JsonValue.JsonArray (List.map (elem -> %s) %s)", elemConversion, varName);
+        } else if (shape.isMapShape()) {
+            software.amazon.smithy.model.shapes.MapShape mapShape = shape.asMapShape().get();
+            software.amazon.smithy.model.shapes.Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            String valueConversion = generateJsonValue(valueTarget, "v", model, clientNamespace);
+            return String.format("aws.json.jsonObject (List.map (cases (k, v) -> (k, %s)) (Map.toList %s))",
+                    valueConversion, varName);
+        } else if (shape.isStructureShape()) {
+            // Nested structure - need recursive serialization
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    shape.getId().getName() + "ToJson");
+            return serializerName + " " + varName;
+        } else if (shape.isUnionShape()) {
+            // Union - need serializer
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    shape.getId().getName() + "ToJson");
+            return serializerName + " " + varName;
+        } else {
+            // Fallback
+            return "aws.json.JsonValue.JsonString (Any.toText " + varName + ")";
+        }
+    }
+    
+    /**
+     * Generates a JSON serializer for a structure (for nested structures).
+     * 
+     * <p>Adapted from AwsJsonProtocolGenerator.
+     * 
+     * @param structure The structure shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    private void generateStructureSerializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        if (structure.getAllMembers().isEmpty()) {
+            return; // No fields to serialize
+        }
+        
+        String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                structure.getId().getName() + "ToJson");
+        
+        writer.writeComment("Serialize " + structure.getId().getName() + " to JSON");
+        writer.writeSignature(functionName, structType + " -> aws.json.JsonValue");
+        writer.write("$L input =", functionName);
+        writer.indent();
+        writer.write("let");
+        writer.indent();
+        
+        // Generate field list
+        writer.write("fields = [");
+        writer.indent();
+        
+        List<MemberShape> members = structure.getAllMembers().values().stream().toList();
+        for (int i = 0; i < members.size(); i++) {
+            MemberShape member = members.get(i);
+            String jsonName = getJsonName(member);
+            boolean isLast = (i == members.size() - 1);
+            
+            writer.write("(\"$L\", $L)$L",
+                    jsonName,
+                    generateJsonValueForMember(member, model, clientNamespace, "input"),
+                    isLast ? "" : ",");
+        }
+        
+        writer.dedent();
+        writer.write("]");
+        
+        // Filter out null values
+        writer.write("isNotNull = cases");
+        writer.indent();
+        writer.write("(_, aws.json.JsonValue.JsonNull) -> false");
+        writer.write("_ -> true");
+        writer.dedent();
+        writer.write("filteredFields = List.filter isNotNull fields");
+        
+        // Create JSON object
+        writer.write("aws.json.jsonObject filteredFields");
+        
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
     }
     
     @Override
