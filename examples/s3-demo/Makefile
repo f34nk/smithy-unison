@@ -4,7 +4,8 @@ export AWS_SECRET_ACCESS_KEY=dummy
 export AWS_DEFAULT_REGION=us-east-1
 export AWS_ENDPOINT=http://localhost:$(HOST_PORT)
 export TF_VAR_endpoint=$(AWS_ENDPOINT)
-export CONTAINER_NAME=s3-demo
+export SERVICES=s3
+export CONTAINER_NAME=$(SERVICES)-demo
 
 .PHONY: all
 all: clean generate
@@ -18,7 +19,7 @@ generate: model/s3-2006-03-01.json
 	tree -h generated
 
 .PHONY: clean
-clean:
+clean: docker/stop
 	rm -rf generated/*.u ./build .ucm *.output.md
 	rm -f compiled/main.uc
 	rm -f model/*.json
@@ -70,7 +71,7 @@ docker/start: docker/stop
 	# Run LocalStack in Docker
 	#
 	@echo "Forward port $$HOST_PORT to Localstack port 4566"
-	docker run --rm -d -p $(HOST_PORT):4566 -e SERVICES=s3 --name $(CONTAINER_NAME) localstack/localstack
+	docker run --rm -d -p $(HOST_PORT):4566 -e SERVICES=$(SERVICES) --name $(CONTAINER_NAME) localstack/localstack
 
 .PHONY: docker/stop
 docker/stop:
