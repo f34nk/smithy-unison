@@ -31,7 +31,12 @@ Reference: https://smithy.io/2.0/index.html
   - Nested structure serializer/deserializer generation
   - Error parsing (JSON error responses with `__type` field)
   - Service error union types with exception handling
-- REST-JSON protocol (planned)
+- **REST-JSON protocol** (EventBridge, Step Functions, API Gateway)
+  - Full operation implementation with HTTP bindings and JSON serialization
+  - Path parameter substitution and query string building
+  - HTTP header extraction and body serialization
+  - Error parsing with multiple format support
+  - Reserved keyword escaping (backtick syntax)
 - AWS Query / EC2 Query protocols (planned)
 
 ### AWS Authentication
