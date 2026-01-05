@@ -2,6 +2,7 @@ package io.smithy.unison.codegen.protocols;
 
 import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
+import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.ShapeId;
@@ -109,6 +110,89 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      */
     private String getHttpUri(OperationShape operation) {
         return getHttpTrait(operation).getUri().toString();
+    }
+    
+    // ========== Operation Signature Generation ==========
+    
+    /**
+     * Gets the input type name for an operation.
+     * 
+     * <p>Returns the namespaced type name for the operation's input shape,
+     * or "()" if the operation has no input.
+     * 
+     * @param operation The operation shape
+     * @param context The code generation context
+     * @return The fully qualified input type name (e.g., "aws.eventbridge.PutEventsRequest")
+     */
+    private String getInputTypeName(OperationShape operation, UnisonContext context) {
+        String clientNamespace = context.settings().getClientNamespace();
+        return operation.getInput()
+                .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
+                .orElse("()");
+    }
+    
+    /**
+     * Gets the output type name for an operation.
+     * 
+     * <p>Returns the namespaced type name for the operation's output shape,
+     * or "()" if the operation has no output.
+     * 
+     * @param operation The operation shape
+     * @param context The code generation context
+     * @return The fully qualified output type name (e.g., "aws.eventbridge.PutEventsResponse")
+     */
+    private String getOutputTypeName(OperationShape operation, UnisonContext context) {
+        String clientNamespace = context.settings().getClientNamespace();
+        return operation.getOutput()
+                .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
+                .orElse("()");
+    }
+    
+    /**
+     * Gets the operation function name.
+     * 
+     * <p>Converts the operation name to a namespaced Unison function name
+     * (camelCase with namespace prefix).
+     * 
+     * @param operation The operation shape
+     * @param context The code generation context
+     * @return The fully qualified function name (e.g., "aws.eventbridge.putEvents")
+     */
+    private String getOperationName(OperationShape operation, UnisonContext context) {
+        String clientNamespace = context.settings().getClientNamespace();
+        return UnisonSymbolProvider.toNamespacedFunctionName(
+                operation.getId().getName(), clientNamespace);
+    }
+    
+    /**
+     * Generates the operation function signature.
+     * 
+     * <p>Generates a Unison function signature in the format:
+     * <pre>
+     * operationName : Config -> InputType -> '{IO, Exception, Threads} OutputType
+     * </pre>
+     * 
+     * <p>Example:
+     * <pre>
+     * aws.eventbridge.putEvents : aws.eventbridge.Config -> aws.eventbridge.PutEventsRequest -> '{IO, Exception, Threads} aws.eventbridge.PutEventsResponse
+     * </pre>
+     * 
+     * @param operation The operation to generate a signature for
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    private void generateOperationSignature(OperationShape operation, UnisonWriter writer, UnisonContext context) {
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String opName = getOperationName(operation, context);
+        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        String inputType = getInputTypeName(operation, context);
+        String outputType = getOutputTypeName(operation, context);
+        
+        // Generate signature: opName : Config -> Input -> '{IO, Exception, Threads} Output
+        String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", 
+                configType, inputType, outputType);
+        writer.writeSignature(opName, signature);
     }
     
     // ========== Operation Generation ==========
