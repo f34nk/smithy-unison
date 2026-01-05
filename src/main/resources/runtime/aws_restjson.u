@@ -1,0 +1,121 @@
+-- AWS REST-JSON Protocol Runtime Module
+-- Helper functions for REST-JSON protocol implementation
+--
+-- This module provides utilities for building REST-JSON requests,
+-- including path parameter substitution and query string construction.
+
+-- =============================================================================
+-- Path Parameter Substitution
+-- =============================================================================
+
+{{
+Build REST URL with path parameter substitution.
+
+Replaces {label} placeholders in the URI pattern with values from the map.
+
+Example:
+  endpoint = "https://api.example.com"
+  uriPattern = "/functions/{FunctionName}/invocations"
+  pathParams = Map.fromList [("FunctionName", "MyFunc")]
+  result = "https://api.example.com/functions/MyFunc/invocations"
+
+Note: Values are URL-encoded automatically.
+}}
+aws.restjson.buildRestUrl : Text -> Text -> Map Text Text -> Text
+aws.restjson.buildRestUrl endpoint uriPattern pathParams =
+  -- Replace {label} placeholders with URL-encoded values from map
+  url = pathParams
+    |> Map.toList
+    |> List.foldLeft uriPattern (acc, kv ->
+        match kv with (key, value) ->
+          encodedValue = aws.http.urlEncode value
+          Text.replaceAll ("{" ++ key ++ "}") encodedValue acc)
+  endpoint ++ url
+
+{{
+Build REST URL with a single path parameter.
+
+Convenience function for operations with exactly one path parameter.
+}}
+aws.restjson.buildRestUrlSingle : Text -> Text -> Text -> Text -> Text
+aws.restjson.buildRestUrlSingle endpoint uriPattern paramName paramValue =
+  pathParams = Map.fromList [(paramName, paramValue)]
+  aws.restjson.buildRestUrl endpoint uriPattern pathParams
+
+-- =============================================================================
+-- Query Parameter Construction
+-- =============================================================================
+
+{{
+Add query parameters to a URL.
+
+Builds query string from a map and appends to the URL.
+Empty map returns the URL unchanged.
+
+Example:
+  url = "https://api.example.com/resources"
+  params = Map.fromList [("maxResults", "10"), ("filter", "active")]
+  result = "https://api.example.com/resources?maxResults=10&filter=active"
+
+Note: Both keys and values are URL-encoded.
+}}
+aws.restjson.addQueryParams : Text -> Map Text Text -> Text
+aws.restjson.addQueryParams url params =
+  if Map.isEmpty params then url
+  else
+    queryString = params
+      |> Map.toList
+      |> List.map (kv -> match kv with (k, v) ->
+          aws.http.urlEncode k ++ "=" ++ aws.http.urlEncode v)
+      |> Text.join "&"
+    url ++ "?" ++ queryString
+
+{{
+Add a single query parameter to a URL.
+
+Convenience function for adding one parameter.
+Handles both fresh URLs and URLs that already have query parameters.
+}}
+aws.restjson.addQueryParam : Text -> Text -> Text -> Text
+aws.restjson.addQueryParam url paramName paramValue =
+  encodedName = aws.http.urlEncode paramName
+  encodedValue = aws.http.urlEncode paramValue
+  separator = if Text.contains "?" url then "&" else "?"
+  url ++ separator ++ encodedName ++ "=" ++ encodedValue
+
+-- =============================================================================
+-- URL Encoding
+-- =============================================================================
+
+{{
+URL-encode a path segment for use in REST URLs.
+
+Path segments have different encoding rules than query parameters:
+- Forward slashes (/) should be encoded as %2F
+- Equals (=) should be encoded as %3D
+- Ampersands (&) should be encoded as %26
+
+This uses the same encoding as query parameters since aws.http.urlEncode
+follows RFC 3986 which encodes all reserved characters.
+}}
+aws.restjson.urlEncodePathSegment : Text -> Text
+aws.restjson.urlEncodePathSegment text =
+  aws.http.urlEncode text
+
+{{
+Build a complete REST URL with both path and query parameters.
+
+Convenience function that combines path substitution and query addition.
+
+Example:
+  endpoint = "https://api.example.com"
+  uriPattern = "/users/{UserId}/posts"
+  pathParams = Map.fromList [("UserId", "123")]
+  queryParams = Map.fromList [("limit", "10")]
+  result = "https://api.example.com/users/123/posts?limit=10"
+}}
+aws.restjson.buildCompleteUrl : Text -> Text -> Map Text Text -> Map Text Text -> Text
+aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams =
+  baseUrl = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  aws.restjson.addQueryParams baseUrl queryParams
+
