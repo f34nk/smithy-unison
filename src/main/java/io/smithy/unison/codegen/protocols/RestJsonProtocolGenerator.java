@@ -395,34 +395,171 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     /**
      * Generates URL building code with path parameter substitution.
      * 
-     * <p>TODO: Step 1.3 will implement:
-     * <ul>
-     *   <li>Path parameter extraction from @httpLabel members</li>
-     *   <li>URL encoding of path segments</li>
-     *   <li>Substitution of {param} placeholders</li>
-     * </ul>
+     * <p>Extracts {@code @httpLabel} members and substitutes them into the URI template.
+     * Example: URI "/resources/{ResourceId}" with ResourceId="abc123" becomes "/resources/abc123"
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
      */
     private void generateUrlBuilding(OperationShape operation, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
         String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        String inputType = getInputTypeName(operation, context);
         
-        // Basic URL building - Step 1.3 will add path parameter substitution
-        writer.write("url = ($L.endpoint config) ++ uri", configType);
+        Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
+        if (inputShape.isEmpty()) {
+            // No input - just use URI as-is
+            writer.write("url = ($L.endpoint config) ++ uri", configType);
+            return;
+        }
+        
+        List<MemberShape> pathParams = getPathParameterMembers(inputShape.get());
+        
+        if (pathParams.isEmpty()) {
+            // No path parameters - just use URI as-is
+            writer.write("url = ($L.endpoint config) ++ uri", configType);
+        } else {
+            // Has path parameters - need substitution
+            writer.write("");
+            writer.write("-- Substitute path parameters");
+            
+            String currentUri = "uri";
+            for (int i = 0; i < pathParams.size(); i++) {
+                MemberShape member = pathParams.get(i);
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                String placeholder = "{" + member.getMemberName() + "}";
+                String nextUri = "uri" + (i + 1);
+                
+                // Extract value from input
+                writer.write("$LValue = $L.$L input", memberName, inputType, memberName);
+                
+                // URL encode and substitute
+                writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode $LValue) $L",
+                        nextUri, placeholder, memberName, currentUri);
+                
+                currentUri = nextUri;
+            }
+            
+            writer.write("url = ($L.endpoint config) ++ $L", configType, currentUri);
+        }
     }
     
     /**
      * Generates query string building code.
      * 
-     * <p>TODO: Step 1.3 will implement:
-     * <ul>
-     *   <li>Query parameter extraction from @httpQuery members</li>
-     *   <li>URL encoding of query values</li>
-     *   <li>Building query string with proper separators</li>
-     * </ul>
+     * <p>Extracts {@code @httpQuery} members and builds a query string.
+     * Example: maxResults=10&filter=active becomes "?maxResults=10&filter=active"
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
      */
     private void generateQueryString(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // Basic empty query string - Step 1.3 will add query parameter serialization
-        writer.write("queryString = \"\"");
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        String inputType = getInputTypeName(operation, context);
+        
+        Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
+        if (inputShape.isEmpty()) {
+            writer.write("queryString = \"\"");
+            return;
+        }
+        
+        List<MemberShape> queryParams = getQueryParameterMembers(inputShape.get());
+        
+        if (queryParams.isEmpty()) {
+            writer.write("queryString = \"\"");
+        } else {
+            writer.write("");
+            writer.write("-- Build query string from @httpQuery members");
+            writer.write("queryParts : [Optional Text]");
+            writer.write("queryParts = [");
+            writer.indent();
+            
+            for (int i = 0; i < queryParams.size(); i++) {
+                MemberShape member = queryParams.get(i);
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                String queryName = getQueryParamName(member);
+                boolean isLast = (i == queryParams.size() - 1);
+                
+                // Get the target shape to determine serialization
+                software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
+                String toTextFunc = getToTextFunction(targetShape, clientNamespace);
+                
+                // Check if member is required
+                boolean isRequired = member.isRequired();
+                
+                if (isRequired) {
+                    // Required field: convert value directly and wrap in Some
+                    if (toTextFunc.isEmpty()) {
+                        writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L.$L input))$L",
+                                queryName, inputType, memberName, isLast ? "" : ",");
+                    } else {
+                        writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L ($L.$L input)))$L",
+                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
+                    }
+                } else {
+                    // Optional field: map over the Optional
+                    if (toTextFunc.isEmpty()) {
+                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
+                                queryName, inputType, memberName, isLast ? "" : ",");
+                    } else {
+                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
+                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
+                    }
+                }
+            }
+            
+            writer.dedent();
+            writer.write("]");
+            writer.write("filteredParts = List.filterMap (x -> x) queryParts");
+            writer.write("queryString = if List.isEmpty filteredParts then \"\" else \"?\" ++ Text.join \"&\" filteredParts");
+        }
+    }
+    
+    /**
+     * Gets the query parameter name for a member with {@code @httpQuery} trait.
+     * 
+     * @param member The member shape
+     * @return The query parameter name
+     */
+    private String getQueryParamName(MemberShape member) {
+        return member.getTrait(HttpQueryTrait.class)
+                .map(HttpQueryTrait::getValue)
+                .filter(v -> !v.isEmpty())
+                .orElse(member.getMemberName());
+    }
+    
+    /**
+     * Gets the appropriate toText function for a given shape type.
+     * 
+     * @param shape The shape to get toText function for
+     * @param clientNamespace The client namespace for namespacing enum functions
+     * @return The toText function name, or empty string if no conversion needed
+     */
+    private String getToTextFunction(software.amazon.smithy.model.shapes.Shape shape, String clientNamespace) {
+        // Check for enums first
+        if (shape.isEnumShape() || 
+            (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            return UnisonSymbolProvider.toNamespacedFunctionName(
+                    shape.getId().getName() + "ToText", clientNamespace);
+        }
+        
+        if (shape.isStringShape()) {
+            return "";  // No conversion needed for Text
+        } else if (shape.isIntegerShape() || shape.isLongShape()) {
+            return "Int.toText";
+        } else if (shape.isBooleanShape()) {
+            return "Boolean.toText";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "Float.toText";
+        } else if (shape.isTimestampShape()) {
+            return "";  // Timestamps are Text in Unison
+        } else {
+            return "";  // Default fallback
+        }
     }
     
     // ========== Request Headers (Step 1.5) ==========
