@@ -28,8 +28,10 @@ use aws.json.AttributeValue'BOOL
 -- Get environment variable with default value
 envOrDefault : Text -> Text -> '{IO, Exception} Text
 envOrDefault name default = do
-  value = getEnv name
-  if Text.isEmpty value then default else value
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
 
 -- =============================================================================
 -- Configuration
