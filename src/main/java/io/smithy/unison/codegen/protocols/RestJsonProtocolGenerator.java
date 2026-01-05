@@ -567,22 +567,102 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     /**
      * Generates request header building code.
      * 
-     * <p>TODO: Step 1.5 will implement:
-     * <ul>
-     *   <li>Header extraction from @httpHeader members</li>
-     *   <li>Content-Type header</li>
-     *   <li>Optional header handling</li>
-     * </ul>
+     * <p>Extracts {@code @httpHeader} members and builds HTTP request headers.
+     * Handles both required and optional headers, with type-specific serialization.
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
      */
     private void generateRequestHeaders(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // Basic headers - Step 1.5 will add @httpHeader members
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        String inputType = getInputTypeName(operation, context);
+        
+        Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
+        
         writer.write("");
-        writer.write("-- Request headers");
-        writer.write("headers = [");
-        writer.indent();
-        writer.write("(\"Content-Type\", \"application/json\")");
-        writer.dedent();
-        writer.write("]");
+        writer.write("-- Build headers from @httpHeader members");
+        
+        if (inputShape.isEmpty()) {
+            // No input - just Content-Type
+            writer.write("headers = [(\"Content-Type\", \"application/json\")]");
+            return;
+        }
+        
+        List<MemberShape> headerMembers = getHeaderMembers(inputShape.get());
+        
+        if (headerMembers.isEmpty()) {
+            // No custom headers - just Content-Type
+            writer.write("headers = [(\"Content-Type\", \"application/json\")]");
+        } else {
+            // Has custom headers - build header list
+            writer.write("baseHeaders = [(\"Content-Type\", \"application/json\")]");
+            writer.write("-- Each header is converted to (Text, Optional Text) for homogeneous list");
+            writer.write("customHeaderParts : [(Text, Optional Text)]");
+            writer.write("customHeaderParts = [");
+            writer.indent();
+            
+            for (int i = 0; i < headerMembers.size(); i++) {
+                MemberShape member = headerMembers.get(i);
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                String headerName = getHeaderName(member);
+                boolean isLast = (i == headerMembers.size() - 1);
+                
+                // Get target shape to determine serialization
+                software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
+                String toTextFunc = getToTextFunction(targetShape, clientNamespace);
+                
+                // Check if member is required
+                boolean isRequired = member.isRequired();
+                
+                if (isRequired) {
+                    // Required field: convert value directly and wrap in Some
+                    if (toTextFunc.isEmpty()) {
+                        writer.write("(\"$L\", Some ($L.$L input))$L", 
+                                headerName, inputType, memberName, isLast ? "" : ",");
+                    } else {
+                        writer.write("(\"$L\", Some ($L ($L.$L input)))$L", 
+                                headerName, toTextFunc, inputType, memberName, isLast ? "" : ",");
+                    }
+                } else {
+                    // Optional field: map over the Optional
+                    if (toTextFunc.isEmpty()) {
+                        writer.write("(\"$L\", $L.$L input)$L", 
+                                headerName, inputType, memberName, isLast ? "" : ",");
+                    } else {
+                        writer.write("(\"$L\", Optional.map $L ($L.$L input))$L", 
+                                headerName, toTextFunc, inputType, memberName, isLast ? "" : ",");
+                    }
+                }
+            }
+            
+            writer.dedent();
+            writer.write("]");
+            
+            // Build headers by extracting Some values
+            writer.write("toHeader : (Text, Optional Text) -> Optional (Text, Text)");
+            writer.write("toHeader pair = match pair with");
+            writer.indent();
+            writer.write("(name, Some v) -> if Text.isEmpty v then None else Some (name, v)");
+            writer.write("(_, None) -> None");
+            writer.dedent();
+            writer.write("filteredHeaders = List.filterMap toHeader customHeaderParts");
+            writer.write("headers = baseHeaders ++ filteredHeaders");
+        }
+    }
+    
+    /**
+     * Gets the header name for a member with {@code @httpHeader} trait.
+     * 
+     * @param member The member shape
+     * @return The header name
+     */
+    private String getHeaderName(MemberShape member) {
+        return member.getTrait(HttpHeaderTrait.class)
+                .map(HttpHeaderTrait::getValue)
+                .filter(v -> !v.isEmpty())
+                .orElse(member.getMemberName());
     }
     
     // ========== Request Body (Step 1.4) ==========
