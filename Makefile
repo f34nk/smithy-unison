@@ -2,7 +2,7 @@ X:=$(shell find examples -type d -not -name examples -maxdepth 1 -exec basename 
 EXAMPLES:=$(foreach x,$(X),examples/$(x)/)
 
 .PHONY: all
-all: clean build examples test
+all: clean build
 
 .PHONY: build
 build:
@@ -64,7 +64,7 @@ examples/%: $(EXAMPLES)
 	#
 	# Build $@
 	#
-	cd $@ && make
+	cd $@ && make clean && make test
 
 # Usage: make examples/clean
 examples/clean:
@@ -76,16 +76,6 @@ examples/clean:
 		make clean ; \
 		cd - ; \
 	done
-
-.PHONY: demo
-demo/%:
-	#
-	# Run $@
-	#
-	name=$(shell echo $@|sed 's/demo\///g') && \
-	cd examples/$$name-demo && \
-	make clean && \
-	make test
 
 .PHONY: integration-test
 integration-test/%:
