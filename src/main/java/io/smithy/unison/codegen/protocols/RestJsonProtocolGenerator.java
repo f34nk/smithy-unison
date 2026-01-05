@@ -761,12 +761,18 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     /**
      * Generates HTTP call code with SigV4 signing.
      * 
-     * <p>TODO: Step 1.6 will implement:
+     * <p>Implements:
      * <ul>
      *   <li>SigV4 request signing</li>
-     *   <li>Error status checking</li>
-     *   <li>HTTP method-specific request construction</li>
+     *   <li>HTTP method-specific request construction (GET/DELETE/HEAD vs POST/PUT/PATCH)</li>
+     *   <li>HTTP request execution</li>
      * </ul>
+     * 
+     * <p>Error status checking is handled in {@link #generateResponseHandling}.
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
      */
     private void generateHttpCall(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         String clientNamespace = context.settings().getClientNamespace();
