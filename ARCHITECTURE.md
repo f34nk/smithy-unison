@@ -245,9 +245,9 @@ public interface ProtocolGenerator {
 |----------|----------------|--------|----------|
 | REST-XML | `RestXmlProtocolGenerator` | ✅ | S3, CloudFront, Route 53 |
 | AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | ✅ | DynamoDB, Lambda, Kinesis |
+| REST-JSON | `RestJsonProtocolGenerator` | ✅ | EventBridge, Step Functions, API Gateway |
 | AWS Query | `AwsQueryProtocolGenerator` | Planned | SQS, SNS, RDS |
 | EC2 Query | `Ec2QueryProtocolGenerator` | Planned | EC2, Auto Scaling |
-| REST-JSON | `RestJsonProtocolGenerator` | Planned | API Gateway, Step Functions |
 
 ## Code Generation Flow
 
@@ -308,6 +308,158 @@ The generator conditionally generates AWS-specific code based on service traits:
 | Runtime modules | Copied (protocol-specific) | Not copied |
 | Model types | Via protocol generator | Via `generateModelTypes()` |
 | Operations | Full implementation (if protocol supported) | Stub implementation |
+
+---
+
+## Protocol Implementation Details
+
+### REST-JSON Protocol
+
+**Status:** ✅ Fully Implemented  
+**Generator:** `RestJsonProtocolGenerator.java`  
+**Trait:** `aws.protocols#restJson1`  
+**Services:** EventBridge, Step Functions, API Gateway, Lambda (streaming), AppSync, IoT, Cognito, WAF
+
+#### Overview
+
+The REST-JSON protocol combines RESTful HTTP bindings with JSON request/response serialization. It uses HTTP verbs, URI paths, query strings, and headers for operation routing while serializing structured data as JSON.
+
+#### HTTP Binding Extraction
+
+The generator extracts HTTP bindings from Smithy traits to determine where each input member should be placed:
+
+| Trait | Location | Example |
+|-------|----------|---------|
+| `@httpLabel` | URI path | `/functions/{FunctionName}/invocations` |
+| `@httpQuery` | Query string | `?maxResults=100&nextToken=abc` |
+| `@httpHeader` | HTTP header | `X-Amz-Target: EventBridge.PutEvents` |
+| `@httpPayload` | HTTP body (raw) | Binary or text payload |
+| *(none)* | HTTP body (JSON) | `{"Detail": "...", "DetailType": "..."}` |
+
+**Binding Priority:**
+1. Members with explicit HTTP traits (`@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`)
+2. Remaining members serialize to JSON body
+
+#### Request Generation Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    REST-JSON Request Generation              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. HTTP Binding Detection                                  │
+│     ┌──────────────┐    ┌──────────────┐    ┌────────────┐ │
+│     │ Scan Input   │───▶│ Group by     │───▶│ Validate   │ │
+│     │ Members      │    │ Trait Type   │    │ Placement  │ │
+│     └──────────────┘    └──────────────┘    └────────────┘ │
+│                                                              │
+│  2. URL Building                                             │
+│     ┌──────────────┐    ┌──────────────┐                    │
+│     │ Substitute   │───▶│ Append Query │                    │
+│     │ Path Params  │    │ Parameters   │                    │
+│     └──────────────┘    └──────────────┘                    │
+│                                                              │
+│  3. Header Construction                                      │
+│     ┌──────────────┐    ┌──────────────┐                    │
+│     │ Extract      │───▶│ Add Content- │                    │
+│     │ @httpHeader  │    │ Type         │                    │
+│     └──────────────┘    └──────────────┘                    │
+│                                                              │
+│  4. Body Serialization                                       │
+│     ┌──────────────┐    ┌──────────────┐    ┌────────────┐ │
+│     │ Collect Body │───▶│ Serialize to │───▶│ UTF-8      │ │
+│     │ Members      │    │ JSON         │    │ Encode     │ │
+│     └──────────────┘    └──────────────┘    └────────────┘ │
+│                                                              │
+│  5. SigV4 Signing                                            │
+│     ┌──────────────┐    ┌──────────────┐                    │
+│     │ Sign Request │───▶│ Add Auth     │                    │
+│     │ (aws.sigv4)  │    │ Headers      │                    │
+│     └──────────────┘    └──────────────┘                    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Response Deserialization Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 REST-JSON Response Deserialization           │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. Status Check                                             │
+│     ┌──────────────┐    ┌──────────────┐    ┌────────────┐ │
+│     │ Check Status │───▶│ < 300:       │───▶│ Parse      │ │
+│     │ Code         │    │ Success      │    │ Response   │ │
+│     └──────────────┘    │ >= 300:      │    └────────────┘ │
+│                         │ Error        │                    │
+│                         └──────────────┘                    │
+│                                ↓                             │
+│  2. Error Parsing (if >= 300)                                │
+│     ┌──────────────┐    ┌──────────────┐                    │
+│     │ Parse JSON   │───▶│ Extract      │                    │
+│     │ Body         │    │ __type/code  │                    │
+│     └──────────────┘    └──────────────┘                    │
+│                                ↓                             │
+│     ┌──────────────┐    ┌──────────────┐                    │
+│     │ Extract      │───▶│ Map to       │                    │
+│     │ message      │    │ ServiceError │                    │
+│     └──────────────┘    └──────────────┘                    │
+│                                                              │
+│  3. Success Parsing                                          │
+│     ┌──────────────┐    ┌──────────────┐    ┌────────────┐ │
+│     │ Parse JSON   │───▶│ Extract HTTP │───▶│ Construct  │ │
+│     │ Body         │    │ Headers      │    │ Output     │ │
+│     └──────────────┘    └──────────────┘    └────────────┘ │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Error Handling
+
+REST-JSON errors are returned as JSON with HTTP status >= 300. The error code can appear in multiple locations:
+
+```json
+{
+  "__type": "ResourceNotFoundException",
+  "message": "The resource was not found"
+}
+```
+
+Or:
+
+```json
+{
+  "code": "ResourceNotFoundException",
+  "message": "The resource was not found"
+}
+```
+
+The generator handles all variations:
+- `__type` field (primary)
+- `code` field (secondary)
+- `Code` field (alternate casing)
+- `Type` field (alternate location)
+
+#### Reserved Keyword Handling
+
+Unison has reserved keywords like `type` that may appear as field names in AWS models. The generator escapes these using backticks:
+
+```unison
+-- Field accessor with escaped keyword
+Condition.`type` condition
+
+-- Lambda parameter with escaped keyword
+Optional.flatMap (`type` -> ...) typeOpt
+```
+
+#### Runtime Dependencies
+
+The REST-JSON protocol requires these runtime modules:
+- `aws_restjson.u` - URL building, path/query parameter handling
+- `aws_json.u` - JSON serialization/deserialization
+- `aws_http.u` - HTTP client with retry
+- `aws_sigv4.u` - SigV4 request signing
 
 ---
 
