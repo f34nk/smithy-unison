@@ -5,6 +5,7 @@ import io.smithy.unison.codegen.UnisonWriter;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.traits.HttpTrait;
 
 /**
  * Protocol generator for REST-JSON protocol (aws.protocols#restJson1).
@@ -71,7 +72,44 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     
     // ========== HTTP Trait Helper Methods ==========
     
-    // TODO: Add HTTP trait helper methods (Step 1.1.2)
+    /**
+     * Gets the HTTP trait from an operation.
+     * 
+     * <p>REST-JSON operations are required to have an {@code @http} trait
+     * that specifies the HTTP method and URI pattern.
+     * 
+     * @param operation The operation shape
+     * @return The HTTP trait
+     * @throws software.amazon.smithy.model.validation.ValidationException if the operation lacks an @http trait
+     */
+    private HttpTrait getHttpTrait(OperationShape operation) {
+        return operation.expectTrait(HttpTrait.class);
+    }
+    
+    /**
+     * Gets the HTTP method from an operation's @http trait.
+     * 
+     * <p>REST-JSON supports all standard HTTP methods: GET, POST, PUT, DELETE, PATCH, HEAD.
+     * 
+     * @param operation The operation shape
+     * @return The HTTP method (e.g., "GET", "POST", "PUT", "DELETE")
+     */
+    private String getHttpMethod(OperationShape operation) {
+        return getHttpTrait(operation).getMethod();
+    }
+    
+    /**
+     * Gets the HTTP URI pattern from an operation's @http trait.
+     * 
+     * <p>The URI pattern may contain path parameters in curly braces (e.g., "/resources/{ResourceId}").
+     * Path parameters correspond to input members with the {@code @httpLabel} trait.
+     * 
+     * @param operation The operation shape
+     * @return The URI pattern (e.g., "/functions/{FunctionName}/invocations")
+     */
+    private String getHttpUri(OperationShape operation) {
+        return getHttpTrait(operation).getUri().toString();
+    }
     
     // ========== Operation Generation ==========
     
