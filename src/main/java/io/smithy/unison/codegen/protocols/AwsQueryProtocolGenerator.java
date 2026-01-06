@@ -225,14 +225,15 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("-- request = Http.Request.post url allHeaders bodyBytes");
         writer.write("-- response = !(executeRequest request)");
         
-        // Placeholder for response parsing (Step 2.6)
+        // Parse XML response
         writer.write("");
-        writer.write("-- TODO: Parse XML response");
-        writer.write("-- parseResponse response");
-        
-        // Temporary stub return
-        writer.write("");
-        writer.write("bug \"AWS Query operation not yet implemented\"");
+        writer.write("-- Parse XML response");
+        if (operation.getOutput().isPresent()) {
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+            writer.write("!($L response)", parserName);
+        } else {
+            writer.write("()");
+        }
         
         writer.dedent();
     }
@@ -565,9 +566,135 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         }
     }
     
+    // ========== Response Deserialization ==========
+    
     @Override
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement AWS Query response deserialization (Step 2.5)
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        Optional<StructureShape> outputShape = ProtocolUtils.getOutputShape(operation, model);
+        if (outputShape.isEmpty()) {
+            return; // No output to deserialize
+        }
+        
+        StructureShape output = outputShape.get();
+        String outputType = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
+        String operationName = operation.getId().getName();
+        
+        writer.writeComment("Parse " + operationName + " response from XML");
+        writer.writeSignature(functionName, "Http.Response -> '{Exception} " + outputType);
+        writer.write("$L response = do", functionName);
+        writer.indent();
+        
+        // Navigate AWS Query response wrapper structure
+        writer.write("-- AWS Query response structure:");
+        writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
+        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
+        writer.write("responseElem = aws.xml.extractElement \"$LResponse\" xmlText", operationName);
+        writer.write("resultElem = aws.xml.extractElement \"$LResult\" responseElem", operationName);
+        
+        // Extract fields from result element
+        generateFieldExtraction(output, model, clientNamespace, writer);
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates field extraction from XML result element.
+     * 
+     * <p>Extracts each field from the XML using appropriate extraction functions
+     * based on the field's type, then constructs the output record.
+     */
+    private void generateFieldExtraction(StructureShape output, Model model, 
+                                         String clientNamespace, UnisonWriter writer) {
+        List<MemberShape> members = new ArrayList<>(output.getAllMembers().values());
+        
+        if (members.isEmpty()) {
+            // No fields - construct empty output
+            String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
+            writer.write(outputTypeName + "." + outputTypeName);
+            return;
+        }
+        
+        writer.write("");
+        writer.write("-- Extract fields from XML result");
+        
+        // Extract each field
+        for (MemberShape member : members) {
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            String varName = memberName + "Val";
+            String xmlName = getXmlFieldName(member);
+            Shape target = model.expectShape(member.getTarget());
+            
+            String extractor = getXmlExtractor(target, member.isRequired());
+            writer.write("$L = $L \"$L\" resultElem", varName, extractor, xmlName);
+        }
+        
+        // Construct output record with extracted fields
+        writer.write("");
+        writer.write("-- Construct output record");
+        String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
+        
+        // Build positional arguments for constructor
+        List<String> args = new ArrayList<>();
+        for (MemberShape member : members) {
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            args.add(memberName + "Val");
+        }
+        
+        // Generate constructor call with positional arguments
+        StringBuilder sb = new StringBuilder();
+        sb.append(outputTypeName).append(".").append(outputTypeName);
+        for (String arg : args) {
+            sb.append(" ").append(arg);
+        }
+        writer.write(sb.toString());
+    }
+    
+    /**
+     * Gets the XML field name for a member, using @xmlName trait if present.
+     */
+    private String getXmlFieldName(MemberShape member) {
+        return member.getTrait(XmlNameTrait.class)
+                .map(XmlNameTrait::getValue)
+                .orElse(member.getMemberName());
+    }
+    
+    /**
+     * Gets the appropriate XML extractor function based on the shape type.
+     * 
+     * <p>Returns functions like:
+     * <ul>
+     *   <li>aws.xml.extractElementOpt - for optional text fields</li>
+     *   <li>aws.xml.extractElement - for required text fields</li>
+     *   <li>aws.xml.extractInt - for integer fields</li>
+     *   <li>aws.xml.extractBool - for boolean fields</li>
+     * </ul>
+     */
+    private String getXmlExtractor(Shape shape, boolean isRequired) {
+        switch (shape.getType()) {
+            case STRING:
+                return isRequired ? "aws.xml.extractElement" : "aws.xml.extractElementOpt";
+            case BOOLEAN:
+                return isRequired ? "aws.xml.extractBool" : "aws.xml.extractBoolOpt";
+            case BYTE:
+            case SHORT:
+            case INTEGER:
+            case LONG:
+                return isRequired ? "aws.xml.extractInt" : "aws.xml.extractIntOpt";
+            case FLOAT:
+            case DOUBLE:
+                return isRequired ? "aws.xml.extractFloat" : "aws.xml.extractFloatOpt";
+            case LIST:
+                return "aws.xml.extractList";
+            case STRUCTURE:
+                return "aws.xml.extractStructure";
+            default:
+                return isRequired ? "aws.xml.extractElement" : "aws.xml.extractElementOpt";
+        }
     }
     
     @Override
