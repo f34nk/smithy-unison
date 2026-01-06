@@ -171,6 +171,7 @@ public class PaginationGenerator {
         // Get the item type from the output structure
         String itemsField = UnisonSymbolProvider.toUnisonFunctionName(items);
         String itemType = "a"; // default to polymorphic
+        boolean itemsFieldIsRequired = false; // Track if items field is required
         if (operation.getOutput().isPresent()) {
             StructureShape outputShape = model.expectShape(operation.getOutput().get(), StructureShape.class);
             // Try to find the items member - check both as-is and with first letter capitalized
@@ -200,7 +201,9 @@ public class PaginationGenerator {
                 }
             }
             if (itemsMember.isPresent()) {
-                Shape itemsShape = model.expectShape(itemsMember.get().getTarget());
+                MemberShape member = itemsMember.get();
+                itemsFieldIsRequired = member.isRequired();
+                Shape itemsShape = model.expectShape(member.getTarget());
                 if (itemsShape instanceof ListShape) {
                     ListShape listShape = (ListShape) itemsShape;
                     Shape memberShape = model.expectShape(listShape.getMember().getTarget());
@@ -243,8 +246,13 @@ public class PaginationGenerator {
         // Force the delayed computation with !
         writer.write("response = !($L config inputWithToken)", opName);
         // Note: Unison uses accessor functions: TypeName.field record, not record.field
-        // Optional.getOrElse takes default first, then optional
-        writer.write("newItems = Optional.getOrElse [] ($L.$L response)", outputType, itemsField);
+        // If items field is required, access it directly; if optional, use Optional.getOrElse
+        if (itemsFieldIsRequired) {
+            writer.write("newItems = $L.$L response", outputType, itemsField);
+        } else {
+            // Optional.getOrElse takes default first, then optional
+            writer.write("newItems = Optional.getOrElse [] ($L.$L response)", outputType, itemsField);
+        }
         writer.write("allItems = (List.++) acc newItems");
         
         // Check for next page - recursive call needs to be forced with !

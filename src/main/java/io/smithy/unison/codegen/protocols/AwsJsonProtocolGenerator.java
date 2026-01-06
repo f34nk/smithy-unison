@@ -501,8 +501,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else if (shape.isFloatShape() || shape.isDoubleShape()) {
             return "aws.json.JsonValue.JsonNumber " + varName;
         } else if (shape.isBlobShape()) {
-            // Base64 encode bytes
-            return "aws.json.JsonValue.JsonString (Bytes.toBase64 " + varName + ")";
+            // Base64 encode bytes - toBase64 returns Bytes, need to convert to Text
+            return "aws.json.JsonValue.JsonString (Text.fromUtf8 (Bytes.toBase64 " + varName + "))";
         } else if (shape.isTimestampShape()) {
             // Timestamp is generated as Text in structures, just wrap in JSON string
             return "aws.json.JsonValue.JsonString " + varName;
@@ -513,10 +513,21 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("aws.json.JsonValue.JsonArray (List.map (elem -> %s) %s)", elemConversion, varName);
         } else if (shape.isMapShape()) {
             MapShape mapShape = shape.asMapShape().get();
+            Shape keyTarget = model.expectShape(mapShape.getKey().getTarget());
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            
+            // Check if key is an enum that needs conversion to Text
+            String keyConversion;
+            if (keyTarget.isEnumShape() || (keyTarget.isStringShape() && keyTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                String keyToTextFn = UnisonSymbolProvider.toNamespacedFunctionName(keyTarget.getId().getName() + "ToText", clientNamespace);
+                keyConversion = keyToTextFn + " k";
+            } else {
+                keyConversion = "k";  // Key is already Text
+            }
+            
             String valueConversion = generateJsonValue(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.jsonObject (List.map (cases (k, v) -> (k, %s)) (Map.toList %s))",
-                    valueConversion, varName);
+            return String.format("aws.json.jsonObject (List.map (cases (k, v) -> (%s, %s)) (Map.toList %s))",
+                    keyConversion, valueConversion, varName);
         } else if (shape.isStructureShape()) {
             // Nested structure - need recursive serialization
             String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
@@ -651,8 +662,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("aws.json.getFieldAsNumber \"%s\" %s",
                     fieldName, jsonVar);
         } else if (target.isBlobShape()) {
-            // Base64 decode
-            return String.format("aws.json.getFieldAsString \"%s\" %s |> Optional.flatMap Bytes.fromBase64",
+            // Base64 decode: Text -> Bytes (via toUtf8) -> Either Text Bytes -> Optional Bytes
+            return String.format("aws.json.getFieldAsString \"%s\" %s |> Optional.flatMap (t -> aws.json.eitherToOptional (builtin.Bytes.fromBase64 (toUtf8 t)))",
                     fieldName, jsonVar);
         } else if (target.isTimestampShape()) {
             // Timestamp is generated as Text in structures, just extract string
@@ -662,14 +673,34 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             ListShape listShape = target.asListShape().get();
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
             String elemConversion = generateJsonValueConversion(memberTarget, "elem", model, clientNamespace);
-            return String.format("aws.json.getFieldAsArray \"%s\" %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)",
+            return String.format("aws.json.getFieldAsArray \"%s\" %s |> Optional.map (arr -> aws.json.filterMap (elem -> %s) arr)",
                     fieldName, jsonVar, elemConversion);
         } else if (target.isMapShape()) {
             MapShape mapShape = target.asMapShape().get();
+            Shape keyTarget = model.expectShape(mapShape.getKey().getTarget());
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            
+            // Check if key is an enum that needs conversion from Text
+            String keyConversion;
+            if (keyTarget.isEnumShape() || (keyTarget.isStringShape() && keyTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                String keyFromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(keyTarget.getId().getName() + "FromText", clientNamespace);
+                keyConversion = "Optional.flatMap " + keyFromTextFn + " (Some k)";
+            } else {
+                keyConversion = "Some k";  // Key is already Text
+            }
+            
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))",
-                    fieldName, jsonVar, valueConversion);
+            // For enum keys, use Optional.flatMap to convert key text to enum
+            String mapConversion;
+            if (keyTarget.isEnumShape() || (keyTarget.isStringShape() && keyTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                String keyFromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(keyTarget.getId().getName() + "FromText", clientNamespace);
+                mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.flatMap (key -> Optional.map (val -> (key, val)) (%s)) (%s k)) fields", 
+                    valueConversion, keyFromTextFn);
+            } else {
+                mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields", valueConversion);
+            }
+            return String.format("aws.json.getFieldAsObjectList \"%s\" %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (%s))",
+                    fieldName, jsonVar, mapConversion);
         } else if (target.isStructureShape()) {
             // Nested structure - need recursive parser
             String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
@@ -715,7 +746,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         } else if (target.isFloatShape() || target.isDoubleShape()) {
             return String.format("aws.json.jsonValueToNumber %s", varName);
         } else if (target.isBlobShape()) {
-            return String.format("aws.json.jsonValueToString %s |> Optional.flatMap Bytes.fromBase64", varName);
+            // Base64 decode: Text -> Bytes (via toUtf8) -> Either Text Bytes -> Optional Bytes
+            return String.format("aws.json.jsonValueToString %s |> Optional.flatMap (t -> aws.json.eitherToOptional (builtin.Bytes.fromBase64 (toUtf8 t)))", varName);
         } else if (target.isTimestampShape()) {
             // Timestamp is generated as Text in structures, just extract string
             return String.format("aws.json.jsonValueToString %s", varName);
@@ -724,13 +756,33 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             ListShape listShape = target.asListShape().get();
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
             String elemConversion = generateJsonValueConversion(memberTarget, "elem", model, clientNamespace);
-            return String.format("aws.json.jsonValueToArray %s |> Optional.map (arr -> List.filterMap (elem -> %s) arr)", varName, elemConversion);
+            return String.format("aws.json.jsonValueToArray %s |> Optional.map (arr -> aws.json.filterMap (elem -> %s) arr)", varName, elemConversion);
         } else if (target.isMapShape()) {
             // Map - convert object fields recursively
             MapShape mapShape = target.asMapShape().get();
+            Shape keyTarget = model.expectShape(mapShape.getKey().getTarget());
             Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            
+            // Check if key is an enum that needs conversion from Text
+            String keyConversion;
+            if (keyTarget.isEnumShape() || (keyTarget.isStringShape() && keyTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                String keyFromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(keyTarget.getId().getName() + "FromText", clientNamespace);
+                keyConversion = "Optional.flatMap " + keyFromTextFn + " (Some k)";
+            } else {
+                keyConversion = "Some k";  // Key is already Text
+            }
+            
             String valueConversion = generateJsonValueConversion(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (List.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields))", varName, valueConversion);
+            // For enum keys, use Optional.flatMap to convert key text to enum
+            String mapConversion;
+            if (keyTarget.isEnumShape() || (keyTarget.isStringShape() && keyTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                String keyFromTextFn = UnisonSymbolProvider.toNamespacedFunctionName(keyTarget.getId().getName() + "FromText", clientNamespace);
+                mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.flatMap (key -> Optional.map (val -> (key, val)) (%s)) (%s k)) fields", 
+                    valueConversion, keyFromTextFn);
+            } else {
+                mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (key, val)) (%s)) fields", valueConversion);
+            }
+            return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (%s))", varName, mapConversion);
         } else if (target.isStructureShape()) {
             String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(target.getId().getName() + "FromJson");
             return String.format("%s %s", parserName, varName);

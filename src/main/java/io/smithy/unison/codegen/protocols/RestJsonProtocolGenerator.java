@@ -1043,7 +1043,8 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         } else if (shape.isFloatShape() || shape.isDoubleShape()) {
             return "aws.json.JsonValue.JsonNumber " + varName;
         } else if (shape.isBlobShape()) {
-            return "aws.json.JsonValue.JsonString (Bytes.toBase64 " + varName + ")";
+            // Base64 encode bytes - toBase64 returns Bytes, need to convert to Text
+            return "aws.json.JsonValue.JsonString (Text.fromUtf8 (Bytes.toBase64 " + varName + "))";
         } else if (shape.isTimestampShape()) {
             return "aws.json.JsonValue.JsonString " + varName;
         } else if (shape.isListShape()) {
@@ -1053,10 +1054,21 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             return String.format("aws.json.JsonValue.JsonArray (List.map (elem -> %s) %s)", elemConversion, varName);
         } else if (shape.isMapShape()) {
             software.amazon.smithy.model.shapes.MapShape mapShape = shape.asMapShape().get();
+            software.amazon.smithy.model.shapes.Shape keyTarget = model.expectShape(mapShape.getKey().getTarget());
             software.amazon.smithy.model.shapes.Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            
+            // Check if key is an enum that needs conversion to Text
+            String keyConversion;
+            if (keyTarget.isEnumShape() || (keyTarget.isStringShape() && keyTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                String keyToTextFn = UnisonSymbolProvider.toNamespacedFunctionName(keyTarget.getId().getName() + "ToText", clientNamespace);
+                keyConversion = keyToTextFn + " k";
+            } else {
+                keyConversion = "k";  // Key is already Text
+            }
+            
             String valueConversion = generateJsonValue(valueTarget, "v", model, clientNamespace);
-            return String.format("aws.json.jsonObject (List.map (cases (k, v) -> (k, %s)) (Map.toList %s))",
-                    valueConversion, varName);
+            return String.format("aws.json.jsonObject (List.map (cases (k, v) -> (%s, %s)) (Map.toList %s))",
+                    keyConversion, valueConversion, varName);
         } else if (shape.isStructureShape()) {
             // Nested structure - need recursive serialization
             String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
