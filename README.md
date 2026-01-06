@@ -88,6 +88,7 @@ The ***-demo** examples generate client code from the official [AWS SDK smithy m
 |--|:--:|
 | `make examples/s3-demo` | [s3-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u)  |
 | `make examples/dynamodb-demo` | [dynamodb-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u)  |
+| `make examples/sqs-demo` | [sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
 
 Run integration-test:
 

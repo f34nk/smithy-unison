@@ -1,0 +1,251 @@
+-- SQS Demo Application
+-- Tests the generated SQS client against LocalStack mock server
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests (not placeholders), install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
+
+-- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create SQS client configuration for LocalStack
+defaultConfig : '{IO, Exception} aws.sqs.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  aws.sqs.Config.Config endpoint region creds false
+
+-- Test queue name - created by terraform provisioner
+testQueueName : Text
+testQueueName = "sqs-demo-queue"
+
+-- Test message body
+testMessageBody : Text
+testMessageBody = "Hello from Unison SQS Client!"
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
+main : '{IO, Exception} ()
+main = do
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║   SQS Client Demo (LocalStack Backend)      ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ Config.endpoint config)
+  printLine ("Region: " ++ Config.region config)
+  printLine ("Queue: " ++ testQueueName)
+  printLine ""
+  
+  -- Demo 1: Get Queue URL
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: Get Queue URL"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  queueUrl = !(getQueueUrlDemo config)
+  
+  -- Demo 2: Send Message
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Send Message"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(sendMessageDemo config queueUrl)
+  
+  -- Demo 3: Receive Message
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: Receive Message"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  receiptHandle = !(receiveMessageDemo config queueUrl)
+  
+  -- Demo 4: Delete Message (cleanup)
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 4: Delete Message (cleanup)"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  match receiptHandle with
+    Some hdl -> !(deleteMessageDemo config queueUrl hdl)
+    None -> printLine "  → No message to delete"
+  
+  -- Demo 5: Purge Queue
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 5: Purge Queue"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(purgeQueueDemo config queueUrl)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║            SQS Demo Complete!                ║"
+  printLine "╚══════════════════════════════════════════════╝"
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+Get the URL of the test queue.
+The terraform provisioner creates the 'sqs-demo-queue' queue.
+}}
+getQueueUrlDemo : aws.sqs.Config -> '{IO, Exception, Threads} Text
+getQueueUrlDemo config = do
+  printLine "  → Creating GetQueueUrlRequest..."
+  printLine ("    QueueName: " ++ testQueueName)
+  
+  -- Create request - GetQueueUrlRequest: queueName, queueOwnerAWSAccountId
+  request = GetQueueUrlRequest.GetQueueUrlRequest testQueueName None
+  
+  -- Call the SQS client
+  printLine "  → Calling getQueueUrl..."
+  result = !(aws.sqs.getQueueUrl config request)
+  
+  -- Extract queue URL
+  printLine "  ✓ SUCCESS: GetQueueUrl returned"
+  queueUrl = match aws.sqs.GetQueueUrlResult.queueUrl result with
+    Some url -> 
+      printLine ("  → Queue URL: " ++ url)
+      url
+    None -> 
+      printLine "  ✗ ERROR: No queue URL in response"
+      ""
+  
+  queueUrl
+
+{{
+Send a test message to the queue.
+}}
+sendMessageDemo : aws.sqs.Config -> Text -> '{IO, Exception, Threads} ()
+sendMessageDemo config queueUrl = do
+  printLine "  → Creating SendMessageRequest..."
+  printLine ("    QueueUrl: " ++ queueUrl)
+  printLine ("    MessageBody: \"" ++ testMessageBody ++ "\"")
+  
+  -- SendMessageRequest: delaySeconds, messageAttributes, messageBody, messageDeduplicationId,
+  --                      messageGroupId, messageSystemAttributes, queueUrl
+  request = SendMessageRequest.SendMessageRequest None None testMessageBody None None None queueUrl
+  
+  -- Call the SQS client
+  printLine "  → Calling sendMessage..."
+  result = !(aws.sqs.sendMessage config request)
+  
+  printLine "  ✓ SUCCESS: SendMessage completed"
+  
+  -- Display message ID if available
+  match aws.sqs.SendMessageResult.messageId result with
+    Some msgId -> printLine ("  → MessageId: " ++ msgId)
+    None -> ()
+
+{{
+Receive messages from the queue.
+Returns the receipt handle of the first message, if any.
+}}
+receiveMessageDemo : aws.sqs.Config -> Text -> '{IO, Exception, Threads} (Optional Text)
+receiveMessageDemo config queueUrl = do
+  printLine "  → Creating ReceiveMessageRequest..."
+  printLine ("    QueueUrl: " ++ queueUrl)
+  printLine "    MaxNumberOfMessages: 1"
+  printLine "    WaitTimeSeconds: 2"
+  
+  -- ReceiveMessageRequest: attributeNames, maxNumberOfMessages, messageAttributeNames, 
+  --                         messageSystemAttributeNames, queueUrl, receiveRequestAttemptId,
+  --                         visibilityTimeout, waitTimeSeconds
+  request = ReceiveMessageRequest.ReceiveMessageRequest None (Some +1) None None queueUrl None None (Some +2)
+  
+  -- Call the SQS client
+  printLine "  → Calling receiveMessage..."
+  result = !(aws.sqs.receiveMessage config request)
+  
+  printLine "  ✓ SUCCESS: ReceiveMessage returned"
+  
+  -- Extract and print messages
+  match aws.sqs.ReceiveMessageResult.messages result with
+    Some messages ->
+      count = List.size messages
+      printLine ("  → Received " ++ Nat.toText count ++ " message(s)")
+      
+      -- Process first message
+      match List.at 0 messages with
+        Some msg ->
+          match Message.body msg with
+            Some body -> 
+              printLine ("    Body: \"" ++ body ++ "\"")
+              
+              -- Verify content matches what we sent
+              if Text.eq body testMessageBody then
+                printLine "    ✓ Content matches sent message!"
+              else
+                printLine ("    ✗ Content does NOT match! Expected: \"" ++ testMessageBody ++ "\"")
+            None -> printLine "    (no body)"
+          
+          -- Return receipt handle for deletion
+          Message.receiptHandle msg
+        None -> None
+    None -> 
+      printLine "  → No messages received"
+      None
+
+{{
+Delete a message from the queue using its receipt handle.
+}}
+deleteMessageDemo : aws.sqs.Config -> Text -> Text -> '{IO, Exception, Threads} ()
+deleteMessageDemo config queueUrl receiptHandle = do
+  printLine "  → Creating DeleteMessageRequest..."
+  printLine ("    QueueUrl: " ++ queueUrl)
+  
+  -- DeleteMessageRequest: queueUrl, receiptHandle
+  request = DeleteMessageRequest.DeleteMessageRequest queueUrl receiptHandle
+  
+  -- Call the SQS client
+  printLine "  → Calling deleteMessage..."
+  result = !(aws.sqs.deleteMessage config request)
+  
+  printLine "  ✓ SUCCESS: DeleteMessage completed"
+
+{{
+Purge all messages from the queue.
+}}
+purgeQueueDemo : aws.sqs.Config -> Text -> '{IO, Exception, Threads} ()
+purgeQueueDemo config queueUrl = do
+  printLine "  → Creating PurgeQueueRequest..."
+  printLine ("    QueueUrl: " ++ queueUrl)
+  
+  -- PurgeQueueRequest: queueUrl
+  request = PurgeQueueRequest.PurgeQueueRequest queueUrl
+  
+  -- Call the SQS client
+  printLine "  → Calling purgeQueue..."
+  result = !(aws.sqs.purgeQueue config request)
+  
+  printLine "  ✓ SUCCESS: PurgeQueue completed"
+  printLine "    All remaining messages have been deleted"
