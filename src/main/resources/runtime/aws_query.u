@@ -16,11 +16,10 @@ Build form-encoded body from parameter list.
 
 Converts a list of (name, value) pairs to application/x-www-form-urlencoded format.
 
-Example:
-  params = [("Action", "SendMessage"), ("Version", "2012-11-05"), ("QueueUrl", "https://...")]
-  result = "Action=SendMessage&Version=2012-11-05&QueueUrl=https%3A%2F%2F..."
-
+Takes a list of parameter pairs and returns a form-encoded string.
 All parameter names and values are URL-encoded according to RFC 3986.
+
+Result format: "Action=SendMessage&Version=2012-11-05&QueueUrl=https%3A%2F%2F..."
 }}
 aws.query.buildFormEncodedBody : [(Text, Text)] -> Text
 aws.query.buildFormEncodedBody params =
@@ -43,15 +42,10 @@ encodeParam pair =
 {{
 URL-encode text according to RFC 3986.
 
-Encodes all characters except:
-- Unreserved characters: A-Z, a-z, 0-9, -, _, ., ~
-- Space is encoded as %20 (not +)
+Encodes all characters except unreserved ones (A-Z, a-z, 0-9, hyphen, underscore, dot, tilde).
+Space is encoded as %20 (not +). All other characters are percent-encoded as %XX where XX is the hex byte value.
 
-All other characters are percent-encoded as %XX where XX is the hex byte value.
-
-Example:
-  aws.query.urlEncode "Hello World!" = "Hello%20World%21"
-  aws.query.urlEncode "https://example.com" = "https%3A%2F%2Fexample.com"
+Examples: "Hello World!" becomes "Hello%20World%21"
 }}
 aws.query.urlEncode : Text -> Text
 aws.query.urlEncode text =
@@ -79,7 +73,8 @@ Unreserved characters per RFC 3986:
 isUnreserved : Char -> Boolean
 isUnreserved c =
   -- A-Z, a-z, 0-9, -, _, ., ~
-  if Char.isAlphanumeric c then true
+  isAlphaNum = isLetter c || isDigit c
+  if isAlphaNum then true
   else if Char.eq c ?- then true
   else if Char.eq c ?_ then true
   else if Char.eq c ?. then true
@@ -103,7 +98,7 @@ Convert a byte to %XX format.
 }}
 byteToHex : Nat -> [Char]
 byteToHex byte =
-  highNibble = Nat./ byte 16
+  highNibble = Nat.div byte 16
   lowNibble = Nat.mod byte 16
   [?%, nibbleToHex highNibble, nibbleToHex lowNibble]
 
@@ -114,10 +109,10 @@ nibbleToHex : Nat -> Char
 nibbleToHex n =
   if Nat.lt n 10 then
     -- 0-9: ASCII 48-57
-    Char.fromNat (Nat.+ 48 n)
+    Char.fromNat (48 + n)
   else
     -- A-F: ASCII 65-70
-    Char.fromNat (Nat.+ 55 n)
+    Char.fromNat (55 + n)
 
 -- =============================================================================
 -- Parameter Flattening (for nested structures)
@@ -129,10 +124,8 @@ Flatten nested structure parameters with dot notation.
 Takes a prefix and a list of (field, value) pairs and creates
 flattened parameters in the form "Prefix.Field=value".
 
-Example:
-  prefix = "Filter"
-  fields = [("Type", "IncludeAll"), ("Enabled", "true")]
-  result = [("Filter.Type", "IncludeAll"), ("Filter.Enabled", "true")]
+Given prefix "Filter" and fields Type/Enabled, produces:
+  Filter.Type=IncludeAll, Filter.Enabled=true
 
 Used for AWS Query nested structure serialization.
 }}
@@ -148,24 +141,17 @@ Flatten a list of structures with indexed notation.
 
 AWS Query protocol uses .member.N notation for lists of structures.
 
-Example:
-  prefix = "Filters"
-  structures = [
-    [("Name", "tag:Environment"), ("Value", "production")],
-    [("Name", "instance-state-name"), ("Value", "running")]
-  ]
-  result = [
-    ("Filters.member.1.Name", "tag:Environment"),
-    ("Filters.member.1.Value", "production"),
-    ("Filters.member.2.Name", "instance-state-name"),
-    ("Filters.member.2.Value", "running")
-  ]
+Given prefix "Filters" and multiple structures, produces:
+  Filters.member.1.Name = tag:Environment
+  Filters.member.1.Value = production
+  Filters.member.2.Name = instance-state-name
+  Filters.member.2.Value = running
 }}
 aws.query.flattenListOfStructures : Text -> [[(Text, Text)]] -> [(Text, Text)]
 aws.query.flattenListOfStructures prefix structures =
   structures
     |> List.indexed
     |> List.flatMap (pair ->
-        match pair with (idx, fields) ->
-          memberPrefix = prefix ++ ".member." ++ Int.toText (idx + 1)
+        match pair with (fields, idx) ->
+          memberPrefix = prefix ++ ".member." ++ Nat.toText (idx + 1)
           aws.query.flattenStructure memberPrefix fields)
