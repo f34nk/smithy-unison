@@ -1,0 +1,332 @@
+-- Unit tests for AWS REST-JSON Runtime Module
+
+namespace aws.restjson.test
+
+use aws.restjson
+use aws.http
+use Text ++
+use Map
+
+-- === Path Parameter Substitution Tests ===
+
+testBuildRestUrlNoParams : '{Exception} Boolean
+testBuildRestUrlNoParams = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/resources"
+  pathParams = Map.fromList ([])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  result === "https://api.example.com/resources"
+
+testBuildRestUrlSingleParam : '{Exception} Boolean
+testBuildRestUrlSingleParam = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/functions/{FunctionName}/invocations"
+  pathParams = Map.fromList ([("FunctionName", "MyFunc")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  result === "https://api.example.com/functions/MyFunc/invocations"
+
+testBuildRestUrlMultipleParams : '{Exception} Boolean
+testBuildRestUrlMultipleParams = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/users/{UserId}/posts/{PostId}"
+  pathParams = Map.fromList ([("UserId", "123"), ("PostId", "456")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  -- Order might vary, so check both possibilities
+  (result === "https://api.example.com/users/123/posts/456") || (result === "https://api.example.com/users/123/posts/456")
+
+testBuildRestUrlWithEncoding : '{Exception} Boolean
+testBuildRestUrlWithEncoding = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/resources/{ResourceName}"
+  pathParams = Map.fromList ([("ResourceName", "my resource")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  result === "https://api.example.com/resources/my%20resource"
+
+testBuildRestUrlSpecialCharacters : '{Exception} Boolean
+testBuildRestUrlSpecialCharacters = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/items/{ItemId}"
+  pathParams = Map.fromList ([("ItemId", "item/with/slashes")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  result === "https://api.example.com/items/item%2Fwith%2Fslashes"
+
+testBuildRestUrlSingle : '{Exception} Boolean
+testBuildRestUrlSingle = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/buckets/{BucketName}"
+  result = aws.restjson.buildRestUrlSingle endpoint uriPattern "BucketName" "my-bucket"
+  result === "https://api.example.com/buckets/my-bucket"
+
+testBuildRestUrlSingleWithEncoding : '{Exception} Boolean
+testBuildRestUrlSingleWithEncoding = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/files/{FileName}"
+  result = aws.restjson.buildRestUrlSingle endpoint uriPattern "FileName" "my file.txt"
+  result === "https://api.example.com/files/my%20file.txt"
+
+-- === Query Parameter Construction Tests ===
+
+testAddQueryParamsEmpty : '{Exception} Boolean
+testAddQueryParamsEmpty = 'let
+  url = "https://api.example.com/resources"
+  params = Map.fromList ([])
+  result = aws.restjson.addQueryParams url params
+  result === "https://api.example.com/resources"
+
+testAddQueryParamsSingle : '{Exception} Boolean
+testAddQueryParamsSingle = 'let
+  url = "https://api.example.com/resources"
+  params = Map.fromList ([("limit", "10")])
+  result = aws.restjson.addQueryParams url params
+  result === "https://api.example.com/resources?limit=10"
+
+testAddQueryParamsMultiple : '{Exception} Boolean
+testAddQueryParamsMultiple = 'let
+  url = "https://api.example.com/resources"
+  params = Map.fromList ([("limit", "10"), ("offset", "20")])
+  result = aws.restjson.addQueryParams url params
+  -- Order might vary, so check both possibilities
+  (result === "https://api.example.com/resources?limit=10&offset=20") || (result === "https://api.example.com/resources?offset=20&limit=10")
+
+testAddQueryParamsWithEncoding : '{Exception} Boolean
+testAddQueryParamsWithEncoding = 'let
+  url = "https://api.example.com/search"
+  params = Map.fromList ([("query", "hello world")])
+  result = aws.restjson.addQueryParams url params
+  result === "https://api.example.com/search?query=hello%20world"
+
+testAddQueryParamsKeyValueEncoding : '{Exception} Boolean
+testAddQueryParamsKeyValueEncoding = 'let
+  url = "https://api.example.com/resources"
+  params = Map.fromList ([("filter[name]", "value&test")])
+  result = aws.restjson.addQueryParams url params
+  result === "https://api.example.com/resources?filter%5Bname%5D=value%26test"
+
+testAddQueryParam : '{Exception} Boolean
+testAddQueryParam = 'let
+  url = "https://api.example.com/resources"
+  result = aws.restjson.addQueryParam url "limit" "10"
+  result === "https://api.example.com/resources?limit=10"
+
+testAddQueryParamToExistingQuery : '{Exception} Boolean
+testAddQueryParamToExistingQuery = 'let
+  url = "https://api.example.com/resources?existing=value"
+  result = aws.restjson.addQueryParam url "limit" "10"
+  result === "https://api.example.com/resources?existing=value&limit=10"
+
+testAddQueryParamWithEncoding : '{Exception} Boolean
+testAddQueryParamWithEncoding = 'let
+  url = "https://api.example.com/search"
+  result = aws.restjson.addQueryParam url "query" "hello world"
+  result === "https://api.example.com/search?query=hello%20world"
+
+testAddQueryParamSpecialChars : '{Exception} Boolean
+testAddQueryParamSpecialChars = 'let
+  url = "https://api.example.com/resources"
+  result = aws.restjson.addQueryParam url "filter" "a=b&c=d"
+  result === "https://api.example.com/resources?filter=a%3Db%26c%3Dd"
+
+-- === URL Encoding Tests ===
+
+testUrlEncodePathSegment : '{Exception} Boolean
+testUrlEncodePathSegment = 'let
+  test1 = aws.restjson.urlEncodePathSegment "hello" === "hello"
+  test2 = aws.restjson.urlEncodePathSegment "hello world" === "hello%20world"
+  test3 = aws.restjson.urlEncodePathSegment "path/segment" === "path%2Fsegment"
+  test4 = aws.restjson.urlEncodePathSegment "a=b" === "a%3Db"
+  test5 = aws.restjson.urlEncodePathSegment "a&b" === "a%26b"
+  test1 && test2 && test3 && test4 && test5
+
+testUrlEncodePathSegmentSpecialChars : '{Exception} Boolean
+testUrlEncodePathSegmentSpecialChars = 'let
+  test1 = aws.restjson.urlEncodePathSegment "file.txt" === "file.txt"
+  test2 = aws.restjson.urlEncodePathSegment "my file (1).txt" === "my%20file%20%281%29.txt"
+  test3 = aws.restjson.urlEncodePathSegment "100%" === "100%25"
+  test1 && test2 && test3
+
+-- === Complete URL Building Tests ===
+
+testBuildCompleteUrlNoQuery : '{Exception} Boolean
+testBuildCompleteUrlNoQuery = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/users/{UserId}"
+  pathParams = Map.fromList ([("UserId", "123")])
+  queryParams = Map.fromList ([])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  result === "https://api.example.com/users/123"
+
+testBuildCompleteUrlWithQuery : '{Exception} Boolean
+testBuildCompleteUrlWithQuery = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/users/{UserId}/posts"
+  pathParams = Map.fromList ([("UserId", "123")])
+  queryParams = Map.fromList ([("limit", "10")])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  result === "https://api.example.com/users/123/posts?limit=10"
+
+testBuildCompleteUrlMultipleParams : '{Exception} Boolean
+testBuildCompleteUrlMultipleParams = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/orgs/{OrgId}/repos/{RepoId}"
+  pathParams = Map.fromList ([("OrgId", "myorg"), ("RepoId", "myrepo")])
+  queryParams = Map.fromList ([("page", "1"), ("per_page", "50")])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  -- Check that it contains all the expected parts
+  test1 = Text.contains "/orgs/myorg/repos/myrepo" result
+  test2 = Text.contains "page=1" result
+  test3 = Text.contains "per_page=50" result
+  test4 = Text.contains "?" result
+  test1 && test2 && test3 && test4
+
+testBuildCompleteUrlWithEncoding : '{Exception} Boolean
+testBuildCompleteUrlWithEncoding = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/files/{FileName}"
+  pathParams = Map.fromList ([("FileName", "my file.txt")])
+  queryParams = Map.fromList ([("version", "v1.0")])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  result === "https://api.example.com/files/my%20file.txt?version=v1.0"
+
+testBuildCompleteUrlComplexEncoding : '{Exception} Boolean
+testBuildCompleteUrlComplexEncoding = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/resources/{ResourceId}"
+  pathParams = Map.fromList ([("ResourceId", "res/123")])
+  queryParams = Map.fromList ([("filter", "name=test")])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  result === "https://api.example.com/resources/res%2F123?filter=name%3Dtest"
+
+-- === Edge Cases and Integration Tests ===
+
+testEmptyPathParam : '{Exception} Boolean
+testEmptyPathParam = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/resources/{ResourceId}"
+  pathParams = Map.fromList ([("ResourceId", "")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  result === "https://api.example.com/resources/"
+
+testMultipleSlashesInPath : '{Exception} Boolean
+testMultipleSlashesInPath = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/{Org}/{Repo}/commits/{CommitId}"
+  pathParams = Map.fromList ([("Org", "myorg"), ("Repo", "myrepo"), ("CommitId", "abc123")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  -- Check that all parameters are substituted
+  test1 = Text.contains "myorg" result
+  test2 = Text.contains "myrepo" result
+  test3 = Text.contains "abc123" result
+  test4 = Text.contains "commits" result
+  test1 && test2 && test3 && test4
+
+testUrlWithTrailingSlash : '{Exception} Boolean
+testUrlWithTrailingSlash = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/resources/"
+  pathParams = Map.fromList ([])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  result === "https://api.example.com/resources/"
+
+testQueryParamChaining : '{Exception} Boolean
+testQueryParamChaining = 'let
+  url = "https://api.example.com/resources"
+  result = 
+    url
+      |> (u -> aws.restjson.addQueryParam u "limit" "10")
+      |> (u -> aws.restjson.addQueryParam u "offset" "20")
+      |> (u -> aws.restjson.addQueryParam u "sort" "name")
+  -- Check that all params are present
+  test1 = Text.contains "limit=10" result
+  test2 = Text.contains "offset=20" result
+  test3 = Text.contains "sort=name" result
+  test4 = Text.contains "?" result
+  test5 = Text.contains "&" result
+  test1 && test2 && test3 && test4 && test5
+
+testPathParamNotInPattern : '{Exception} Boolean
+testPathParamNotInPattern = 'let
+  endpoint = "https://api.example.com"
+  uriPattern = "/resources/{ResourceId}"
+  pathParams = Map.fromList ([("ResourceId", "123"), ("UnusedParam", "value")])
+  result = aws.restjson.buildRestUrl endpoint uriPattern pathParams
+  -- UnusedParam should not appear in the result
+  test1 = Text.contains "/resources/123" result
+  test2 = not (Text.contains "UnusedParam" result)
+  test3 = not (Text.contains "value" result) || Text.contains "/resources/123" result
+  test1 && test2
+
+testComplexAwsStyleUrl : '{Exception} Boolean
+testComplexAwsStyleUrl = 'let
+  endpoint = "https://lambda.us-east-1.amazonaws.com"
+  uriPattern = "/2015-03-31/functions/{FunctionName}/invocations"
+  pathParams = Map.fromList ([("FunctionName", "my-function")])
+  queryParams = Map.fromList ([("Qualifier", "prod")])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  result === "https://lambda.us-east-1.amazonaws.com/2015-03-31/functions/my-function/invocations?Qualifier=prod"
+
+testS3StyleUrl : '{Exception} Boolean
+testS3StyleUrl = 'let
+  endpoint = "https://s3.amazonaws.com"
+  uriPattern = "/{Bucket}/{Key}"
+  pathParams = Map.fromList ([("Bucket", "my-bucket"), ("Key", "path/to/object.txt")])
+  queryParams = Map.fromList ([])
+  result = aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams
+  -- Check that path is properly encoded
+  test1 = Text.contains "my-bucket" result
+  test2 = Text.contains "path%2Fto%2Fobject.txt" result
+  test1 && test2
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS REST-JSON Runtime Tests..."
+  printLine ""
+  
+  -- Path parameter substitution tests
+  runTest "buildRestUrl no params" testBuildRestUrlNoParams ()
+  runTest "buildRestUrl single param" testBuildRestUrlSingleParam ()
+  runTest "buildRestUrl multiple params" testBuildRestUrlMultipleParams ()
+  runTest "buildRestUrl with encoding" testBuildRestUrlWithEncoding ()
+  runTest "buildRestUrl special characters" testBuildRestUrlSpecialCharacters ()
+  runTest "buildRestUrlSingle" testBuildRestUrlSingle ()
+  runTest "buildRestUrlSingle with encoding" testBuildRestUrlSingleWithEncoding ()
+  
+  -- Query parameter construction tests
+  runTest "addQueryParams empty" testAddQueryParamsEmpty ()
+  runTest "addQueryParams single" testAddQueryParamsSingle ()
+  runTest "addQueryParams multiple" testAddQueryParamsMultiple ()
+  runTest "addQueryParams with encoding" testAddQueryParamsWithEncoding ()
+  runTest "addQueryParams key-value encoding" testAddQueryParamsKeyValueEncoding ()
+  runTest "addQueryParam" testAddQueryParam ()
+  runTest "addQueryParam to existing query" testAddQueryParamToExistingQuery ()
+  runTest "addQueryParam with encoding" testAddQueryParamWithEncoding ()
+  runTest "addQueryParam special chars" testAddQueryParamSpecialChars ()
+  
+  -- URL encoding tests
+  runTest "urlEncodePathSegment" testUrlEncodePathSegment ()
+  runTest "urlEncodePathSegment special chars" testUrlEncodePathSegmentSpecialChars ()
+  
+  -- Complete URL building tests
+  runTest "buildCompleteUrl no query" testBuildCompleteUrlNoQuery ()
+  runTest "buildCompleteUrl with query" testBuildCompleteUrlWithQuery ()
+  runTest "buildCompleteUrl multiple params" testBuildCompleteUrlMultipleParams ()
+  runTest "buildCompleteUrl with encoding" testBuildCompleteUrlWithEncoding ()
+  runTest "buildCompleteUrl complex encoding" testBuildCompleteUrlComplexEncoding ()
+  
+  -- Edge cases and integration tests
+  runTest "empty path param" testEmptyPathParam ()
+  runTest "multiple slashes in path" testMultipleSlashesInPath ()
+  runTest "url with trailing slash" testUrlWithTrailingSlash ()
+  runTest "query param chaining" testQueryParamChaining ()
+  runTest "path param not in pattern" testPathParamNotInPattern ()
+  runTest "complex AWS style URL" testComplexAwsStyleUrl ()
+  runTest "S3 style URL" testS3StyleUrl ()
+  
+  printLine ""
+  printLine "All tests completed!"
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)

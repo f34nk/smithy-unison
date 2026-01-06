@@ -16,7 +16,7 @@ Replaces {label} placeholders in the URI pattern with values from the map.
 Example:
   endpoint = "https://api.example.com"
   uriPattern = "/functions/{FunctionName}/invocations"
-  pathParams = Map.fromList [("FunctionName", "MyFunc")]
+  pathParams = Map.fromList ([("FunctionName", "MyFunc")])
   result = "https://api.example.com/functions/MyFunc/invocations"
 
 Note: Values are URL-encoded automatically.
@@ -24,12 +24,13 @@ Note: Values are URL-encoded automatically.
 aws.restjson.buildRestUrl : Text -> Text -> Map Text Text -> Text
 aws.restjson.buildRestUrl endpoint uriPattern pathParams =
   -- Replace {label} placeholders with URL-encoded values from map
-  url = pathParams
-    |> Map.toList
-    |> List.foldLeft uriPattern (acc, kv ->
-        match kv with (key, value) ->
-          encodedValue = aws.http.urlEncode value
-          Text.replaceAll ("{" ++ key ++ "}") encodedValue acc)
+  url = 
+    pathParams
+      |> Map.toList
+      |> List.foldLeft (acc -> kv ->
+          match kv with (key, value) ->
+            encodedValue = aws.http.urlEncode value
+            Text.replaceAll ("{" ++ key ++ "}") encodedValue acc) uriPattern
   endpoint ++ url
 
 {{
@@ -39,7 +40,7 @@ Convenience function for operations with exactly one path parameter.
 }}
 aws.restjson.buildRestUrlSingle : Text -> Text -> Text -> Text -> Text
 aws.restjson.buildRestUrlSingle endpoint uriPattern paramName paramValue =
-  pathParams = Map.fromList [(paramName, paramValue)]
+  pathParams = Map.fromList ([(paramName, paramValue)])
   aws.restjson.buildRestUrl endpoint uriPattern pathParams
 
 -- =============================================================================
@@ -54,7 +55,7 @@ Empty map returns the URL unchanged.
 
 Example:
   url = "https://api.example.com/resources"
-  params = Map.fromList [("maxResults", "10"), ("filter", "active")]
+  params = Map.fromList ([("maxResults", "10"), ("filter", "active")])
   result = "https://api.example.com/resources?maxResults=10&filter=active"
 
 Note: Both keys and values are URL-encoded.
@@ -63,11 +64,12 @@ aws.restjson.addQueryParams : Text -> Map Text Text -> Text
 aws.restjson.addQueryParams url params =
   if Map.isEmpty params then url
   else
-    queryString = params
-      |> Map.toList
-      |> List.map (kv -> match kv with (k, v) ->
-          aws.http.urlEncode k ++ "=" ++ aws.http.urlEncode v)
-      |> Text.join "&"
+    queryString = 
+      params
+        |> Map.toList
+        |> List.map (kv -> match kv with (k, v) ->
+            aws.http.urlEncode k ++ "=" ++ aws.http.urlEncode v)
+        |> Text.join "&"
     url ++ "?" ++ queryString
 
 {{
@@ -110,12 +112,11 @@ Convenience function that combines path substitution and query addition.
 Example:
   endpoint = "https://api.example.com"
   uriPattern = "/users/{UserId}/posts"
-  pathParams = Map.fromList [("UserId", "123")]
-  queryParams = Map.fromList [("limit", "10")]
+  pathParams = Map.fromList ([("UserId", "123")])
+  queryParams = Map.fromList ([("limit", "10")])
   result = "https://api.example.com/users/123/posts?limit=10"
 }}
 aws.restjson.buildCompleteUrl : Text -> Text -> Map Text Text -> Map Text Text -> Text
 aws.restjson.buildCompleteUrl endpoint uriPattern pathParams queryParams =
   baseUrl = aws.restjson.buildRestUrl endpoint uriPattern pathParams
   aws.restjson.addQueryParams baseUrl queryParams
-

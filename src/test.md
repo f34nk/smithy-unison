@@ -18,6 +18,9 @@ scratch/main> add
 scratch/main> load main/resources/runtime/aws_http.u
 scratch/main> add
 
+scratch/main> load main/resources/runtime/aws_restjson.u
+scratch/main> add
+
 scratch/main> load test/resources/runtime/aws_json_test.u
 scratch/main> add
 
@@ -33,7 +36,11 @@ scratch/main> add
 scratch/main> load test/resources/runtime/aws_http_test.u
 scratch/main> add
 
+scratch/main> load test/resources/runtime/aws_restjson_test.u
+scratch/main> add
+
 scratch/main> run aws.http.test.runAllTests
+scratch/main> run aws.restjson.test.runAllTests
 scratch/main> run aws.json.test.runAllTests
 scratch/main> run aws.json.bridge.test.runAllTests
 scratch/main> run aws.xml.test.runAllTests
