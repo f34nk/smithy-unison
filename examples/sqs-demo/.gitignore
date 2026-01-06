@@ -1,5 +1,8 @@
 # Generated code
-generated/
+generated/*.u
+
+# Compiled bytecode
+compiled/*.uc
 
 # Smithy build output (intermediate JSON AST)
 build/

@@ -60,10 +60,6 @@ erl_crash.dump
 # Generated Code - Output from smithy-build and code generation
 # =============================================================================
 
-# All generated directories
-**/generated/
-examples/*/generated/
-
 # Smithy build output
 examples/weather-service/build/smithy/
 examples/*/build/smithy/
