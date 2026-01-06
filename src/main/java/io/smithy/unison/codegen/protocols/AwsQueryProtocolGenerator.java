@@ -697,8 +697,53 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         }
     }
     
+    // ========== Error Parsing ==========
+    
     @Override
     public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        // TODO: Implement AWS Query error parsing (Step 2.6)
+        ServiceShape service = context.serviceShape();
+        String clientNamespace = context.settings().getClientNamespace();
+        String serviceName = service.getId().getName();
+        
+        // Remove "Service" suffix if present to avoid duplication
+        if (serviceName.endsWith("Service")) {
+            serviceName = serviceName.substring(0, serviceName.length() - 7);
+        }
+        
+        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                serviceName + "ServiceError", clientNamespace);
+        
+        writer.writeDocComment("Parse AWS Query error response\n\n" +
+                "AWS Query error format:\n" +
+                "<ErrorResponse>\n" +
+                "  <Error>\n" +
+                "    <Type>Sender</Type>\n" +
+                "    <Code>InvalidParameterValue</Code>\n" +
+                "    <Message>...</Message>\n" +
+                "  </Error>\n" +
+                "  <RequestId>xyz789</RequestId>\n" +
+                "</ErrorResponse>");
+        
+        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
+        writer.indent();
+        
+        // Parse AWS Query error XML structure
+        writer.write("-- Convert response body to text");
+        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
+        writer.write("");
+        writer.write("-- Navigate to Error element within ErrorResponse");
+        writer.write("errorResponseElem = aws.xml.extractElement \"ErrorResponse\" xmlText");
+        writer.write("errorElem = aws.xml.extractElement \"Error\" errorResponseElem");
+        writer.write("");
+        writer.write("-- Extract error code and message");
+        writer.write("code = aws.xml.extractElement \"Code\" errorElem");
+        writer.write("message = aws.xml.extractElement \"Message\" errorElem");
+        writer.write("");
+        writer.write("-- Map to service-specific error type");
+        writer.write("$L.fromCodeAndMessage code message", errorTypeName);
+        
+        writer.dedent();
+        writer.writeBlankLine();
     }
 }
