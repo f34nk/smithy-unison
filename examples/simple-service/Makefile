@@ -12,3 +12,6 @@ generate:
 .PHONY: clean
 clean:
 	rm -rf generated/*.u ./build
+
+test:
+	
