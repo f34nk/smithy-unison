@@ -1,0 +1,171 @@
+-- AWS HTTP Bridge Stub Module
+-- Provides mock responses for Kinesis operations for testing/transcript purposes
+--
+-- This module overrides executeRequest to return hardcoded mock responses
+-- instead of making real HTTP calls. This allows the demo to run in
+-- transcript environments without requiring LocalStack.
+--
+-- Load this module INSTEAD of aws_http_bridge.u for mock execution.
+
+-- =============================================================================
+-- executeRequest Override (Returns Mock Responses)
+-- =============================================================================
+
+{{
+Stub implementation of executeRequest that returns mock Kinesis responses.
+
+This examines the X-Amz-Target header to determine which operation is being
+called and returns appropriate mock JSON responses.
+
+Supported operations:
+- Kinesis_20131202.ListStreams
+- Kinesis_20131202.DescribeStream
+- Kinesis_20131202.PutRecord
+- Kinesis_20131202.GetShardIterator
+- Kinesis_20131202.GetRecords
+}}
+executeRequest : Http.Request -> '{IO, Exception, Threads} Http.Response
+executeRequest req = do
+  -- Extract the X-Amz-Target header to determine which operation
+  operation = aws.http.getHeader "X-Amz-Target" (Http.Request.headers req)
+  
+  -- mock response functions are thunks, so we need to force evaluation
+  match operation with
+    Some "Kinesis_20131202.ListStreams" -> !mockListStreamsResponse
+    Some "Kinesis_20131202.DescribeStream" -> !mockDescribeStreamResponse
+    Some "Kinesis_20131202.PutRecord" -> !mockPutRecordResponse
+    Some "Kinesis_20131202.GetShardIterator" -> !mockGetShardIteratorResponse
+    Some "Kinesis_20131202.GetRecords" -> !mockGetRecordsResponse
+    _ -> !mockUnknownOperationResponse
+
+-- =============================================================================
+-- Mock Response Generators
+-- =============================================================================
+
+{{
+Mock response for ListStreams operation.
+Returns a single stream: "kinesis-demo-stream"
+}}
+mockListStreamsResponse : '{IO, Exception, Threads} Http.Response
+mockListStreamsResponse = do
+  jsonBody = 
+    """
+    {
+      "StreamNames": ["kinesis-demo-stream"],
+      "HasMoreStreams": false
+    }
+    """
+  bodyBytes = Text.toUtf8 jsonBody
+  Http.Response.Response 200 [("Content-Type", "application/x-amz-json-1.1")] bodyBytes
+
+{{
+Mock response for DescribeStream operation.
+Returns stream description with one shard.
+}}
+mockDescribeStreamResponse : '{IO, Exception, Threads} Http.Response
+mockDescribeStreamResponse = do
+  jsonBody = 
+    """
+    {
+      "StreamDescription": {
+        "StreamName": "kinesis-demo-stream",
+        "StreamARN": "arn:aws:kinesis:us-east-1:000000000000:stream/kinesis-demo-stream",
+        "StreamStatus": "ACTIVE",
+        "StreamCreationTimestamp": "2024-01-01T00:00:00.000Z",
+        "Shards": [
+          {
+            "ShardId": "shardId-000000000000",
+            "HashKeyRange": {
+              "StartingHashKey": "0",
+              "EndingHashKey": "340282366920938463463374607431768211455"
+            },
+            "SequenceNumberRange": {
+              "StartingSequenceNumber": "49590338271490256608559692538361571095921575989136588898"
+            }
+          }
+        ],
+        "HasMoreShards": false,
+        "RetentionPeriodHours": 24,
+        "EnhancedMonitoring": [
+          {
+            "ShardLevelMetrics": []
+          }
+        ]
+      }
+    }
+    """
+  bodyBytes = Text.toUtf8 jsonBody
+  Http.Response.Response 200 [("Content-Type", "application/x-amz-json-1.1")] bodyBytes
+
+{{
+Mock response for PutRecord operation.
+Returns a successful record put with sequence number and shard ID.
+}}
+mockPutRecordResponse : '{IO, Exception, Threads} Http.Response
+mockPutRecordResponse = do
+  jsonBody = 
+    """
+    {
+      "ShardId": "shardId-000000000000",
+      "SequenceNumber": "49590338271490256608559692538361571095921575989136588898"
+    }
+    """
+  bodyBytes = Text.toUtf8 jsonBody
+  Http.Response.Response 200 [("Content-Type", "application/x-amz-json-1.1")] bodyBytes
+
+{{
+Mock response for GetShardIterator operation.
+Returns a shard iterator string.
+}}
+mockGetShardIteratorResponse : '{IO, Exception, Threads} Http.Response
+mockGetShardIteratorResponse = do
+  jsonBody = 
+    """
+    {
+      "ShardIterator": "AAAAAAAAAAHSywljv0zEgPX4NyKdZ5wryMzP9yALs8NeKbUjp1IxtZs1Sp+KEd8I6AJ9ZG4lNR1EMi+9Md/nHvtLyxpfhEzYvkTZ4D9DQVz/mBYWRO6OTZRKnW9gd+efGN2aHFdkH1rJl4BL9Wyrk+ghYG22D2T1Da2EyNSH1+LAbK33gQweTJADBdyMwlo5r6PqcP2dzhg="
+    }
+    """
+  bodyBytes = Text.toUtf8 jsonBody
+  Http.Response.Response 200 [("Content-Type", "application/x-amz-json-1.1")] bodyBytes
+
+{{
+Mock response for GetRecords operation.
+Returns one record with the test data "Hello from Unison Kinesis Client!"
+}}
+mockGetRecordsResponse : '{IO, Exception, Threads} Http.Response
+mockGetRecordsResponse = do
+  -- Base64 encoded "Hello from Unison Kinesis Client!"
+  
+  jsonBody = 
+    """
+    {
+      "Records": [
+        {
+          "SequenceNumber": "49590338271490256608559692538361571095921575989136588898",
+          "ApproximateArrivalTimestamp": "2024-01-01T00:00:00.000Z",
+          "Data": "SGVsbG8gZnJvbSBVbmlzb24gS2luZXNpcyBDbGllbnQh",
+          "PartitionKey": "test-partition-1"
+        }
+      ],
+      "NextShardIterator": "AAAAAAAAAAHSywljv0zEgPX4NyKdZ5wryMzP9yALs8NeKbUjp1IxtZs1Sp+KEd8I6AJ9ZG4lNR1EMi+9Md/nHvtLyxpfhEzYvkTZ4D9DQVz/mBYWRO6OTZRKnW9gd+efGN2aHFdkH1rJl4BL9Wyrk+ghYG22D2T1Da2EyNSH1+LAbK33gQweTJADBdyMwlo5r6PqcP2dzhg=",
+      "MillisBehindLatest": 0
+    }
+    """
+  bodyBytes = Text.toUtf8 jsonBody
+  Http.Response.Response 200 [("Content-Type", "application/x-amz-json-1.1")] bodyBytes
+
+{{
+Mock response for unknown operations.
+Returns a generic error response.
+}}
+mockUnknownOperationResponse : '{IO, Exception, Threads} Http.Response
+mockUnknownOperationResponse = do
+  jsonBody = 
+    """
+    {
+      "__type": "UnknownOperationException",
+      "message": "Unknown operation (mock mode)"
+    }
+    """
+  bodyBytes = Text.toUtf8 jsonBody
+  Http.Response.Response 400 [("Content-Type", "application/x-amz-json-1.1")] bodyBytes

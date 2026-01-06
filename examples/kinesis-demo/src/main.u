@@ -1,0 +1,330 @@
+-- Kinesis Demo Application
+-- Tests the generated Kinesis client against LocalStack mock server
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests (not placeholders), install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
+
+-- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create Kinesis client configuration for LocalStack
+defaultConfig : '{IO, Exception} aws.kinesis.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  aws.kinesis.Config.Config endpoint region creds false
+
+-- Test stream name - created by terraform provisioner
+testStreamName : Text
+testStreamName = "kinesis-demo-stream"
+
+-- Test partition key
+testPartitionKey : Text
+testPartitionKey = "test-partition-1"
+
+-- Test message data
+testMessageData : Text
+testMessageData = "Hello from Unison Kinesis Client!"
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
+main : '{IO, Exception} ()
+main = do
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║  Kinesis Client Demo (LocalStack Backend)   ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ Config.endpoint config)
+  printLine ("Region: " ++ Config.region config)
+  printLine ("Stream: " ++ testStreamName)
+  printLine ""
+  
+  -- Demo 1: List Streams
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: List Streams"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(listStreamsDemo config)
+  
+  -- Demo 2: Describe Stream
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Describe Stream"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  shardId = !(describeStreamDemo config)
+  
+  -- Demo 3: Put Record
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: Put Record"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  sequenceNumber = !(putRecordDemo config)
+  
+  -- Demo 4: Get Shard Iterator
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 4: Get Shard Iterator"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  shardIterator = !(getShardIteratorDemo config shardId)
+  
+  -- Demo 5: Get Records
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 5: Get Records"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(getRecordsDemo config shardIterator)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║         Kinesis Demo Complete!               ║"
+  printLine "╚══════════════════════════════════════════════╝"
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+List all Kinesis streams.
+Verifies that our test stream exists.
+}}
+listStreamsDemo : aws.kinesis.Config -> '{IO, Exception, Threads} ()
+listStreamsDemo config = do
+  printLine "  → Creating ListStreamsInput..."
+  printLine "    Limit: 10"
+  
+  -- ListStreamsInput: exclusiveStartStreamName, limit, nextToken
+  request = aws.kinesis.ListStreamsInput.ListStreamsInput None (Some +10) None
+  
+  -- Call the Kinesis client
+  printLine "  → Calling listStreams..."
+  result = !(aws.kinesis.listStreams config request)
+  
+  printLine "  ✓ SUCCESS: ListStreams returned"
+  
+  -- Extract and display stream names
+  streamNames = aws.kinesis.ListStreamsOutput.streamNames result
+  count = List.size streamNames
+  printLine ("  → Found " ++ Nat.toText count ++ " stream(s)")
+  
+  -- Print each stream name
+  go i = cases
+    [] -> ()
+    name +: rest ->
+      printLine ("    [" ++ Nat.toText i ++ "] " ++ name)
+      if Text.eq name testStreamName then
+        printLine "        ✓ Test stream found!"
+      else
+        ()
+      go (i + 1) rest
+  
+  go 0 streamNames
+  
+  hasMore = aws.kinesis.ListStreamsOutput.hasMoreStreams result
+  if hasMore then
+    printLine "  → More streams available (use pagination to see all)"
+  else
+    ()
+
+{{
+Describe the test stream to get shard information.
+Returns the first shard ID for use in subsequent operations.
+}}
+describeStreamDemo : aws.kinesis.Config -> '{IO, Exception, Threads} Text
+describeStreamDemo config = do
+  printLine "  → Creating DescribeStreamInput..."
+  printLine ("    StreamName: " ++ testStreamName)
+  
+  -- DescribeStreamInput: exclusiveStartShardId, limit, streamARN, streamName
+  request = aws.kinesis.DescribeStreamInput.DescribeStreamInput None None None (Some testStreamName)
+  
+  -- Call the Kinesis client
+  printLine "  → Calling describeStream..."
+  result = !(aws.kinesis.describeStream config request)
+  
+  printLine "  ✓ SUCCESS: DescribeStream returned"
+  
+  -- Extract stream description
+  streamDesc = aws.kinesis.DescribeStreamOutput.streamDescription result
+  streamName = aws.kinesis.StreamDescription.streamName streamDesc
+  streamStatus = aws.kinesis.StreamDescription.streamStatus streamDesc
+  shards = aws.kinesis.StreamDescription.shards streamDesc
+  
+  printLine ("  → Stream Name: " ++ streamName)
+  printLine ("  → Stream Status: " ++ aws.kinesis.streamStatusToText streamStatus)
+  printLine ("  → Number of Shards: " ++ Nat.toText (List.size shards))
+  
+  -- Get the first shard ID
+  match List.at 0 shards with
+    Some shard ->
+      shardId = aws.kinesis.Shard.shardId shard
+      printLine ("  → First Shard ID: " ++ shardId)
+      shardId
+    None ->
+      printLine "  ✗ ERROR: No shards found in stream"
+      ""
+
+{{
+Put a test record into the stream.
+Returns the sequence number of the record.
+}}
+putRecordDemo : aws.kinesis.Config -> '{IO, Exception, Threads} Text
+putRecordDemo config = do
+  printLine "  → Creating PutRecordInput..."
+  printLine ("    StreamName: " ++ testStreamName)
+  printLine ("    PartitionKey: " ++ testPartitionKey)
+  printLine ("    Data: \"" ++ testMessageData ++ "\"")
+  
+  -- Convert the message to Bytes
+  dataBytes = Text.toUtf8 testMessageData
+  
+  -- PutRecordInput: data, explicitHashKey, partitionKey, sequenceNumberForOrdering, streamARN, streamName
+  request = aws.kinesis.PutRecordInput.PutRecordInput dataBytes None testPartitionKey None None (Some testStreamName)
+  
+  -- Call the Kinesis client
+  printLine "  → Calling putRecord..."
+  result = !(aws.kinesis.putRecord config request)
+  
+  printLine "  ✓ SUCCESS: PutRecord completed"
+  
+  -- Display result details
+  sequenceNumber = aws.kinesis.PutRecordOutput.sequenceNumber result
+  shardId = aws.kinesis.PutRecordOutput.shardId result
+  
+  printLine ("  → Sequence Number: " ++ sequenceNumber)
+  printLine ("  → Shard ID: " ++ shardId)
+  
+  sequenceNumber
+
+{{
+Get a shard iterator for reading records from the stream.
+Uses TRIM_HORIZON to start from the beginning of the shard.
+}}
+getShardIteratorDemo : aws.kinesis.Config -> Text -> '{IO, Exception, Threads} Text
+getShardIteratorDemo config shardId = do
+  printLine "  → Creating GetShardIteratorInput..."
+  printLine ("    StreamName: " ++ testStreamName)
+  printLine ("    ShardId: " ++ shardId)
+  printLine "    ShardIteratorType: TRIM_HORIZON"
+  
+  -- GetShardIteratorInput: shardId, shardIteratorType, startingSequenceNumber, streamARN, streamName, timestamp
+  request = aws.kinesis.GetShardIteratorInput.GetShardIteratorInput shardId aws.kinesis.ShardIteratorType'TRIM_HORIZON None None (Some testStreamName) None
+  
+  -- Call the Kinesis client
+  printLine "  → Calling getShardIterator..."
+  result = !(aws.kinesis.getShardIterator config request)
+  
+  printLine "  ✓ SUCCESS: GetShardIterator returned"
+  
+  -- Extract shard iterator
+  match aws.kinesis.GetShardIteratorOutput.shardIterator result with
+    Some iterator ->
+      printLine ("  → Shard Iterator: " ++ Text.take 50 iterator ++ "...")
+      iterator
+    None ->
+      printLine "  ✗ ERROR: No shard iterator in response"
+      ""
+
+{{
+Get records from the stream using the shard iterator.
+Reads and verifies the data we put into the stream.
+}}
+getRecordsDemo : aws.kinesis.Config -> Text -> '{IO, Exception, Threads} ()
+getRecordsDemo config shardIterator = do
+  printLine "  → Creating GetRecordsInput..."
+  printLine "    Limit: 10"
+  
+  -- GetRecordsInput: limit, shardIterator, streamARN
+  request = aws.kinesis.GetRecordsInput.GetRecordsInput (Some +10) shardIterator None
+  
+  -- Call the Kinesis client
+  printLine "  → Calling getRecords..."
+  result = !(aws.kinesis.getRecords config request)
+  
+  printLine "  ✓ SUCCESS: GetRecords returned"
+  
+  -- Extract records
+  records = aws.kinesis.GetRecordsOutput.records result
+  count = List.size records
+  printLine ("  → Received " ++ Nat.toText count ++ " record(s)")
+  
+  -- Display millis behind latest
+  match aws.kinesis.GetRecordsOutput.millisBehindLatest result with
+    Some millis ->
+      printLine ("  → Millis Behind Latest: " ++ Int.toText millis)
+    None -> ()
+  
+  -- Process each record
+  go i = cases
+    [] -> ()
+    record +: rest ->
+      printLine ("")
+      printLine ("  Record " ++ Nat.toText i ++ ":")
+      
+      -- Get sequence number
+      seqNum = aws.kinesis.Record.sequenceNumber record
+      printLine ("    Sequence Number: " ++ seqNum)
+      
+      -- Get partition key
+      partKey = aws.kinesis.Record.partitionKey record
+      printLine ("    Partition Key: " ++ partKey)
+      
+      -- Get and decode data
+      dataBytes = aws.kinesis.Record.data record
+      match catch do fromUtf8 dataBytes with
+        Right dataText ->
+          printLine ("    Data: \"" ++ dataText ++ "\"")
+          
+          -- Verify content matches what we sent
+          if Text.eq dataText testMessageData then
+            printLine "    ✓ Content matches sent message!"
+          else
+            printLine ("    ✗ Content does NOT match! Expected: \"" ++ testMessageData ++ "\"")
+        Left _ ->
+          printLine "    Data: (could not decode as UTF-8)"
+      
+      go (i + 1) rest
+  
+  go 0 records
+  
+  -- Display next shard iterator info
+  match aws.kinesis.GetRecordsOutput.nextShardIterator result with
+    Some nextIter ->
+      printLine ("")
+      printLine ("  → Next Shard Iterator available: " ++ Text.take 50 nextIter ++ "...")
+      printLine "    (Use this to continue reading more records)"
+    None ->
+      printLine ("")
+      printLine "  → No more records available in this shard"
