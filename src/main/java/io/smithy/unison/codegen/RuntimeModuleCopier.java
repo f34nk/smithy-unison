@@ -25,9 +25,13 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@code aws_sigv4.u} - AWS SigV4 request signing</li>
  *   <li>{@code aws_xml.u} - XML encoding/decoding</li>
+ *   <li>{@code aws_xml_bridge.u} - XML bridge for @unison/xml</li>
  *   <li>{@code aws_json.u} - JSON encoding/decoding with DynamoDB AttributeValue support</li>
  *   <li>{@code aws_json_bridge.u} - JSON-HTTP integration</li>
+ *   <li>{@code aws_query.u} - AWS Query protocol utilities</li>
+ *   <li>{@code aws_restjson.u} - AWS REST-JSON protocol utilities</li>
  *   <li>{@code aws_http.u} - HTTP request helpers</li>
+ *   <li>{@code aws_http_bridge.u} - HTTP bridge for @unison/http</li>
  *   <li>{@code aws_s3.u} - S3-specific utilities</li>
  *   <li>{@code aws_config.u} - Configuration types</li>
  *   <li>{@code aws_credentials.u} - Credential loading</li>
@@ -60,6 +64,12 @@ public final class RuntimeModuleCopier {
         AWS_XML("aws_xml.u", "XML encoding/decoding"),
         
         /**
+         * XML bridge for @unison/xml library.
+         * Enables XML parsing in generated client code.
+         */
+        AWS_XML_BRIDGE("aws_xml_bridge.u", "XML bridge for @unison/xml"),
+        
+        /**
          * JSON encoding/decoding utilities with DynamoDB AttributeValue support.
          */
         AWS_JSON("aws_json.u", "JSON encoding/decoding with AttributeValue support"),
@@ -68,6 +78,16 @@ public final class RuntimeModuleCopier {
          * JSON-HTTP integration for AWS JSON protocols.
          */
         AWS_JSON_BRIDGE("aws_json_bridge.u", "JSON-HTTP integration"),
+        
+        /**
+         * AWS Query protocol utilities.
+         */
+        AWS_QUERY("aws_query.u", "AWS Query protocol utilities"),
+        
+        /**
+         * AWS REST-JSON protocol utilities.
+         */
+        AWS_RESTJSON("aws_restjson.u", "AWS REST-JSON protocol utilities"),
         
         /**
          * HTTP request helpers.
@@ -200,7 +220,13 @@ public final class RuntimeModuleCopier {
      * <ul>
      *   <li>{@code aws_sigv4.u} - Required for all AWS services</li>
      *   <li>{@code aws_xml.u} - Required for REST-XML protocol services</li>
+     *   <li>{@code aws_xml_bridge.u} - XML bridge for @unison/xml</li>
+     *   <li>{@code aws_json.u} - Required for JSON protocol services</li>
+     *   <li>{@code aws_json_bridge.u} - JSON-HTTP integration</li>
+     *   <li>{@code aws_query.u} - Required for Query protocol services</li>
+     *   <li>{@code aws_restjson.u} - Required for REST-JSON protocol services</li>
      *   <li>{@code aws_http.u} - HTTP utilities for all services</li>
+     *   <li>{@code aws_http_bridge.u} - HTTP bridge for @unison/http</li>
      *   <li>{@code aws_s3.u} - S3-specific utilities</li>
      *   <li>{@code aws_config.u} - Configuration types</li>
      *   <li>{@code aws_credentials.u} - Credential provider chain</li>
@@ -282,9 +308,18 @@ public final class RuntimeModuleCopier {
         }
         
         // Protocol-specific modules
-        if (protocol.isXml()) {
+        // AWS Query protocol (SQS, SNS, etc.)
+        // Also copy for services with awsQueryCompatible trait (like SQS)
+        boolean isQueryProtocol = protocol == AwsProtocol.AWS_QUERY || protocol == AwsProtocol.EC2_QUERY;
+        boolean hasQueryCompatible = service.findTrait(ShapeId.from("aws.protocols#awsQueryCompatible")).isPresent();
+        
+        // XML modules needed for XML protocols and Query-compatible services
+        if (protocol.isXml() || hasQueryCompatible) {
             if (copyModule(RuntimeModule.AWS_XML)) {
                 copied.add(RuntimeModule.AWS_XML.getFilename());
+            }
+            if (copyModule(RuntimeModule.AWS_XML_BRIDGE)) {
+                copied.add(RuntimeModule.AWS_XML_BRIDGE.getFilename());
             }
         }
         
@@ -294,6 +329,20 @@ public final class RuntimeModuleCopier {
             }
             if (copyModule(RuntimeModule.AWS_JSON_BRIDGE)) {
                 copied.add(RuntimeModule.AWS_JSON_BRIDGE.getFilename());
+            }
+        }
+        
+        // AWS Query utilities for Query protocols and Query-compatible services
+        if (isQueryProtocol || hasQueryCompatible) {
+            if (copyModule(RuntimeModule.AWS_QUERY)) {
+                copied.add(RuntimeModule.AWS_QUERY.getFilename());
+            }
+        }
+        
+        // REST-JSON protocol (Lambda, API Gateway, etc.)
+        if (protocol == AwsProtocol.REST_JSON_1) {
+            if (copyModule(RuntimeModule.AWS_RESTJSON)) {
+                copied.add(RuntimeModule.AWS_RESTJSON.getFilename());
             }
         }
         
