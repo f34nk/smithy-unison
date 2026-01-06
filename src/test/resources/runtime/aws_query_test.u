@@ -1,0 +1,370 @@
+-- Unit tests for AWS Query Protocol Runtime Module
+
+namespace aws.query.test
+
+use aws.query
+use Text ++
+
+-- === Form Encoding Tests ===
+
+testBuildFormEncodedBodyEmpty : '{Exception} Boolean
+testBuildFormEncodedBodyEmpty = 'let
+  params = []
+  result = aws.query.buildFormEncodedBody params
+  result === ""
+
+testBuildFormEncodedBodySingle : '{Exception} Boolean
+testBuildFormEncodedBodySingle = 'let
+  params = [("Action", "SendMessage")]
+  result = aws.query.buildFormEncodedBody params
+  result === "Action=SendMessage"
+
+testBuildFormEncodedBodyMultiple : '{Exception} Boolean
+testBuildFormEncodedBodyMultiple = 'let
+  params = [("Action", "SendMessage"), ("Version", "2012-11-05")]
+  result = aws.query.buildFormEncodedBody params
+  result === "Action=SendMessage&Version=2012-11-05"
+
+testBuildFormEncodedBodyWithEncoding : '{Exception} Boolean
+testBuildFormEncodedBodyWithEncoding = 'let
+  params = [("QueueUrl", "https://sqs.us-east-1.amazonaws.com/123/my-queue")]
+  result = aws.query.buildFormEncodedBody params
+  -- Check that colons, slashes, and hyphens are encoded
+  test1 = Text.contains "QueueUrl=" result
+  test2 = Text.contains "%3A" result  -- colon
+  test3 = Text.contains "%2F" result  -- slash
+  test1 && test2 && test3
+
+testBuildFormEncodedBodySpaces : '{Exception} Boolean
+testBuildFormEncodedBodySpaces = 'let
+  params = [("Message", "Hello World")]
+  result = aws.query.buildFormEncodedBody params
+  result === "Message=Hello%20World"
+
+-- === URL Encoding Tests ===
+
+testUrlEncodeSimple : '{Exception} Boolean
+testUrlEncodeSimple = 'let
+  result = aws.query.urlEncode "hello"
+  result === "hello"
+
+testUrlEncodeSpaces : '{Exception} Boolean
+testUrlEncodeSpaces = 'let
+  result = aws.query.urlEncode "Hello World"
+  result === "Hello%20World"
+
+testUrlEncodeSpecialChars : '{Exception} Boolean
+testUrlEncodeSpecialChars = 'let
+  test1 = aws.query.urlEncode "!" === "%21"
+  test2 = aws.query.urlEncode "#" === "%23"
+  test3 = aws.query.urlEncode "$" === "%24"
+  test4 = aws.query.urlEncode "&" === "%26"
+  test5 = aws.query.urlEncode "'" === "%27"
+  test1 && test2 && test3 && test4 && test5
+
+testUrlEncodeParentheses : '{Exception} Boolean
+testUrlEncodeParentheses = 'let
+  test1 = aws.query.urlEncode "(" === "%28"
+  test2 = aws.query.urlEncode ")" === "%29"
+  test1 && test2
+
+testUrlEncodeMoreSpecialChars : '{Exception} Boolean
+testUrlEncodeMoreSpecialChars = 'let
+  test1 = aws.query.urlEncode "*" === "%2A"
+  test2 = aws.query.urlEncode "+" === "%2B"
+  test3 = aws.query.urlEncode "," === "%2C"
+  test4 = aws.query.urlEncode "/" === "%2F"
+  test1 && test2 && test3 && test4
+
+testUrlEncodeUrlChars : '{Exception} Boolean
+testUrlEncodeUrlChars = 'let
+  test1 = aws.query.urlEncode ":" === "%3A"
+  test2 = aws.query.urlEncode ";" === "%3B"
+  test3 = aws.query.urlEncode "=" === "%3D"
+  test4 = aws.query.urlEncode "?" === "%3F"
+  test5 = aws.query.urlEncode "@" === "%40"
+  test1 && test2 && test3 && test4 && test5
+
+testUrlEncodeBrackets : '{Exception} Boolean
+testUrlEncodeBrackets = 'let
+  test1 = aws.query.urlEncode "[" === "%5B"
+  test2 = aws.query.urlEncode "]" === "%5D"
+  test1 && test2
+
+testUrlEncodeUnreservedChars : '{Exception} Boolean
+testUrlEncodeUnreservedChars = 'let
+  -- These should NOT be encoded
+  test1 = aws.query.urlEncode "-" === "-"
+  test2 = aws.query.urlEncode "_" === "_"
+  test3 = aws.query.urlEncode "." === "."
+  test4 = aws.query.urlEncode "~" === "~"
+  test1 && test2 && test3 && test4
+
+testUrlEncodeAlphanumeric : '{Exception} Boolean
+testUrlEncodeAlphanumeric = 'let
+  test1 = aws.query.urlEncode "ABCabc123" === "ABCabc123"
+  test2 = aws.query.urlEncode "0123456789" === "0123456789"
+  test1 && test2
+
+testUrlEncodeComplexString : '{Exception} Boolean
+testUrlEncodeComplexString = 'let
+  result = aws.query.urlEncode "https://example.com/path?query=value"
+  -- Check that special chars are encoded
+  test1 = Text.contains "%3A" result  -- colon
+  test2 = Text.contains "%2F" result  -- slash
+  test3 = Text.contains "%3F" result  -- question mark
+  test4 = Text.contains "%3D" result  -- equals
+  test1 && test2 && test3 && test4
+
+testUrlEncodePercent : '{Exception} Boolean
+testUrlEncodePercent = 'let
+  result = aws.query.urlEncode "100%"
+  result === "100%25"
+
+-- === Character Encoding Helper Tests ===
+
+testIsUnreservedAlpha : '{Exception} Boolean
+testIsUnreservedAlpha = 'let
+  test1 = isUnreserved ?A
+  test2 = isUnreserved ?Z
+  test3 = isUnreserved ?a
+  test4 = isUnreserved ?z
+  test1 && test2 && test3 && test4
+
+testIsUnreservedDigit : '{Exception} Boolean
+testIsUnreservedDigit = 'let
+  test1 = isUnreserved ?0
+  test2 = isUnreserved ?9
+  test1 && test2
+
+testIsUnreservedSpecial : '{Exception} Boolean
+testIsUnreservedSpecial = 'let
+  test1 = isUnreserved ?-
+  test2 = isUnreserved ?_
+  test3 = isUnreserved ?.
+  test4 = isUnreserved ?~
+  test1 && test2 && test3 && test4
+
+testIsUnreservedReserved : '{Exception} Boolean
+testIsUnreservedReserved = 'let
+  test1 = not (isUnreserved ?!)
+  test2 = not (isUnreserved ?@)
+  test3 = not (isUnreserved ?#)
+  test4 = not (isUnreserved ?$)
+  test1 && test2 && test3 && test4
+
+testNibbleToHexDigits : '{Exception} Boolean
+testNibbleToHexDigits = 'let
+  test1 = nibbleToHex 0 === ?0
+  test2 = nibbleToHex 5 === ?5
+  test3 = nibbleToHex 9 === ?9
+  test1 && test2 && test3
+
+testNibbleToHexLetters : '{Exception} Boolean
+testNibbleToHexLetters = 'let
+  test1 = nibbleToHex 10 === ?A
+  test2 = nibbleToHex 12 === ?C
+  test3 = nibbleToHex 15 === ?F
+  test1 && test2 && test3
+
+testByteToHex : '{Exception} Boolean
+testByteToHex = 'let
+  result = byteToHex 32  -- space character
+  test1 = List.size result === 3
+  test2 = List.at 0 result === Some ?%
+  test3 = List.at 1 result === Some ?2
+  test4 = List.at 2 result === Some ?0
+  test1 && test2 && test3 && test4
+
+testByteToHexUpperCase : '{Exception} Boolean
+testByteToHexUpperCase = 'let
+  result = byteToHex 255  -- 0xFF
+  test1 = List.at 1 result === Some ?F
+  test2 = List.at 2 result === Some ?F
+  test1 && test2
+
+-- === Parameter Flattening Tests ===
+
+testFlattenStructureEmpty : '{Exception} Boolean
+testFlattenStructureEmpty = 'let
+  result = aws.query.flattenStructure "Prefix" []
+  List.isEmpty result
+
+testFlattenStructureSingle : '{Exception} Boolean
+testFlattenStructureSingle = 'let
+  fields = [("Name", "Value")]
+  result = aws.query.flattenStructure "Filter" fields
+  result === [("Filter.Name", "Value")]
+
+testFlattenStructureMultiple : '{Exception} Boolean
+testFlattenStructureMultiple = 'let
+  fields = [("Type", "IncludeAll"), ("Enabled", "true")]
+  result = aws.query.flattenStructure "Filter" fields
+  test1 = List.contains ("Filter.Type", "IncludeAll") result
+  test2 = List.contains ("Filter.Enabled", "true") result
+  test3 = List.size result === 2
+  test1 && test2 && test3
+
+testFlattenStructureNestedPrefix : '{Exception} Boolean
+testFlattenStructureNestedPrefix = 'let
+  fields = [("Key", "Environment"), ("Value", "production")]
+  result = aws.query.flattenStructure "Tags.member.1" fields
+  test1 = List.contains ("Tags.member.1.Key", "Environment") result
+  test2 = List.contains ("Tags.member.1.Value", "production") result
+  test1 && test2
+
+testFlattenListOfStructuresEmpty : '{Exception} Boolean
+testFlattenListOfStructuresEmpty = 'let
+  result = aws.query.flattenListOfStructures "Filters" []
+  List.isEmpty result
+
+testFlattenListOfStructuresSingle : '{Exception} Boolean
+testFlattenListOfStructuresSingle = 'let
+  structures = [[("Name", "tag:Env"), ("Value", "prod")]]
+  result = aws.query.flattenListOfStructures "Filters" structures
+  test1 = List.contains ("Filters.member.1.Name", "tag:Env") result
+  test2 = List.contains ("Filters.member.1.Value", "prod") result
+  test3 = List.size result === 2
+  test1 && test2 && test3
+
+testFlattenListOfStructuresMultiple : '{Exception} Boolean
+testFlattenListOfStructuresMultiple = 'let
+  structures = [
+    [("Name", "tag:Environment"), ("Value", "production")],
+    [("Name", "instance-state-name"), ("Value", "running")]
+  ]
+  result = aws.query.flattenListOfStructures "Filters" structures
+  test1 = List.contains ("Filters.member.1.Name", "tag:Environment") result
+  test2 = List.contains ("Filters.member.1.Value", "production") result
+  test3 = List.contains ("Filters.member.2.Name", "instance-state-name") result
+  test4 = List.contains ("Filters.member.2.Value", "running") result
+  test5 = List.size result === 4
+  test1 && test2 && test3 && test4 && test5
+
+testFlattenListOfStructuresIndexing : '{Exception} Boolean
+testFlattenListOfStructuresIndexing = 'let
+  structures = [
+    [("Id", "1")],
+    [("Id", "2")],
+    [("Id", "3")]
+  ]
+  result = aws.query.flattenListOfStructures "Items" structures
+  -- Check that indexing starts at 1 and increments
+  test1 = List.contains ("Items.member.1.Id", "1") result
+  test2 = List.contains ("Items.member.2.Id", "2") result
+  test3 = List.contains ("Items.member.3.Id", "3") result
+  test4 = List.size result === 3
+  test1 && test2 && test3 && test4
+
+-- === Integration Tests ===
+
+testAwsQueryRequestExample : '{Exception} Boolean
+testAwsQueryRequestExample = 'let
+  -- Simulate building a real AWS Query request
+  params = [
+    ("Action", "SendMessage"),
+    ("Version", "2012-11-05"),
+    ("QueueUrl", "https://sqs.us-east-1.amazonaws.com/123456789012/MyQueue"),
+    ("MessageBody", "Hello World!")
+  ]
+  result = aws.query.buildFormEncodedBody params
+  -- Check all params are present
+  test1 = Text.contains "Action=SendMessage" result
+  test2 = Text.contains "Version=2012-11-05" result
+  test3 = Text.contains "QueueUrl=" result
+  test4 = Text.contains "MessageBody=Hello%20World%21" result
+  test5 = Text.contains "&" result
+  test1 && test2 && test3 && test4 && test5
+
+testComplexParameterFlattening : '{Exception} Boolean
+testComplexParameterFlattening = 'let
+  -- Simulate a complex nested structure
+  tags = [
+    [("Key", "Environment"), ("Value", "production")],
+    [("Key", "Application"), ("Value", "web-server")]
+  ]
+  flattenedTags = aws.query.flattenListOfStructures "Tags" tags
+  allParams = [("Action", "CreateInstance"), ("Version", "2016-11-15")] List.++ flattenedTags
+  result = aws.query.buildFormEncodedBody allParams
+  -- Check the structure is properly flattened
+  test1 = Text.contains "Tags.member.1.Key=Environment" result
+  test2 = Text.contains "Tags.member.1.Value=production" result
+  test3 = Text.contains "Tags.member.2.Key=Application" result
+  test4 = Text.contains "Tags.member.2.Value=web-server" result
+  test1 && test2 && test3 && test4
+
+testEncodingRoundtrip : '{Exception} Boolean
+testEncodingRoundtrip = 'let
+  -- Test that unreserved chars survive encoding
+  original = "test-value_123.abc~"
+  encoded = aws.query.urlEncode original
+  encoded === original
+
+testFormBodyWithSpecialCharacters : '{Exception} Boolean
+testFormBodyWithSpecialCharacters = 'let
+  params = [("Filter.1.Name", "tag:Name"), ("Filter.1.Value", "My Instance")]
+  result = aws.query.buildFormEncodedBody params
+  test1 = Text.contains "Filter.1.Name=tag%3AName" result
+  test2 = Text.contains "Filter.1.Value=My%20Instance" result
+  test1 && test2
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS Query Protocol Runtime Tests..."
+  printLine ""
+  
+  -- Form encoding tests
+  runTest "buildFormEncodedBody empty" testBuildFormEncodedBodyEmpty ()
+  runTest "buildFormEncodedBody single" testBuildFormEncodedBodySingle ()
+  runTest "buildFormEncodedBody multiple" testBuildFormEncodedBodyMultiple ()
+  runTest "buildFormEncodedBody with encoding" testBuildFormEncodedBodyWithEncoding ()
+  runTest "buildFormEncodedBody spaces" testBuildFormEncodedBodySpaces ()
+  
+  -- URL encoding tests
+  runTest "urlEncode simple" testUrlEncodeSimple ()
+  runTest "urlEncode spaces" testUrlEncodeSpaces ()
+  runTest "urlEncode special chars" testUrlEncodeSpecialChars ()
+  runTest "urlEncode parentheses" testUrlEncodeParentheses ()
+  runTest "urlEncode more special chars" testUrlEncodeMoreSpecialChars ()
+  runTest "urlEncode URL chars" testUrlEncodeUrlChars ()
+  runTest "urlEncode brackets" testUrlEncodeBrackets ()
+  runTest "urlEncode unreserved chars" testUrlEncodeUnreservedChars ()
+  runTest "urlEncode alphanumeric" testUrlEncodeAlphanumeric ()
+  runTest "urlEncode complex string" testUrlEncodeComplexString ()
+  runTest "urlEncode percent" testUrlEncodePercent ()
+  
+  -- Character encoding helper tests
+  runTest "isUnreserved alpha" testIsUnreservedAlpha ()
+  runTest "isUnreserved digit" testIsUnreservedDigit ()
+  runTest "isUnreserved special" testIsUnreservedSpecial ()
+  runTest "isUnreserved reserved" testIsUnreservedReserved ()
+  runTest "nibbleToHex digits" testNibbleToHexDigits ()
+  runTest "nibbleToHex letters" testNibbleToHexLetters ()
+  runTest "byteToHex" testByteToHex ()
+  runTest "byteToHex uppercase" testByteToHexUpperCase ()
+  
+  -- Parameter flattening tests
+  runTest "flattenStructure empty" testFlattenStructureEmpty ()
+  runTest "flattenStructure single" testFlattenStructureSingle ()
+  runTest "flattenStructure multiple" testFlattenStructureMultiple ()
+  runTest "flattenStructure nested prefix" testFlattenStructureNestedPrefix ()
+  runTest "flattenListOfStructures empty" testFlattenListOfStructuresEmpty ()
+  runTest "flattenListOfStructures single" testFlattenListOfStructuresSingle ()
+  runTest "flattenListOfStructures multiple" testFlattenListOfStructuresMultiple ()
+  runTest "flattenListOfStructures indexing" testFlattenListOfStructuresIndexing ()
+  
+  -- Integration tests
+  runTest "AWS Query request example" testAwsQueryRequestExample ()
+  runTest "complex parameter flattening" testComplexParameterFlattening ()
+  runTest "encoding roundtrip" testEncodingRoundtrip ()
+  runTest "form body with special characters" testFormBodyWithSpecialCharacters ()
+  
+  printLine ""
+  printLine "All tests completed!"
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)

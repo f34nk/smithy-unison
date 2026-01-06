@@ -145,9 +145,40 @@ def main():
     start_time = time.time()
 
     # sdks = sorted(os.listdir(INPUT_PATH))
-    # sdks = ["s3", "dynamodb", "ec2", "lambda", "sns", "sqs", "iam", "sts", "route53", "cloudfront", "waf", "organizations"]
-    sdks = ["s3", "dynamodb", "ec2"]
-    # sdks = ["s3"]
+    sdks = [
+        "acm",
+        "account",
+        "api-gateway",
+        "athena",
+        "billing",
+        "cloudfront",
+        "cloudtrail",
+        "cloudwatch",
+        "cloudwatch-logs",
+        "codedeploy",
+        "config-service",
+        "dynamodb",
+        "dynamodb-streams",
+        "ec2",
+        "elasticache",
+        "firehose",
+        "glue",
+        "iam",
+        "kafka",
+        "kinesis",
+        "lambda",
+        "organizations",
+        "rds",
+        "route-53",
+        "route53",
+        "s3",
+        "sns",
+        "sqs",
+        "ssm",
+        "sts",
+        "waf",
+        "wafv2",
+    ]
 
     # This sets the worker count to the minimum of:
     # Number of SDKs to process

@@ -1,0 +1,157 @@
+-- AWS Query Protocol Runtime Module
+-- Helper functions for AWS Query protocol implementation
+--
+-- This module provides utilities for building AWS Query requests,
+-- including form-encoded body construction and URL encoding.
+--
+-- AWS Query protocol uses HTTP POST with form-encoded parameters
+-- sent to the root path (/). All parameters must be URL-encoded.
+
+-- =============================================================================
+-- Form Encoding
+-- =============================================================================
+
+{{
+Build form-encoded body from parameter list.
+
+Converts a list of (name, value) pairs to application/x-www-form-urlencoded format.
+
+Takes a list of parameter pairs and returns a form-encoded string.
+All parameter names and values are URL-encoded according to RFC 3986.
+
+Result format: "Action=SendMessage&Version=2012-11-05&QueueUrl=https%3A%2F%2F..."
+}}
+aws.query.buildFormEncodedBody : [(Text, Text)] -> Text
+aws.query.buildFormEncodedBody params =
+  params
+    |> List.map encodeParam
+    |> Text.join "&"
+
+{{
+Encode a single parameter as name=value with URL encoding.
+}}
+encodeParam : (Text, Text) -> Text
+encodeParam pair =
+  match pair with (key, value) ->
+    aws.query.urlEncode key ++ "=" ++ aws.query.urlEncode value
+
+-- =============================================================================
+-- URL Encoding
+-- =============================================================================
+
+{{
+URL-encode text according to RFC 3986.
+
+Encodes all characters except unreserved ones (A-Z, a-z, 0-9, hyphen, underscore, dot, tilde).
+Space is encoded as %20 (not +). All other characters are percent-encoded as %XX where XX is the hex byte value.
+
+Examples: "Hello World!" becomes "Hello%20World%21"
+}}
+aws.query.urlEncode : Text -> Text
+aws.query.urlEncode text =
+  text
+    |> Text.toCharList
+    |> List.flatMap encodeChar
+    |> Text.fromCharList
+
+{{
+Encode a single character.
+
+Returns the character as-is if unreserved, or percent-encoded otherwise.
+}}
+encodeChar : Char -> [Char]
+encodeChar char =
+  if isUnreserved char then [char]
+  else percentEncode char
+
+{{
+Check if a character is unreserved (doesn't need encoding).
+
+Unreserved characters per RFC 3986:
+  ALPHA / DIGIT / "-" / "." / "_" / "~"
+}}
+isUnreserved : Char -> Boolean
+isUnreserved c =
+  -- A-Z, a-z, 0-9, -, _, ., ~
+  isAlphaNum = isLetter c || isDigit c
+  if isAlphaNum then true
+  else if Char.eq c ?- then true
+  else if Char.eq c ?_ then true
+  else if Char.eq c ?. then true
+  else if Char.eq c ?~ then true
+  else false
+
+{{
+Percent-encode a character as %XX.
+
+Converts the character to its UTF-8 byte representation and formats as %XX.
+}}
+percentEncode : Char -> [Char]
+percentEncode char =
+  -- Convert char to UTF-8 bytes and encode each byte
+  bytes = Text.toUtf8 (Char.toText char)
+  Bytes.toList bytes
+    |> List.flatMap byteToHex
+
+{{
+Convert a byte to %XX format.
+}}
+byteToHex : Nat -> [Char]
+byteToHex byte =
+  highNibble = Nat.div byte 16
+  lowNibble = Nat.mod byte 16
+  [?%, nibbleToHex highNibble, nibbleToHex lowNibble]
+
+{{
+Convert a nibble (0-15) to a hex digit character.
+}}
+nibbleToHex : Nat -> Char
+nibbleToHex n =
+  if Nat.lt n 10 then
+    -- 0-9: ASCII 48-57
+    Char.fromNat (48 + n)
+  else
+    -- A-F: ASCII 65-70
+    Char.fromNat (55 + n)
+
+-- =============================================================================
+-- Parameter Flattening (for nested structures)
+-- =============================================================================
+
+{{
+Flatten nested structure parameters with dot notation.
+
+Takes a prefix and a list of (field, value) pairs and creates
+flattened parameters in the form "Prefix.Field=value".
+
+Given prefix "Filter" and fields Type/Enabled, produces:
+  Filter.Type=IncludeAll, Filter.Enabled=true
+
+Used for AWS Query nested structure serialization.
+}}
+aws.query.flattenStructure : Text -> [(Text, Text)] -> [(Text, Text)]
+aws.query.flattenStructure prefix fields =
+  fields
+    |> List.map (pair ->
+        match pair with (key, value) ->
+          (prefix ++ "." ++ key, value))
+
+{{
+Flatten a list of structures with indexed notation.
+
+AWS Query protocol uses .member.N notation for lists of structures.
+
+Given prefix "Filters" and multiple structures, produces:
+  Filters.member.1.Name = tag:Environment
+  Filters.member.1.Value = production
+  Filters.member.2.Name = instance-state-name
+  Filters.member.2.Value = running
+}}
+aws.query.flattenListOfStructures : Text -> [[(Text, Text)]] -> [(Text, Text)]
+aws.query.flattenListOfStructures prefix structures =
+  structures
+    |> List.indexed
+    |> List.flatMap (pair ->
+        match pair with (fields, idx) ->
+          memberPrefix = prefix ++ ".member." ++ Nat.toText (idx + 1)
+          aws.query.flattenStructure memberPrefix fields)
