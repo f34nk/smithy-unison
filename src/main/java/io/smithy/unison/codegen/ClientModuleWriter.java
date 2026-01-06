@@ -339,7 +339,7 @@ public final class ClientModuleWriter {
             // Generate JSON serializers for nested structures (used by request serialization)
             // Only generate for AWS JSON protocols
             if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
-                generateJsonSerializers(structures, writer);
+                generateJsonSerializers(structures, enums, writer);
             }
         }
         
@@ -593,13 +593,13 @@ public final class ClientModuleWriter {
     }
     
     /**
-     * Generates JSON serializer and deserializer functions for all nested structures.
+     * Generates JSON serializer and deserializer functions for all nested structures and unions.
      * 
-     * <p>For AWS JSON protocols, nested structures need ToJson serializers
+     * <p>For AWS JSON protocols, nested structures and unions need ToJson serializers
      * and FromJson deserializers so they can be used in lists, maps, or as nested fields.
      */
-    private void generateJsonSerializers(Set<StructureShape> structures, UnisonWriter writer) {
-        if (structures.isEmpty()) {
+    private void generateJsonSerializers(Set<StructureShape> structures, Set<Shape> enums, UnisonWriter writer) {
+        if (structures.isEmpty() && enums.isEmpty()) {
             return;
         }
         
@@ -615,9 +615,46 @@ public final class ClientModuleWriter {
         writer.writeComment("=== Structure JSON Serializers/Deserializers ===");
         writer.writeBlankLine();
         
+        // Collect all error structures that are referenced by unions
+        // These need serializers even though they're errors
+        Set<StructureShape> errorStructuresInUnions = new HashSet<>();
+        for (Shape enumShape : enums) {
+            if (enumShape instanceof UnionShape) {
+                UnionShape unionShape = (UnionShape) enumShape;
+                for (MemberShape member : unionShape.getAllMembers().values()) {
+                    Shape memberTarget = model.expectShape(member.getTarget());
+                    if (memberTarget.isStructureShape()) {
+                        StructureShape structTarget = memberTarget.asStructureShape().get();
+                        // Check if this is an error structure
+                        if (structTarget.hasTrait(software.amazon.smithy.model.traits.ErrorTrait.class)) {
+                            errorStructuresInUnions.add(structTarget);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Generate serializers for regular structures
         for (StructureShape structure : structures) {
             jsonGen.generateStructureSerializer(structure, writer, context);
             jsonGen.generateStructureDeserializer(structure, writer, context);
+        }
+        
+        // Generate serializers for error structures that are in unions
+        for (StructureShape errorStruct : errorStructuresInUnions) {
+            jsonGen.generateStructureSerializer(errorStruct, writer, context);
+            jsonGen.generateStructureDeserializer(errorStruct, writer, context);
+        }
+        
+        // Generate serializers for unions (not enums or DynamoDB AttributeValue)
+        for (Shape enumShape : enums) {
+            if (enumShape instanceof UnionShape) {
+                UnionShape unionShape = (UnionShape) enumShape;
+                if (!isDynamoDBAttributeValue(unionShape)) {
+                    jsonGen.generateUnionSerializer(unionShape, writer, context);
+                    jsonGen.generateUnionDeserializer(unionShape, writer, context);
+                }
+            }
         }
     }
     

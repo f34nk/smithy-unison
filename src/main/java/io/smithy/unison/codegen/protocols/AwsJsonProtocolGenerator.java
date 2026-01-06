@@ -849,4 +849,149 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.dedent();
         writer.writeBlankLine();
     }
+    
+    /**
+     * Generates a JSON serializer for a union type with the naming pattern {UnionName}ToJson.
+     * Used for union types that are referenced in structures.
+     */
+    public void generateUnionSerializer(UnionShape union, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String unionType = UnisonSymbolProvider.toNamespacedTypeName(union.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(union.getId().getName() + "ToJson");
+        
+        writer.writeComment("Serialize " + union.getId().getName() + " to JSON");
+        writer.writeSignature(functionName, unionType + " -> aws.json.JsonValue");
+        writer.write("$L union =", functionName);
+        writer.indent();
+        
+        // Add use statements for union constructors
+        writer.write("use " + clientNamespace + " " + 
+            String.join(" ", union.getAllMembers().keySet().stream()
+                .map(memberName -> union.getId().getName() + "'" + memberName)
+                .toList()));
+        
+        writer.write("match union with");
+        writer.indent();
+        
+        // Generate pattern match case for each union member
+        for (MemberShape member : union.getAllMembers().values()) {
+            String variantName = member.getMemberName();
+            String constructorName = union.getId().getName() + "'" + variantName;
+            Shape memberTarget = model.expectShape(member.getTarget());
+            
+            // Get the JSON serialization for the member's value
+            String serializedValue = generateJsonValueForShape(memberTarget, "value", model, clientNamespace);
+            
+            writer.write("$L value -> $L", constructorName, serializedValue);
+        }
+        
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates a JSON deserializer for a union type with the naming pattern {UnionName}FromJson.
+     * Used for union types that are referenced in structures.
+     */
+    public void generateUnionDeserializer(UnionShape union, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String unionType = UnisonSymbolProvider.toNamespacedTypeName(union.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(union.getId().getName() + "FromJson");
+        
+        writer.writeComment("Parse " + union.getId().getName() + " from JSON");
+        writer.writeSignature(functionName, "aws.json.JsonValue -> Optional " + unionType);
+        writer.write("$L json =", functionName);
+        writer.indent();
+        
+        // Add use statement for union constructors
+        writer.write("use " + clientNamespace + " " + 
+            String.join(" ", union.getAllMembers().keySet().stream()
+                .map(memberName -> union.getId().getName() + "'" + memberName)
+                .toList()));
+        
+        // Try to parse each variant
+        // We try the first variant that successfully parses
+        List<MemberShape> members = union.getAllMembers().values().stream().toList();
+        
+        if (members.isEmpty()) {
+            writer.write("None");
+        } else if (members.size() == 1) {
+            // Single variant - just try to parse it
+            MemberShape member = members.get(0);
+            String variantName = member.getMemberName();
+            String constructorName = union.getId().getName() + "'" + variantName;
+            Shape memberTarget = model.expectShape(member.getTarget());
+            
+            String parseExpr = generateJsonValueConversion(memberTarget, "json", model, clientNamespace);
+            writer.write("$L |> Optional.map $L", parseExpr, constructorName);
+        } else {
+            // Multiple variants - try each in sequence
+            for (int i = 0; i < members.size(); i++) {
+                MemberShape member = members.get(i);
+                String variantName = member.getMemberName();
+                String constructorName = union.getId().getName() + "'" + variantName;
+                Shape memberTarget = model.expectShape(member.getTarget());
+                
+                String parseExpr = generateJsonValueConversion(memberTarget, "json", model, clientNamespace);
+                
+                if (i == 0) {
+                    writer.write("match $L with", parseExpr);
+                    writer.indent();
+                    writer.write("Some val -> Some ($L val)", constructorName);
+                    writer.write("None ->");
+                    writer.indent();
+                } else if (i < members.size() - 1) {
+                    writer.write("match $L with", parseExpr);
+                    writer.indent();
+                    writer.write("Some val -> Some ($L val)", constructorName);
+                    writer.write("None ->");
+                    writer.indent();
+                } else {
+                    // Last one
+                    writer.write("$L |> Optional.map $L", parseExpr, constructorName);
+                }
+            }
+            
+            // Close all the match blocks
+            for (int i = 0; i < members.size() - 1; i++) {
+                writer.dedent();
+                writer.dedent();
+            }
+        }
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Helper to generate JSON value expression for a shape (used in union serialization).
+     */
+    private String generateJsonValueForShape(Shape shape, String varName, Model model, String clientNamespace) {
+        if (shape.isStringShape()) {
+            return "aws.json.JsonValue.JsonString " + varName;
+        } else if (shape.isBooleanShape()) {
+            return "aws.json.JsonValue.JsonBoolean " + varName;
+        } else if (shape.isIntegerShape() || shape.isLongShape() || shape.isShortShape() || shape.isByteShape()) {
+            return "aws.json.JsonValue.JsonNumber (Float.fromInt " + varName + ")";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "aws.json.JsonValue.JsonNumber " + varName;
+        } else if (shape.isBlobShape()) {
+            return "aws.json.JsonValue.JsonString (builtin.Bytes.toBase64 " + varName + " |> fromUtf8)";
+        } else if (shape.isTimestampShape()) {
+            return "aws.json.JsonValue.JsonString " + varName;
+        } else if (shape.isStructureShape()) {
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            return serializerName + " " + varName;
+        } else if (shape.isUnionShape()) {
+            String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(shape.getId().getName() + "ToJson");
+            return serializerName + " " + varName;
+        } else {
+            return "aws.json.JsonValue.JsonString (Any.toText " + varName + ")";
+        }
+    }
 }
