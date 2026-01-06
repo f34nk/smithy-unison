@@ -780,7 +780,7 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.flatMap (key -> Optional.map (val -> (key, val)) (%s)) (%s k)) fields", 
                     valueConversion, keyFromTextFn);
             } else {
-                mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (key, val)) (%s)) fields", valueConversion);
+                mapConversion = String.format("aws.json.filterMap (kv -> match kv with (k, v) -> Optional.map (val -> (k, val)) (%s)) fields", valueConversion);
             }
             return String.format("aws.json.jsonValueToObjectList %s |> Optional.map (fields -> lib.unison_base_3_18_0.data.Map.fromList (%s))", varName, mapConversion);
         } else if (target.isStructureShape()) {
