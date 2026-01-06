@@ -1,0 +1,594 @@
+-- Unit tests for AWS HTTP Runtime Module
+
+namespace aws.http.test
+
+use aws.http
+use Bytes
+use Text ++
+
+-- === Status Code Tests ===
+
+testIsSuccess : '{Exception} Boolean
+testIsSuccess = 'let
+  test1 = aws.http.isSuccess 200
+  test2 = aws.http.isSuccess 204
+  test3 = aws.http.isSuccess 299
+  test4 = not (aws.http.isSuccess 199)
+  test5 = not (aws.http.isSuccess 300)
+  test6 = not (aws.http.isSuccess 404)
+  test1 && test2 && test3 && test4 && test5 && test6
+
+testIsClientError : '{Exception} Boolean
+testIsClientError = 'let
+  test1 = aws.http.isClientError 400
+  test2 = aws.http.isClientError 404
+  test3 = aws.http.isClientError 499
+  test4 = not (aws.http.isClientError 399)
+  test5 = not (aws.http.isClientError 500)
+  test1 && test2 && test3 && test4 && test5
+
+testIsServerError : '{Exception} Boolean
+testIsServerError = 'let
+  test1 = aws.http.isServerError 500
+  test2 = aws.http.isServerError 503
+  test3 = aws.http.isServerError 599
+  test4 = not (aws.http.isServerError 499)
+  test5 = not (aws.http.isServerError 600)
+  test1 && test2 && test3 && test4 && test5
+
+testIsError : '{Exception} Boolean
+testIsError = 'let
+  test1 = aws.http.isError 400
+  test2 = aws.http.isError 404
+  test3 = aws.http.isError 500
+  test4 = aws.http.isError 503
+  test5 = not (aws.http.isError 200)
+  test6 = not (aws.http.isError 399)
+  test1 && test2 && test3 && test4 && test5 && test6
+
+testIsRetryable : '{Exception} Boolean
+testIsRetryable = 'let
+  test1 = aws.http.isRetryable 429
+  test2 = aws.http.isRetryable 500
+  test3 = aws.http.isRetryable 502
+  test4 = aws.http.isRetryable 503
+  test5 = aws.http.isRetryable 504
+  test6 = not (aws.http.isRetryable 400)
+  test7 = not (aws.http.isRetryable 404)
+  test8 = not (aws.http.isRetryable 200)
+  test1 && test2 && test3 && test4 && test5 && test6 && test7 && test8
+
+-- === Header Helper Tests ===
+
+testGetHeader : '{Exception} Boolean
+testGetHeader = 'let
+  headers = [("Content-Type", "application/json"), ("X-Custom", "value")]
+  test1 = aws.http.getHeader "Content-Type" headers === Some "application/json"
+  test2 = aws.http.getHeader "X-Custom" headers === Some "value"
+  test3 = aws.http.getHeader "Missing" headers === None
+  test1 && test2 && test3
+
+testGetHeaderCaseInsensitive : '{Exception} Boolean
+testGetHeaderCaseInsensitive = 'let
+  headers = [("Content-Type", "application/json")]
+  test1 = aws.http.getHeader "content-type" headers === Some "application/json"
+  test2 = aws.http.getHeader "CONTENT-TYPE" headers === Some "application/json"
+  test3 = aws.http.getHeader "Content-Type" headers === Some "application/json"
+  test1 && test2 && test3
+
+testGetHeaderOrDefault : '{Exception} Boolean
+testGetHeaderOrDefault = 'let
+  headers = [("Content-Type", "application/json")]
+  test1 = aws.http.getHeaderOrDefault "Content-Type" "default" headers === "application/json"
+  test2 = aws.http.getHeaderOrDefault "Missing" "default" headers === "default"
+  test1 && test2
+
+testHasHeader : '{Exception} Boolean
+testHasHeader = 'let
+  headers = [("Content-Type", "application/json")]
+  test1 = aws.http.hasHeader "Content-Type" headers
+  test2 = aws.http.hasHeader "content-type" headers
+  test3 = not (aws.http.hasHeader "Missing" headers)
+  test1 && test2 && test3
+
+testAddHeader : '{Exception} Boolean
+testAddHeader = 'let
+  headers = [("Content-Type", "application/json")]
+  updated = aws.http.addHeader "X-Custom" "value" headers
+  test1 = aws.http.getHeader "X-Custom" updated === Some "value"
+  test2 = aws.http.getHeader "Content-Type" updated === Some "application/json"
+  test1 && test2
+
+testSetHeader : '{Exception} Boolean
+testSetHeader = 'let
+  headers = [("Content-Type", "application/json"), ("X-Custom", "old")]
+  updated = aws.http.setHeader "X-Custom" "new" headers
+  test1 = aws.http.getHeader "X-Custom" updated === Some "new"
+  test2 = aws.http.getHeader "Content-Type" updated === Some "application/json"
+  test1 && test2
+
+testSetHeaderCaseInsensitive : '{Exception} Boolean
+testSetHeaderCaseInsensitive = 'let
+  headers = [("Content-Type", "application/json")]
+  updated = aws.http.setHeader "content-type" "text/plain" headers
+  -- Should only have one Content-Type header after replacement
+  test1 = aws.http.getHeader "Content-Type" updated === Some "text/plain"
+  test2 = List.size updated === 1
+  test1 && test2
+
+testRemoveHeader : '{Exception} Boolean
+testRemoveHeader = 'let
+  headers = [("Content-Type", "application/json"), ("X-Custom", "value")]
+  updated = aws.http.removeHeader "X-Custom" headers
+  test1 = aws.http.getHeader "X-Custom" updated === None
+  test2 = aws.http.getHeader "Content-Type" updated === Some "application/json"
+  test3 = List.size updated === 1
+  test1 && test2 && test3
+
+testRemoveHeaderCaseInsensitive : '{Exception} Boolean
+testRemoveHeaderCaseInsensitive = 'let
+  headers = [("Content-Type", "application/json")]
+  updated = aws.http.removeHeader "content-type" headers
+  test1 = aws.http.getHeader "Content-Type" updated === None
+  test2 = List.size updated === 0
+  test1 && test2
+
+testMergeHeaders : '{Exception} Boolean
+testMergeHeaders = 'let
+  base = [("Content-Type", "application/json"), ("X-Base", "value1")]
+  override = [("Content-Type", "text/plain"), ("X-Override", "value2")]
+  merged = aws.http.mergeHeaders base override
+  test1 = aws.http.getHeader "Content-Type" merged === Some "text/plain"
+  test2 = aws.http.getHeader "X-Base" merged === Some "value1"
+  test3 = aws.http.getHeader "X-Override" merged === Some "value2"
+  test1 && test2 && test3
+
+-- === Query String Tests ===
+
+testBuildQueryString : '{Exception} Boolean
+testBuildQueryString = 'let
+  params = [("key1", "value1"), ("key2", "value2")]
+  result = aws.http.buildQueryString params
+  result === "key1=value1&key2=value2"
+
+testBuildQueryStringEmpty : '{Exception} Boolean
+testBuildQueryStringEmpty = 'let
+  params = [("key", "")]
+  result = aws.http.buildQueryString params
+  result === ""
+
+testBuildQueryStringEncoding : '{Exception} Boolean
+testBuildQueryStringEncoding = 'let
+  params = [("key", "hello world")]
+  result = aws.http.buildQueryString params
+  result === "key=hello%20world"
+
+testAppendQueryString : '{Exception} Boolean
+testAppendQueryString = 'let
+  test1 = aws.http.appendQueryString "http://example.com" "key=value" === "http://example.com?key=value"
+  test2 = aws.http.appendQueryString "http://example.com?existing=1" "key=value" === "http://example.com?existing=1&key=value"
+  test3 = aws.http.appendQueryString "http://example.com" "" === "http://example.com"
+  test1 && test2 && test3
+
+testUrlEncode : '{Exception} Boolean
+testUrlEncode = 'let
+  test1 = aws.http.urlEncode "hello world" === "hello%20world"
+  test2 = aws.http.urlEncode "a+b" === "a%2Bb"
+  test3 = aws.http.urlEncode "a/b" === "a%2Fb"
+  test4 = aws.http.urlEncode "a=b" === "a%3Db"
+  test5 = aws.http.urlEncode "a&b" === "a%26b"
+  test6 = aws.http.urlEncode "hello" === "hello"
+  test1 && test2 && test3 && test4 && test5 && test6
+
+testUrlDecode : '{Exception} Boolean
+testUrlDecode = 'let
+  test1 = aws.http.urlDecode "hello%20world" === "hello world"
+  test2 = aws.http.urlDecode "a%2Bb" === "a+b"
+  test3 = aws.http.urlDecode "a%2Fb" === "a/b"
+  test4 = aws.http.urlDecode "a%3Db" === "a=b"
+  test5 = aws.http.urlDecode "a%26b" === "a&b"
+  test1 && test2 && test3 && test4 && test5
+
+testUrlEncodeDecodeRoundtrip : '{Exception} Boolean
+testUrlEncodeDecodeRoundtrip = 'let
+  original = "hello world!#$&'()*+,/:;=?@[]"
+  encoded = aws.http.urlEncode original
+  decoded = aws.http.urlDecode encoded
+  decoded === original
+
+-- === URL Helper Tests ===
+
+testBuildUrl : '{Exception} Boolean
+testBuildUrl = 'let
+  test1 = aws.http.buildUrl "https" "example.com" "/path" "" === "https://example.com/path"
+  test2 = aws.http.buildUrl "https" "example.com" "/path" "key=value" === "https://example.com/path?key=value"
+  test1 && test2
+
+testExtractHost : '{Exception} Boolean
+testExtractHost = 'let
+  test1 = aws.http.extractHost "https://example.com/path" === "example.com"
+  test2 = aws.http.extractHost "http://example.com/path" === "example.com"
+  test3 = aws.http.extractHost "https://example.com" === "example.com"
+  test4 = aws.http.extractHost "example.com/path" === "example.com"
+  test5 = aws.http.extractHost "example.com" === "example.com"
+  test1 && test2 && test3 && test4 && test5
+
+testExtractPath : '{Exception} Boolean
+testExtractPath = 'let
+  test1 = aws.http.extractPath "https://example.com/path/to/resource" === "/path/to/resource"
+  test2 = aws.http.extractPath "https://example.com/path?query=value" === "/path"
+  test3 = aws.http.extractPath "https://example.com" === "/"
+  test4 = aws.http.extractPath "http://example.com/path" === "/path"
+  test1 && test2 && test3 && test4
+
+-- === Content Type Tests ===
+
+testContentTypeConstants : '{Exception} Boolean
+testContentTypeConstants = 'let
+  test1 = aws.http.contentTypeXml === "application/xml"
+  test2 = aws.http.contentTypeJson === "application/json"
+  test3 = aws.http.contentTypeForm === "application/x-www-form-urlencoded"
+  test4 = aws.http.contentTypeOctetStream === "application/octet-stream"
+  test1 && test2 && test3 && test4
+
+testIsXmlContentType : '{Exception} Boolean
+testIsXmlContentType = 'let
+  test1 = aws.http.isXmlContentType "application/xml"
+  test2 = aws.http.isXmlContentType "text/xml"
+  test3 = aws.http.isXmlContentType "application/xml; charset=utf-8"
+  test4 = not (aws.http.isXmlContentType "application/json")
+  test1 && test2 && test3 && test4
+
+testIsJsonContentType : '{Exception} Boolean
+testIsJsonContentType = 'let
+  test1 = aws.http.isJsonContentType "application/json"
+  test2 = aws.http.isJsonContentType "application/json; charset=utf-8"
+  test3 = not (aws.http.isJsonContentType "application/xml")
+  test1 && test2 && test3
+
+-- === AWS Header Tests ===
+
+testAwsHeaderConstants : '{Exception} Boolean
+testAwsHeaderConstants = 'let
+  test1 = aws.http.requestIdHeader === "x-amz-request-id"
+  test2 = aws.http.extendedRequestIdHeader === "x-amz-id-2"
+  test3 = aws.http.dateHeader === "x-amz-date"
+  test4 = aws.http.securityTokenHeader === "x-amz-security-token"
+  test5 = aws.http.contentSha256Header === "x-amz-content-sha256"
+  test1 && test2 && test3 && test4 && test5
+
+testGetRequestId : '{Exception} Boolean
+testGetRequestId = 'let
+  headers = [("x-amz-request-id", "abc123")]
+  aws.http.getRequestId headers === Some "abc123"
+
+testGetExtendedRequestId : '{Exception} Boolean
+testGetExtendedRequestId = 'let
+  headers = [("x-amz-id-2", "extended123")]
+  aws.http.getExtendedRequestId headers === Some "extended123"
+
+-- === Request Constructor Tests ===
+
+testRequestGet : '{Exception} Boolean
+testRequestGet = 'let
+  req = Http.Request.get "http://example.com" [("Header", "value")]
+  test1 = Http.Request.method req === "GET"
+  test2 = Http.Request.url req === "http://example.com"
+  test3 = Bytes.size (Http.Request.body req) === 0
+  test1 && test2 && test3
+
+testRequestPost : '{Exception} Boolean
+testRequestPost = 'let
+  body = builtin.Bytes.fromList [72, 105]  -- "Hi" in ASCII
+  req = Http.Request.post "http://example.com" [] body
+  test1 = Http.Request.method req === "POST"
+  test2 = Http.Request.url req === "http://example.com"
+  test3 = Http.Request.body req === body
+  test1 && test2 && test3
+
+testRequestPut : '{Exception} Boolean
+testRequestPut = 'let
+  body = builtin.Bytes.fromList [72, 105]
+  req = Http.Request.put "http://example.com" [] body
+  test1 = Http.Request.method req === "PUT"
+  test2 = Http.Request.body req === body
+  test1 && test2
+
+testRequestDelete : '{Exception} Boolean
+testRequestDelete = 'let
+  req = Http.Request.delete "http://example.com" []
+  test1 = Http.Request.method req === "DELETE"
+  test2 = Bytes.size (Http.Request.body req) === 0
+  test1 && test2
+
+testRequestHead : '{Exception} Boolean
+testRequestHead = 'let
+  req = Http.Request.head "http://example.com" []
+  test1 = Http.Request.method req === "HEAD"
+  test2 = Bytes.size (Http.Request.body req) === 0
+  test1 && test2
+
+testRequestPatch : '{Exception} Boolean
+testRequestPatch = 'let
+  body = builtin.Bytes.fromList [72, 105]
+  req = Http.Request.patch "http://example.com" [] body
+  test1 = Http.Request.method req === "PATCH"
+  test2 = Http.Request.body req === body
+  test1 && test2
+
+testRequestOptions : '{Exception} Boolean
+testRequestOptions = 'let
+  req = Http.Request.options "http://example.com" []
+  test1 = Http.Request.method req === "OPTIONS"
+  test2 = Bytes.size (Http.Request.body req) === 0
+  test1 && test2
+
+-- === Response Helper Tests ===
+
+testResponseGetHeader : '{Exception} Boolean
+testResponseGetHeader = 'let
+  resp = Http.Response.Response 200 [("Content-Type", "application/json")] Bytes.empty
+  Http.Response.getHeader "Content-Type" resp === Some "application/json"
+
+testResponseIsSuccess : '{Exception} Boolean
+testResponseIsSuccess = 'let
+  resp1 = Http.Response.Response 200 [] Bytes.empty
+  resp2 = Http.Response.Response 404 [] Bytes.empty
+  test1 = Http.Response.isSuccess resp1
+  test2 = not (Http.Response.isSuccess resp2)
+  test1 && test2
+
+testResponseIsError : '{Exception} Boolean
+testResponseIsError = 'let
+  resp1 = Http.Response.Response 404 [] Bytes.empty
+  resp2 = Http.Response.Response 200 [] Bytes.empty
+  test1 = Http.Response.isError resp1
+  test2 = not (Http.Response.isError resp2)
+  test1 && test2
+
+-- === XML Error Parsing Tests ===
+
+testExtractXmlTag : '{Exception} Boolean
+testExtractXmlTag = 'let
+  xml = "<Error><Code>NoSuchBucket</Code><Message>Not found</Message></Error>"
+  test1 = aws.http.extractXmlTag "Code" xml === "NoSuchBucket"
+  test2 = aws.http.extractXmlTag "Message" xml === "Not found"
+  test3 = aws.http.extractXmlTag "Missing" xml === ""
+  test1 && test2 && test3
+
+testIsErrorXml : '{Exception} Boolean
+testIsErrorXml = 'let
+  xml1 = "<Error><Code>NoSuchBucket</Code></Error>"
+  xml2 = "<Response><Data>success</Data></Response>"
+  test1 = aws.http.isErrorXml xml1
+  test2 = not (aws.http.isErrorXml xml2)
+  test1 && test2
+
+testParseErrorXml : '{Exception} Boolean
+testParseErrorXml = 'let
+  xml = "<Error><Code>NoSuchBucket</Code><Message>Not found</Message><RequestId>req123</RequestId><HostId>host456</HostId></Error>"
+  err = aws.http.parseErrorXml 404 xml
+  test1 = aws.http.Error.statusCode err === 404
+  test2 = aws.http.Error.code err === "NoSuchBucket"
+  test3 = aws.http.Error.message err === "Not found"
+  test4 = aws.http.Error.requestId err === "req123"
+  test5 = aws.http.Error.hostId err === "host456"
+  test1 && test2 && test3 && test4 && test5
+
+-- === Error Checking Tests ===
+
+testErrorIsCode : '{Exception} Boolean
+testErrorIsCode = 'let
+  err = aws.http.Error.Error 404 "NoSuchBucket" "Not found" "" ""
+  test1 = aws.http.Error.isCode "NoSuchBucket" err
+  test2 = not (aws.http.Error.isCode "AccessDenied" err)
+  test1 && test2
+
+testErrorIsNotFound : '{Exception} Boolean
+testErrorIsNotFound = 'let
+  err1 = aws.http.Error.Error 404 "NoSuchBucket" "Not found" "" ""
+  err2 = aws.http.Error.Error 404 "NoSuchKey" "Not found" "" ""
+  err3 = aws.http.Error.Error 404 "NotFound" "Not found" "" ""
+  err4 = aws.http.Error.Error 403 "AccessDenied" "Denied" "" ""
+  test1 = aws.http.Error.isNotFound err1
+  test2 = aws.http.Error.isNotFound err2
+  test3 = aws.http.Error.isNotFound err3
+  test4 = not (aws.http.Error.isNotFound err4)
+  test1 && test2 && test3 && test4
+
+testErrorIsAccessDenied : '{Exception} Boolean
+testErrorIsAccessDenied = 'let
+  err1 = aws.http.Error.Error 403 "AccessDenied" "Denied" "" ""
+  err2 = aws.http.Error.Error 403 "Forbidden" "Denied" "" ""
+  err3 = aws.http.Error.Error 404 "NotFound" "Not found" "" ""
+  test1 = aws.http.Error.isAccessDenied err1
+  test2 = aws.http.Error.isAccessDenied err2
+  test3 = not (aws.http.Error.isAccessDenied err3)
+  test1 && test2 && test3
+
+testErrorIsThrottled : '{Exception} Boolean
+testErrorIsThrottled = 'let
+  err1 = aws.http.Error.Error 429 "Throttling" "Throttled" "" ""
+  err2 = aws.http.Error.Error 429 "ThrottlingException" "Throttled" "" ""
+  err3 = aws.http.Error.Error 503 "SlowDown" "Slow down" "" ""
+  err4 = aws.http.Error.Error 404 "NotFound" "Not found" "" ""
+  test1 = aws.http.Error.isThrottled err1
+  test2 = aws.http.Error.isThrottled err2
+  test3 = aws.http.Error.isThrottled err3
+  test4 = not (aws.http.Error.isThrottled err4)
+  test1 && test2 && test3 && test4
+
+testErrorIsRetryable : '{Exception} Boolean
+testErrorIsRetryable = 'let
+  err1 = aws.http.Error.Error 500 "InternalError" "Server error" "" ""
+  err2 = aws.http.Error.Error 503 "ServiceUnavailable" "Unavailable" "" ""
+  err3 = aws.http.Error.Error 429 "Throttling" "Throttled" "" ""
+  err4 = aws.http.Error.Error 404 "NotFound" "Not found" "" ""
+  test1 = aws.http.Error.isRetryable err1
+  test2 = aws.http.Error.isRetryable err2
+  test3 = aws.http.Error.isRetryable err3
+  test4 = not (aws.http.Error.isRetryable err4)
+  test1 && test2 && test3 && test4
+
+testErrorToText : '{Exception} Boolean
+testErrorToText = 'let
+  err = aws.http.Error.Error 404 "NoSuchBucket" "Not found" "req123" "host456"
+  text = aws.http.Error.toText err
+  test1 = Text.contains "404" text
+  test2 = Text.contains "NoSuchBucket" text
+  test3 = Text.contains "Not found" text
+  test4 = Text.contains "req123" text
+  test5 = Text.contains "host456" text
+  test1 && test2 && test3 && test4 && test5
+
+-- === Retry Logic Tests ===
+
+testRetryConfigDefault : '{Exception} Boolean
+testRetryConfigDefault = 'let
+  config = aws.http.RetryConfig.default
+  test1 = aws.http.RetryConfig.maxRetries config === 3
+  test2 = aws.http.RetryConfig.baseDelayMs config === 100
+  test3 = aws.http.RetryConfig.maxDelayMs config === 20000
+  test1 && test2 && test3
+
+testRetryConfigWithMaxRetries : '{Exception} Boolean
+testRetryConfigWithMaxRetries = 'let
+  config = aws.http.RetryConfig.withMaxRetries 5
+  aws.http.RetryConfig.maxRetries config === 5
+
+testCalculateBackoff : '{Exception} Boolean
+testCalculateBackoff = 'let
+  config = aws.http.RetryConfig.default
+  test1 = aws.http.calculateBackoff config 0 === 100
+  test2 = aws.http.calculateBackoff config 1 === 200
+  test3 = aws.http.calculateBackoff config 2 === 400
+  test4 = aws.http.calculateBackoff config 3 === 800
+  test1 && test2 && test3 && test4
+
+testCalculateBackoffCapped : '{Exception} Boolean
+testCalculateBackoffCapped = 'let
+  config = aws.http.RetryConfig.default
+  -- After many attempts, should cap at maxDelayMs (20000)
+  delay = aws.http.calculateBackoff config 10
+  Nat.lteq delay 20000
+
+testParseRetryAfter : '{Exception} Boolean
+testParseRetryAfter = 'let
+  test1 = aws.http.parseRetryAfter "120" === Some 120000
+  test2 = aws.http.parseRetryAfter "5" === Some 5000
+  test3 = aws.http.parseRetryAfter "invalid" === None
+  test1 && test2 && test3
+
+testIsSuccessResponse : '{Exception} Boolean
+testIsSuccessResponse = 'let
+  resp1 = Http.Response.Response 200 [] Bytes.empty
+  resp2 = Http.Response.Response 204 [] Bytes.empty
+  resp3 = Http.Response.Response 404 [] Bytes.empty
+  test1 = aws.http.isSuccessResponse resp1
+  test2 = aws.http.isSuccessResponse resp2
+  test3 = not (aws.http.isSuccessResponse resp3)
+  test1 && test2 && test3
+
+testIsEmptyResponse : '{Exception} Boolean
+testIsEmptyResponse = 'let
+  resp1 = Http.Response.Response 204 [] Bytes.empty
+  resp2 = Http.Response.Response 200 [] Bytes.empty
+  resp3 = Http.Response.Response 200 [] (builtin.Bytes.fromList [72])
+  test1 = aws.http.isEmptyResponse resp1
+  test2 = aws.http.isEmptyResponse resp2
+  test3 = not (aws.http.isEmptyResponse resp3)
+  test1 && test2 && test3
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS HTTP Runtime Tests..."
+  printLine ""
+  
+  -- Status code tests
+  runTest "isSuccess" testIsSuccess ()
+  runTest "isClientError" testIsClientError ()
+  runTest "isServerError" testIsServerError ()
+  runTest "isError" testIsError ()
+  runTest "isRetryable status code" testIsRetryable ()
+  
+  -- Header tests
+  runTest "getHeader" testGetHeader ()
+  runTest "getHeader case insensitive" testGetHeaderCaseInsensitive ()
+  runTest "getHeaderOrDefault" testGetHeaderOrDefault ()
+  runTest "hasHeader" testHasHeader ()
+  runTest "addHeader" testAddHeader ()
+  runTest "setHeader" testSetHeader ()
+  runTest "setHeader case insensitive" testSetHeaderCaseInsensitive ()
+  runTest "removeHeader" testRemoveHeader ()
+  runTest "removeHeader case insensitive" testRemoveHeaderCaseInsensitive ()
+  runTest "mergeHeaders" testMergeHeaders ()
+  
+  -- Query string tests
+  runTest "buildQueryString" testBuildQueryString ()
+  runTest "buildQueryString empty" testBuildQueryStringEmpty ()
+  runTest "buildQueryString encoding" testBuildQueryStringEncoding ()
+  runTest "appendQueryString" testAppendQueryString ()
+  runTest "urlEncode" testUrlEncode ()
+  runTest "urlDecode" testUrlDecode ()
+  runTest "urlEncode/urlDecode roundtrip" testUrlEncodeDecodeRoundtrip ()
+  
+  -- URL helper tests
+  runTest "buildUrl" testBuildUrl ()
+  runTest "extractHost" testExtractHost ()
+  runTest "extractPath" testExtractPath ()
+  
+  -- Content type tests
+  runTest "contentType constants" testContentTypeConstants ()
+  runTest "isXmlContentType" testIsXmlContentType ()
+  runTest "isJsonContentType" testIsJsonContentType ()
+  
+  -- AWS header tests
+  runTest "AWS header constants" testAwsHeaderConstants ()
+  runTest "getRequestId" testGetRequestId ()
+  runTest "getExtendedRequestId" testGetExtendedRequestId ()
+  
+  -- Request constructor tests
+  runTest "Request.get" testRequestGet ()
+  runTest "Request.post" testRequestPost ()
+  runTest "Request.put" testRequestPut ()
+  runTest "Request.delete" testRequestDelete ()
+  runTest "Request.head" testRequestHead ()
+  runTest "Request.patch" testRequestPatch ()
+  runTest "Request.options" testRequestOptions ()
+  
+  -- Response helper tests
+  runTest "Response.getHeader" testResponseGetHeader ()
+  runTest "Response.isSuccess" testResponseIsSuccess ()
+  runTest "Response.isError" testResponseIsError ()
+  
+  -- XML error parsing tests
+  runTest "extractXmlTag" testExtractXmlTag ()
+  runTest "isErrorXml" testIsErrorXml ()
+  runTest "parseErrorXml" testParseErrorXml ()
+  
+  -- Error checking tests
+  runTest "Error.isCode" testErrorIsCode ()
+  runTest "Error.isNotFound" testErrorIsNotFound ()
+  runTest "Error.isAccessDenied" testErrorIsAccessDenied ()
+  runTest "Error.isThrottled" testErrorIsThrottled ()
+  runTest "Error.isRetryable" testErrorIsRetryable ()
+  runTest "Error.toText" testErrorToText ()
+  
+  -- Retry logic tests
+  runTest "RetryConfig.default" testRetryConfigDefault ()
+  runTest "RetryConfig.withMaxRetries" testRetryConfigWithMaxRetries ()
+  runTest "calculateBackoff" testCalculateBackoff ()
+  runTest "calculateBackoff capped" testCalculateBackoffCapped ()
+  runTest "parseRetryAfter" testParseRetryAfter ()
+  runTest "isSuccessResponse" testIsSuccessResponse ()
+  runTest "isEmptyResponse" testIsEmptyResponse ()
+  
+  printLine ""
+  printLine "All tests completed!"
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)
