@@ -6,6 +6,16 @@
 --
 -- Reference: https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html
 
+-- Helper to trim whitespace (avoids ambiguity with multiple base versions)
+trimWhitespace : Text -> Text
+trimWhitespace t = 
+  isWs = c -> (Universal.==) c ?\s || (Universal.==) c ?\t || (Universal.==) c ?\n || (Universal.==) c ?\r
+  t
+    |> Text.dropWhile isWs
+    |> Text.reverse
+    |> Text.dropWhile isWs
+    |> Text.reverse
+
 -- =============================================================================
 -- XML Escaping / Unescaping
 -- =============================================================================
@@ -451,7 +461,7 @@ aws.xml.rootElement xml =
     content = if Text.startsWith "<?xml" xml
       then
         match Text.indexOf "?>" xml with
-          Some idx -> Text.drop (idx + 2) xml |> Text.trim
+          Some idx -> Text.drop (idx + 2) xml |> trimWhitespace
           None -> xml
       else xml
     -- Find first tag
@@ -477,11 +487,11 @@ Strip XML declaration and whitespace from the beginning of an XML string.
 aws.xml.stripDeclaration : Text -> Text
 aws.xml.stripDeclaration xml =
   let
-    trimmed = Text.trim xml
+    trimmed = trimWhitespace xml
     if Text.startsWith "<?xml" trimmed
     then
       match Text.indexOf "?>" trimmed with
-        Some idx -> Text.drop (idx + 2) trimmed |> Text.trim
+        Some idx -> Text.drop (idx + 2) trimmed |> trimWhitespace
         None -> trimmed
     else trimmed
 
@@ -650,7 +660,7 @@ aws.xml.prettyPrint xml =
                         isSelfClosing = Text.endsWith "/>" tag
                         newLevel = if isSelfClosing then level else level + 1
                         go newLevel rest (acc ++ before ++ "\n" ++ indent level ++ tag)
-    go 0 (aws.xml.stripDeclaration xml) "" |> Text.trim
+    go 0 (aws.xml.stripDeclaration xml) "" |> trimWhitespace
 
 -- =============================================================================
 -- XML Encoding (Placeholder)

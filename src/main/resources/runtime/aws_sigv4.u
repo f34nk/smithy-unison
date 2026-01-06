@@ -3,6 +3,16 @@
 --
 -- Reference: https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html
 
+-- Helper to trim whitespace (avoids ambiguity with multiple base versions)
+trimWhitespace : Text -> Text
+trimWhitespace t = 
+  isWs = c -> (Universal.==) c ?\s || (Universal.==) c ?\t || (Universal.==) c ?\n || (Universal.==) c ?\r
+  t
+    |> Text.dropWhile isWs
+    |> Text.reverse
+    |> Text.dropWhile isWs
+    |> Text.reverse
+
 -- =============================================================================
 -- Types
 -- =============================================================================
@@ -110,7 +120,7 @@ Leading/trailing whitespace is trimmed from values.
 aws.sigv4.canonicalHeaders : [(Text, Text)] -> Text
 aws.sigv4.canonicalHeaders headers =
   headers
-    |> List.map (cases (name, value) -> (Text.toLowercase name, Text.trim value))
+    |> List.map (cases (name, value) -> (Text.toLowercase name, trimWhitespace value))
     |> List.sortBy Tuple.at1
     |> List.map (cases (name, value) -> name ++ ":" ++ value)
     |> Text.join "\n"

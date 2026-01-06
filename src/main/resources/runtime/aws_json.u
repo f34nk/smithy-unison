@@ -7,6 +7,29 @@ namespace aws.json
 use Bytes
 use Nat >= <
 
+-- Helper to trim whitespace (avoids ambiguity with multiple base versions)
+trimWhitespace : Text -> Text
+trimWhitespace t = 
+  isWs = c -> (Universal.==) c ?\s || (Universal.==) c ?\t || (Universal.==) c ?\n || (Universal.==) c ?\r
+  t
+    |> Text.dropWhile isWs
+    |> Text.reverse
+    |> Text.dropWhile isWs
+    |> Text.reverse
+
+-- Helper for filterMap (avoids ambiguity with multiple base versions)
+filterMap : (a ->{e} Optional b) -> [a] ->{e} [b]
+filterMap f xs =
+  List.flatMap (x -> match f x with
+    Some y -> [y]
+    None -> []) xs
+
+-- Helper to convert Either to Optional (for Base64 decoding)
+eitherToOptional : Either a b -> Optional b
+eitherToOptional = cases
+  Left _ -> None
+  Right b -> Some b
+
 -- Helper functions for character comparisons
 isWhitespaceChar : Optional Char -> Boolean
 isWhitespaceChar c =
@@ -115,7 +138,7 @@ escapeJsonString s =
 }}
 fromJson : Text -> Optional JsonValue
 fromJson text =
-  parseResult = parseJsonValue (Text.trim text) 0
+  parseResult = parseJsonValue (trimWhitespace text) 0
   match parseResult with
     Some (value, _) -> Some value
     None -> None
@@ -474,24 +497,24 @@ jsonToAttributeValue value =
             Right bytes -> Some (AttributeValue'B bytes)
             Left _ -> None
         Some ("SS", JsonArray items) ->
-          Some (AttributeValue'SS (List.filterMap (cases
+          Some (AttributeValue'SS (filterMap (cases
             JsonString s -> Some s
             _ -> None) items))
         Some ("NS", JsonArray items) ->
-          Some (AttributeValue'NS (List.filterMap (cases
+          Some (AttributeValue'NS (filterMap (cases
             JsonString n -> Some n
             _ -> None) items))
         Some ("BS", JsonArray items) ->
-          Some (AttributeValue'BS (List.filterMap (cases
+          Some (AttributeValue'BS (filterMap (cases
             JsonString b -> match builtin.Bytes.fromBase64 (toUtf8 b) with
               Right bytes -> Some bytes
               Left _ -> None
             _ -> None) items))
         Some ("M", JsonObject mapFields) ->
-          Some (AttributeValue'M (List.filterMap (cases
+          Some (AttributeValue'M (filterMap (cases
             (k, v) -> Optional.map (attr -> (k, attr)) (jsonToAttributeValue v)) mapFields))
         Some ("L", JsonArray listItems) ->
-          Some (AttributeValue'L (List.filterMap jsonToAttributeValue listItems))
+          Some (AttributeValue'L (filterMap jsonToAttributeValue listItems))
         Some ("NULL", JsonBoolean true) -> Some (AttributeValue'NULL true)
         Some ("BOOL", JsonBoolean b) -> Some (AttributeValue'BOOL b)
         _ -> None

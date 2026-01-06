@@ -138,7 +138,8 @@ aws.http.mergeHeaders : [(Text, Text)] -> [(Text, Text)] -> [(Text, Text)]
 aws.http.mergeHeaders base override =
   let
     overrideNames = List.map (cases (k, _) -> Text.toLowercase k) override
-    filtered = List.filter (cases (k, _) -> not (List.contains (Text.toLowercase k) overrideNames)) base
+    containsName = name -> List.any (n -> (Universal.==) n name) overrideNames
+    filtered = List.filter (cases (k, _) -> not (containsName (Text.toLowercase k))) base
     filtered ++ override
 
 -- =============================================================================
