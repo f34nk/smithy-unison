@@ -163,9 +163,10 @@ public final class ClientModuleWriter {
             OperationShape firstOp = model.expectShape(firstOpId, OperationShape.class);
             gen.generateErrorParser(firstOp, writer, context);
             
-            // For AWS JSON protocols, generate standalone serializer/deserializer functions
+            // For AWS JSON and AWS Query protocols, generate standalone serializer/deserializer functions
             // (REST protocols do inline serialization within each operation)
-            if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
+            if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1 ||
+                protocol == AwsProtocol.AWS_QUERY) {
                 writer.writeComment("=== Request/Response Serializers ===");
                 writer.writeBlankLine();
                 
@@ -360,7 +361,8 @@ public final class ClientModuleWriter {
             
             // Generate service-level error union type (for all AWS protocols that need error parsing)
             if (protocol == AwsProtocol.REST_XML || protocol == AwsProtocol.REST_JSON_1 ||
-                protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
+                protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1 ||
+                protocol == AwsProtocol.AWS_QUERY) {
                 generateServiceErrorUnion(errors, writer);
             }
         }
