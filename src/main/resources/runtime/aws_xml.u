@@ -205,15 +205,28 @@ Content is automatically unescaped.
 }}
 aws.xml.extractElement : Text -> Text -> Text
 aws.xml.extractElement tagName xml =
-  openTag = "<" ++ tagName ++ ">"
+  -- Handle both <tagName> and <tagName attr="value">
+  openTagPrefix = "<" ++ tagName
   closeTag = "</" ++ tagName ++ ">"
-  startIdx = Text.indexOf openTag xml
-  endIdx = Text.indexOf closeTag xml
-  match (startIdx, endIdx) with
-    (Some start, Some end) ->
-      contentStart = start + Text.size openTag
-      Text.slice contentStart end xml |> aws.xml.unescape
-    _ -> ""
+  
+  -- Find the opening tag (could have attributes)
+  startIdxOpt = Text.indexOf openTagPrefix xml
+  match startIdxOpt with
+    None -> ""
+    Some startTagIdx ->
+      -- Find the end of the opening tag (the '>' character after the tag name)
+      afterTag = Text.drop (startTagIdx + Text.size openTagPrefix) xml
+      openTagEndOpt = Text.indexOf ">" afterTag
+      match openTagEndOpt with
+        None -> ""
+        Some relativeEndIdx ->
+          -- Find the closing tag
+          contentStart = startTagIdx + Text.size openTagPrefix + relativeEndIdx + 1
+          endIdxOpt = Text.indexOf closeTag xml
+          match endIdxOpt with
+            Some endIdx ->
+              Text.slice contentStart endIdx xml |> aws.xml.unescape
+            None -> ""
 
 {{
 Extract text content from an XML element, returning Optional.

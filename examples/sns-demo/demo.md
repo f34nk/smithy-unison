@@ -22,6 +22,9 @@ scratch/main> add
 scratch/main> load generated/aws_query.u
 scratch/main> add
 
+scratch/main> load generated/aws_http_bridge.u
+scratch/main> add
+
 scratch/main> load generated/aws_sns_client.u
 scratch/main> add
 

@@ -1,0 +1,32 @@
+namespace aws.xml.parse.test
+
+testXmlParsing : '{IO, Exception} ()
+testXmlParsing = do
+  xmlResponse = "<?xml version='1.0' encoding='utf-8'?><ListTopicsResponse xmlns=\"http://sns.amazonaws.com/doc/2010-03-31/\"><ListTopicsResult><Topics><member><TopicArn>arn:aws:sns:us-east-1:000000000000:sns-demo-topic</TopicArn></member></Topics></ListTopicsResult><ResponseMetadata><RequestId>e9591f3b-d3a9-4fbc-9f55-8ddeb806d89f</RequestId></ResponseMetadata></ListTopicsResponse>"
+  
+  printLine "Extracting ListTopicsResponse element..."
+  responseElem = aws.xml.extractElement "ListTopicsResponse" xmlResponse
+  printLine ("Response element length: " ++ Nat.toText (Text.size responseElem))
+  
+  printLine "\nExtracting ListTopicsResult element..."
+  resultElem = aws.xml.extractElement "ListTopicsResult" responseElem
+  printLine ("Result element length: " ++ Nat.toText (Text.size resultElem))
+  
+  printLine "\nExtracting Topics element..."
+  topicsOpt = aws.xml.extractElementOpt "Topics" resultElem
+  match topicsOpt with
+    None -> printLine "Topics: None found"
+    Some topics -> let
+      printLine ("Topics element length: " ++ Nat.toText (Text.size topics))
+      
+      printLine "\nExtracting member blocks..."
+      members = aws.xml.extractAllBlocks "member" topics
+      printLine ("Found " ++ Nat.toText (List.size members) ++ " member(s)")
+      
+      List.foreach (member -> let
+        arn = aws.xml.extractElementOpt "TopicArn" member
+        arnText = match arn with
+          None -> "None"
+          Some a -> "Some " ++ a
+        printLine ("  TopicArn: " ++ arnText)) members
+  ()
