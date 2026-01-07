@@ -246,8 +246,62 @@ public interface ProtocolGenerator {
 | REST-XML | `RestXmlProtocolGenerator` | ✅ | S3, CloudFront, Route 53 |
 | AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | ✅ | DynamoDB, Lambda, Kinesis |
 | REST-JSON | `RestJsonProtocolGenerator` | ✅ | EventBridge, Step Functions, API Gateway |
-| AWS Query | `AwsQueryProtocolGenerator` | Planned | SQS, SNS, RDS |
-| EC2 Query | `Ec2QueryProtocolGenerator` | Planned | EC2, Auto Scaling |
+| AWS Query | `AwsQueryProtocolGenerator` | ✅ | SQS, SNS, RDS, CloudWatch |
+| EC2 Query | `Ec2QueryProtocolGenerator` | ✅ | EC2, Auto Scaling, ELB Classic |
+
+### Protocol Details
+
+#### AWS Query Protocol
+
+**Request Format:** Form-encoded (URL-encoded) parameters sent via POST
+```
+Action=CreateTopic&Name=MyTopic&Version=2010-03-31
+```
+
+**Response Format:** XML with nested result wrapper
+```xml
+<CreateTopicResponse>
+  <CreateTopicResult>
+    <TopicArn>arn:aws:sns:us-east-1:123456789012:MyTopic</TopicArn>
+  </CreateTopicResult>
+</CreateTopicResponse>
+```
+
+**Key Features:**
+- Parameters serialized using dot notation: `Tags.member.1.Key=env`
+- Lists numbered starting from 1: `.member.1`, `.member.2`
+- Maps serialized as entries: `.entry.1.key`, `.entry.1.value`
+- Response wrapper: `<OperationNameResponse><OperationNameResult>`
+- Error format: `<ErrorResponse><Error><Code>...</Code></Error></ErrorResponse>`
+
+**Implementation:** `AwsQueryProtocolGenerator.java`
+
+#### EC2 Query Protocol
+
+EC2 Query extends AWS Query with these differences:
+
+**Response Format:** Simpler XML structure (no nested Result element)
+```xml
+<RunInstancesResponse>
+  <requestId>...</requestId>
+  <reservationId>...</reservationId>
+  ...
+</RunInstancesResponse>
+```
+
+**Error Format:** Different wrapper structure
+```xml
+<Response>
+  <Errors>
+    <Error>
+      <Code>InvalidParameterValue</Code>
+      <Message>...</Message>
+    </Error>
+  </Errors>
+</Response>
+```
+
+**Implementation:** `Ec2QueryProtocolGenerator.java` (extends `AwsQueryProtocolGenerator`)
 
 ## Code Generation Flow
 

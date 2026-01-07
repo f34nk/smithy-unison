@@ -1,0 +1,269 @@
+-- SNS Demo Application
+-- Demonstrates the generated SNS client against LocalStack
+--
+-- This demo shows:
+--   1. Listing SNS topics
+--   2. Getting topic attributes
+--   3. Listing topic subscriptions (SQS queue)
+--   4. Publishing a message to the topic (delivered to SQS queue)
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests, install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
+
+-- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create SNS client configuration for LocalStack
+defaultConfig : '{IO, Exception} aws.sns.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  aws.sns.Config.Config endpoint region creds false
+
+-- Test topic name - created by terraform provisioner
+testTopicName : Text
+testTopicName = "sns-demo-topic"
+
+-- Test message
+testMessage : Text
+testMessage = "Hello from Unison SNS Client!"
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
+main : '{IO, Exception} ()
+main = do
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║     SNS Client Demo (LocalStack Backend)    ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ Config.endpoint config)
+  printLine ("Region: " ++ Config.region config)
+  printLine ("Topic: " ++ testTopicName)
+  printLine ""
+  
+  -- Demo 1: List Topics
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: List Topics"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  topicArn = !(listTopicsDemo config)
+  
+  -- Demo 2: Get Topic Attributes
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Get Topic Attributes"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(getTopicAttributesDemo config topicArn)
+  
+  -- Demo 3: List Subscriptions
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: List Topic Subscriptions"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(listSubscriptionsDemo config topicArn)
+  
+  -- Demo 4: Publish Message
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 4: Publish Message to Topic"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(publishMessageDemo config topicArn)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║            SNS Demo Complete!                ║"
+  printLine "║                                              ║"
+  printLine "║  The message was published to the topic and  ║"
+  printLine "║  should be delivered to the subscribed SQS   ║"
+  printLine "║  queue (sns-demo-subscriber-queue).          ║"
+  printLine "╚══════════════════════════════════════════════╝"
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+List all SNS topics.
+Verifies that our test topic exists and returns its ARN.
+}}
+listTopicsDemo : aws.sns.Config -> '{IO, Exception, Threads} Text
+listTopicsDemo config = do
+  printLine "  → Creating ListTopicsInput..."
+  
+  -- ListTopicsInput: nextToken
+  request = aws.sns.ListTopicsInput.ListTopicsInput None
+  
+  -- Call the SNS client
+  printLine "  → Calling listTopics..."
+  result = !(aws.sns.listTopics config request)
+  
+  printLine "  ✓ SUCCESS: ListTopics returned"
+  
+  -- Extract and display topics
+  match aws.sns.ListTopicsResponse.topics result with
+    Some topics ->
+      count = List.size topics
+      printLine ("  → Found " ++ Nat.toText count ++ " topic(s)")
+      
+      -- Print each topic ARN
+      go i = cases
+        [] -> "arn:aws:sns:us-east-1:000000000000:sns-demo-topic"
+        topic +: rest ->
+          match aws.sns.Topic.topicArn topic with
+            Some arn ->
+              printLine ("    [" ++ Nat.toText i ++ "] " ++ arn)
+              if Text.contains testTopicName arn then
+                printLine "        ✓ Test topic found!"
+                arn
+              else
+                go (i + 1) rest
+            None ->
+              printLine ("    [" ++ Nat.toText i ++ "] (no ARN)")
+              go (i + 1) rest
+      
+      go 0 topics
+    None ->
+      printLine "  → No topics found"
+      "arn:aws:sns:us-east-1:000000000000:sns-demo-topic"
+
+{{
+Get attributes for the test topic.
+Displays topic configuration details.
+}}
+getTopicAttributesDemo : aws.sns.Config -> Text -> '{IO, Exception, Threads} ()
+getTopicAttributesDemo config topicArn = do
+  printLine "  → Creating GetTopicAttributesInput..."
+  printLine ("    TopicArn: " ++ topicArn)
+  
+  -- GetTopicAttributesInput: topicArn
+  request = aws.sns.GetTopicAttributesInput.GetTopicAttributesInput topicArn
+  
+  -- Call the SNS client
+  printLine "  → Calling getTopicAttributes..."
+  result = !(aws.sns.getTopicAttributes config request)
+  
+  printLine "  ✓ SUCCESS: GetTopicAttributes returned"
+  
+  -- Extract and display attributes
+  match aws.sns.GetTopicAttributesResponse.attributes result with
+    Some attrs ->
+      attrList = Map.toList attrs
+      printLine ("  → Topic has " ++ Nat.toText (List.size attrList) ++ " attribute(s)")
+      
+      -- Display some key attributes
+      go = cases
+        [] -> ()
+        (key, value) +: rest ->
+          printLine ("    " ++ key ++ ": " ++ value)
+          go rest
+      
+      go attrList
+    None ->
+      printLine "  → No attributes returned"
+
+{{
+List all subscriptions for the test topic.
+Shows the SQS queue that is subscribed to receive messages.
+}}
+listSubscriptionsDemo : aws.sns.Config -> Text -> '{IO, Exception, Threads} ()
+listSubscriptionsDemo config topicArn = do
+  printLine "  → Creating ListSubscriptionsByTopicInput..."
+  printLine ("    TopicArn: " ++ topicArn)
+  
+  -- ListSubscriptionsByTopicInput: nextToken, topicArn
+  request = aws.sns.ListSubscriptionsByTopicInput.ListSubscriptionsByTopicInput None topicArn
+  
+  -- Call the SNS client
+  printLine "  → Calling listSubscriptionsByTopic..."
+  result = !(aws.sns.listSubscriptionsByTopic config request)
+  
+  printLine "  ✓ SUCCESS: ListSubscriptionsByTopic returned"
+  
+  -- Extract and display subscriptions
+  match aws.sns.ListSubscriptionsByTopicResponse.subscriptions result with
+    Some subs ->
+      count = List.size subs
+      printLine ("  → Found " ++ Nat.toText count ++ " subscription(s)")
+      
+      -- Display each subscription
+      go i = cases
+        [] -> ()
+        sub +: rest ->
+          printLine ("    [" ++ Nat.toText i ++ "]")
+          match aws.sns.Subscription.protocol sub with
+            Some protocol -> printLine ("        Protocol: " ++ protocol)
+            None -> ()
+          match aws.sns.Subscription.endpoint sub with
+            Some endpoint -> printLine ("        Endpoint: " ++ endpoint)
+            None -> ()
+          match aws.sns.Subscription.subscriptionArn sub with
+            Some arn -> printLine ("        SubscriptionArn: " ++ arn)
+            None -> ()
+          go (i + 1) rest
+      
+      go 0 subs
+    None ->
+      printLine "  → No subscriptions found"
+
+{{
+Publish a message to the test topic.
+Demonstrates basic SNS publish operation.
+The message will be delivered to all subscribed endpoints (SQS queue).
+}}
+publishMessageDemo : aws.sns.Config -> Text -> '{IO, Exception, Threads} ()
+publishMessageDemo config topicArn = do
+  printLine "  → Creating PublishInput..."
+  printLine ("    TopicArn: " ++ topicArn)
+  printLine ("    Message: \"" ++ testMessage ++ "\"")
+  printLine "    Subject: \"Test Message from Unison\""
+  
+  -- PublishInput: message, messageAttributes, messageDeduplicationId, messageGroupId, messageStructure, phoneNumber, subject, targetArn, topicArn
+  request = aws.sns.PublishInput.PublishInput testMessage None None None None None (Some "Test Message from Unison") None (Some topicArn)
+  
+  -- Call the SNS client
+  printLine "  → Calling publish..."
+  result = !(aws.sns.publish config request)
+  
+  printLine "  ✓ SUCCESS: Publish completed"
+  
+  -- Display message ID
+  match aws.sns.PublishResponse.messageId result with
+    Some messageId ->
+      printLine ("  → Message ID: " ++ messageId)
+      printLine "  ✓ Message published successfully!"
+      printLine "  ✓ Message will be delivered to subscribed SQS queue"
+    None ->
+      printLine "  → No message ID returned"

@@ -11,7 +11,11 @@ import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.shapes.StructureShape;
+import software.amazon.smithy.model.traits.DefaultTrait;
+import software.amazon.smithy.model.traits.EnumTrait;
+import software.amazon.smithy.model.traits.XmlFlattenedTrait;
 import software.amazon.smithy.model.traits.XmlNameTrait;
 
 import java.util.ArrayList;
@@ -118,6 +122,22 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         return (version != null && !version.isEmpty()) ? version : DEFAULT_VERSION;
     }
     
+    /**
+     * Extracts the service name for SigV4 signing from the full service name.
+     * 
+     * <p>AWS service names in models often include version suffixes (e.g., SQS_20121105),
+     * but SigV4 signing uses the lowercase base service name (e.g., "sqs").
+     * 
+     * @param serviceName The full service name (e.g., "SQS_20121105")
+     * @return The signing service name (e.g., "sqs")
+     */
+    private String extractSigningServiceName(String serviceName) {
+        // Remove version suffix (e.g., "_20121105")
+        String baseName = serviceName.replaceAll("_\\d+$", "");
+        // Convert to lowercase for signing
+        return baseName.toLowerCase();
+    }
+    
     // ========== Operation Signature Generation ==========
     
     /**
@@ -214,26 +234,58 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("-- Build request headers");
         writer.write("headers = [(\"Content-Type\", \"$L\")]", getContentType(service));
         
-        // Placeholder for HTTP POST (Step 2.5)
+        // Sign request with SigV4
         writer.write("");
-        writer.write("-- TODO: Sign request with SigV4");
-        writer.write("-- allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("-- Sign request with AWS Signature Version 4");
+        writer.write("region = $L.region config", configType);
+        writer.write("creds = $L.credentials config", configType);
+        String credsType = UnisonSymbolProvider.toNamespacedTypeName("Credentials", clientNamespace);
+        writer.write("awsCreds = aws.sigv4.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
+                credsType, credsType, credsType);
         
-        // Placeholder for HTTP POST (Step 2.5)
-        writer.write("");
-        writer.write("-- TODO: Execute HTTP POST");
-        writer.write("-- request = Http.Request.post url allHeaders bodyBytes");
-        writer.write("-- response = !(executeRequest request)");
+        // Extract signing service name (lowercase, without version suffix)
+        String signingServiceName = extractSigningServiceName(service.getId().getName());
+        writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
+        writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
         
-        // Parse XML response
+        // Execute HTTP POST
         writer.write("");
-        writer.write("-- Parse XML response");
+        writer.write("-- Make HTTP request");
+        writer.write("request = Http.Request.post url allHeaders bodyBytes");
+        writer.write("response = !(executeRequest request)");
+        
+        // Handle response - check status and parse
+        writer.write("");
+        writer.write("-- Handle response based on status code");
+        writer.write("statusCode = Http.Response.statusCode response");
+        writer.write("if Nat.lt statusCode 300 then");
+        writer.indent();
+        
+        // Success - parse response
         if (operation.getOutput().isPresent()) {
             String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName() + "ResponseParser");
             writer.write("!($L response)", parserName);
         } else {
             writer.write("()");
         }
+        
+        writer.dedent();
+        writer.write("else");
+        writer.indent();
+        
+        // Error - parse error and raise exception
+        writer.write("-- Parse error response");
+        writer.write("serviceError = $L.parseError response", clientNamespace);
+        String errorServiceName = service.getId().getName();
+        if (errorServiceName.endsWith("Service")) {
+            errorServiceName = errorServiceName.substring(0, errorServiceName.length() - 7);
+        }
+        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                errorServiceName + "ServiceError", clientNamespace);
+        writer.write("failure = $L.toFailure serviceError", errorTypeName);
+        writer.write("Exception.raise failure");
+        
+        writer.dedent();
         
         writer.dedent();
     }
@@ -277,10 +329,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         } else if (paramLists.size() == 1) {
             writer.write(paramLists.get(0));
         } else {
-            // Build concatenation chain: list1 ++ list2 ++ list3
+            // Build concatenation chain: list1 List.++ list2 List.++ list3
             String result = paramLists.get(0);
             for (int i = 1; i < paramLists.size(); i++) {
-                result = "(List.++) " + result + " " + paramLists.get(i);
+                result = result + " List.++ " + paramLists.get(i);
             }
             writer.write(result);
         }
@@ -358,14 +410,26 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                                              UnisonWriter writer) {
         String accessor = inputTypeName + "." + memberName + " input";
         String toTextFunc = getToTextFunction(target);
+        boolean isTextType = isTextType(target);
         
-        if (member.isRequired()) {
-            writer.write("$L = [(\"$L\", $L ($L))]", varName, paramName, toTextFunc, accessor);
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
+            if (isTextType) {
+                writer.write("$L = [(\"$L\", $L)]", varName, paramName, accessor);
+            } else {
+                writer.write("$L = [(\"$L\", $L ($L))]", varName, paramName, toTextFunc, accessor);
+            }
         } else {
             writer.write("$L = match $L with", varName, accessor);
             writer.indent();
             writer.write("None -> []");
-            writer.write("Some val -> [(\"$L\", $L val)]", paramName, toTextFunc);
+            if (isTextType) {
+                writer.write("Some val -> [(\"$L\", val)]", paramName);
+            } else {
+                writer.write("Some val -> [(\"$L\", $L val)]", paramName, toTextFunc);
+            }
             writer.dedent();
         }
     }
@@ -379,31 +443,163 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                                            Model model, String clientNamespace, UnisonWriter writer) {
         String accessor = inputTypeName + "." + memberName + " input";
         Shape elementShape = model.expectShape(listShape.getMember().getTarget());
-        String toTextFunc = getToTextFunction(elementShape);
         
-        if (member.isRequired()) {
-            writer.write("$L =", varName);
+        // Check if element is a structure - needs special handling
+        if (elementShape.isStructureShape()) {
+            generateStructureListSerialization(member, (StructureShape) elementShape, paramName, varName, 
+                    accessor, model, clientNamespace, writer);
+            return;
+        }
+        
+        String toTextFunc = getToTextFunction(elementShape);
+        boolean isTextType = isTextType(elementShape);
+        
+        // Get the Unison type name for the element
+        String elementTypeName = getUnisonTypeName(elementShape, clientNamespace);
+        
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
+            String helperName = varName + "_helper";
+            writer.write(helperName + " : ($L, Nat) -> (Text, Text)", elementTypeName);
+            writer.write(helperName + " = cases");
             writer.indent();
-            writer.write("$L", accessor);
-            writer.write("|> List.indexed");
-            writer.write("|> List.map (pair -> match pair with");
+            if (isTextType) {
+                // For text types, use value directly (val is element, idx is index)
+                writer.write("(val, idx) -> (\"$L.\" ++ Nat.toText (idx + 1), val)", paramName);
+            } else {
+                writer.write("(val, idx) -> (\"$L.\" ++ Nat.toText (idx + 1), $L val)", paramName, toTextFunc);
+            }
+            writer.dedent();
+            writer.write("$L = ($L) |> List.indexed |> List.map $L", varName, accessor, helperName);
+        } else {
+            String helperName = varName + "_helper";
+            writer.write(helperName + " : ($L, Nat) -> (Text, Text)", elementTypeName);
+            writer.write(helperName + " = cases");
             writer.indent();
-            writer.write("(idx, val) -> (\"$L.\" ++ Int.toText (idx + 1), $L val))", paramName, toTextFunc);
+            if (isTextType) {
+                // For text types, use value directly (val is element, idx is index)
+                writer.write("(val, idx) -> (\"$L.\" ++ Nat.toText (idx + 1), val)", paramName);
+            } else {
+                writer.write("(val, idx) -> (\"$L.\" ++ Nat.toText (idx + 1), $L val)", paramName, toTextFunc);
+            }
             writer.dedent();
+            writer.write("$L = match $L with", varName, accessor);
+            writer.indent();
+            writer.write("None -> []");
+            writer.write("Some list -> list |> List.indexed |> List.map $L", helperName);
             writer.dedent();
+        }
+    }
+    
+    /**
+     * Generates serialization for a list of structures.
+     * AWS Query format: ParamName.1.Field1=val1&ParamName.1.Field2=val2&ParamName.2.Field1=val3...
+     */
+    private void generateStructureListSerialization(MemberShape member, StructureShape structureShape, 
+                                                    String paramName, String varName, String accessor,
+                                                    Model model, String clientNamespace, UnisonWriter writer) {
+        String structTypeName = getUnisonTypeName(structureShape, clientNamespace);
+        
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        String helperName = varName + "_helper";
+        writer.write(helperName + " : ($L, Nat) -> [(Text, Text)]", structTypeName);
+        writer.write(helperName + " = cases");
+        writer.indent();
+        writer.write("(val, idx) -> let");
+        writer.indent();
+        writer.write("idxText = Nat.toText (idx + 1)");
+        
+        // Generate field serialization for each member of the structure
+        // Separate required and optional fields
+        List<String> requiredFields = new ArrayList<>();
+        List<String> optionalFieldLists = new ArrayList<>();
+        
+        for (MemberShape structMember : structureShape.getAllMembers().values()) {
+            String fieldName = getQueryParamName(structMember);
+            String fieldAccessor = structTypeName + "." + UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName()) + " val";
+            Shape fieldShape = model.expectShape(structMember.getTarget());
+            
+            // Skip complex types (maps, lists, structures) within structures for now
+            // These would require recursive/nested serialization which is complex
+            if (fieldShape.isMapShape() || fieldShape.isListShape() || fieldShape.isStructureShape()) {
+                // TODO: Implement nested complex type serialization
+                continue;
+            }
+            
+            String fieldParamName = paramName + ".\" ++ idxText ++ \"." + fieldName;
+            
+            boolean isRequired = structMember.isRequired();
+            boolean isFieldText = isTextType(fieldShape);
+            String toTextFunc = getToTextFunction(fieldShape);
+            
+            if (isRequired) {
+                // Required fields go directly in the list
+                if (isFieldText) {
+                    requiredFields.add("(\"" + fieldParamName + "\", " + fieldAccessor + ")");
+                } else {
+                    requiredFields.add("(\"" + fieldParamName + "\", " + toTextFunc + " (" + fieldAccessor + "))");
+                }
+            } else {
+                // Optional fields need conditional inclusion
+                String optFieldName = "opt_" + structMember.getMemberName();
+                if (isFieldText) {
+                    writer.write("$L = match $L with", optFieldName, fieldAccessor);
+                    writer.indent();
+                    writer.write("None -> []");
+                    writer.write("Some v -> [(\"$L\", v)]", fieldParamName);
+                    writer.dedent();
+                } else {
+                    writer.write("$L = match $L with", optFieldName, fieldAccessor);
+                    writer.indent();
+                    writer.write("None -> []");
+                    writer.write("Some v -> [(\"$L\", $L v)]", fieldParamName, toTextFunc);
+                    writer.dedent();
+                }
+                optionalFieldLists.add(optFieldName);
+            }
+        }
+        
+        // Build the result by concatenating required fields with optional field lists
+        if (requiredFields.isEmpty()) {
+            // Only optional fields
+            if (optionalFieldLists.isEmpty()) {
+                writer.write("[]");
+            } else {
+                String result = optionalFieldLists.get(0);
+                for (int i = 1; i < optionalFieldLists.size(); i++) {
+                    result = result + " List.++ " + optionalFieldLists.get(i);
+                }
+                writer.write(result);
+            }
+        } else {
+            // Start with required fields
+            String requiredList = "[ " + String.join(",\n  ", requiredFields) + " ]";
+            if (optionalFieldLists.isEmpty()) {
+                writer.write(requiredList);
+            } else {
+                // Concatenate required with optional
+                String result = requiredList;
+                for (String optList : optionalFieldLists) {
+                    result = result + " List.++ " + optList;
+                }
+                writer.write(result);
+            }
+        }
+        
+        writer.dedent();
+        writer.dedent();
+        
+        if (isNonOptional) {
+            writer.write("$L = ($L) |> List.indexed |> List.flatMap $L", varName, accessor, helperName);
         } else {
             writer.write("$L = match $L with", varName, accessor);
             writer.indent();
             writer.write("None -> []");
-            writer.write("Some list ->");
-            writer.indent();
-            writer.write("list");
-            writer.write("|> List.indexed");
-            writer.write("|> List.map (pair -> match pair with");
-            writer.indent();
-            writer.write("(idx, val) -> (\"$L.\" ++ Int.toText (idx + 1), $L val))", paramName, toTextFunc);
-            writer.dedent();
-            writer.dedent();
+            writer.write("Some list -> list |> List.indexed |> List.flatMap $L", helperName);
             writer.dedent();
         }
     }
@@ -418,41 +614,43 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String accessor = inputTypeName + "." + memberName + " input";
         Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
         Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+        
+        // Skip maps with complex value types (structures, lists, or nested maps)
+        // These would require recursive/nested serialization which is complex
+        if (valueShape.isStructureShape() || valueShape.isListShape() || valueShape.isMapShape()) {
+            // TODO: Implement nested complex type serialization for map values
+            writer.write("$L = [] -- TODO: Map with complex value type not yet supported", varName);
+            return;
+        }
+        
+        boolean isKeyText = isTextType(keyShape);
+        boolean isValueText = isTextType(valueShape);
         String keyToText = getToTextFunction(keyShape);
         String valueToText = getToTextFunction(valueShape);
         
-        if (member.isRequired()) {
-            writer.write("$L =", varName);
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
+            String keyExpr = isKeyText ? "k" : keyToText + " k";
+            String valueExpr = isValueText ? "v" : valueToText + " v";
+            writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let", varName, accessor);
             writer.indent();
-            writer.write("Map.toList ($L)", accessor);
-            writer.write("|> List.indexed");
-            writer.write("|> List.flatMap (pair -> match pair with");
-            writer.indent();
-            writer.write("(idx, (k, v)) ->");
-            writer.indent();
-            writer.write("idxText = Int.toText (idx + 1)");
-            writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L k),", paramName, keyToText);
-            writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L v) ]", paramName, valueToText);
-            writer.dedent();
-            writer.dedent();
+            writer.write("idxText = Nat.toText (idx + 1)");
+            writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L),", paramName, keyExpr);
+            writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L) ])", paramName, valueExpr);
             writer.dedent();
         } else {
+            String keyExpr = isKeyText ? "k" : keyToText + " k";
+            String valueExpr = isValueText ? "v" : valueToText + " v";
             writer.write("$L = match $L with", varName, accessor);
             writer.indent();
             writer.write("None -> []");
-            writer.write("Some map ->");
+            writer.write("Some map -> (Map.toList map) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let");
             writer.indent();
-            writer.write("Map.toList map");
-            writer.write("|> List.indexed");
-            writer.write("|> List.flatMap (pair -> match pair with");
-            writer.indent();
-            writer.write("(idx, (k, v)) ->");
-            writer.indent();
-            writer.write("idxText = Int.toText (idx + 1)");
-            writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L k),", paramName, keyToText);
-            writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L v) ]", paramName, valueToText);
-            writer.dedent();
-            writer.dedent();
+            writer.write("idxText = Nat.toText (idx + 1)");
+            writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L),", paramName, keyExpr);
+            writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L) ])", paramName, valueExpr);
             writer.dedent();
             writer.dedent();
         }
@@ -543,11 +741,14 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     
     /**
      * Gets the appropriate Unison function to convert a shape to Text.
+     * Returns a function reference that can be applied to a value.
      */
     private String getToTextFunction(Shape shape) {
         switch (shape.getType()) {
             case STRING:
-                return "text -> text"; // Identity function
+            case TIMESTAMP:
+                // For strings and timestamps, use identity - they're already text
+                return "identity";
             case BOOLEAN:
                 return "Boolean.toText";
             case BYTE:
@@ -559,11 +760,375 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             case DOUBLE:
             case BIG_DECIMAL:
                 return "Float.toText";
-            case TIMESTAMP:
-                return "text -> text"; // Timestamps are already text
             default:
-                return "Text.fromAny"; // Fallback
+                return "Any.toText"; // Fallback
         }
+    }
+    
+    /**
+     * Checks if a shape type is already text (doesn't need conversion).
+     */
+    private boolean isTextType(Shape shape) {
+        return shape.getType() == ShapeType.STRING || shape.getType() == ShapeType.TIMESTAMP;
+    }
+    
+    /**
+     * Gets the Unison type name for a shape (with namespace prefix for complex types).
+     */
+    private String getUnisonTypeName(Shape shape, String clientNamespace) {
+        switch (shape.getType()) {
+            case STRING:
+                // Check if this is an enum string
+                if (shape.hasTrait(EnumTrait.class)) {
+                    return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
+                }
+                return "Text";
+            case TIMESTAMP:
+                return "Text";
+            case BOOLEAN:
+                return "Boolean";
+            case BYTE:
+            case SHORT:
+            case INTEGER:
+            case LONG:
+                return "Int";
+            case FLOAT:
+            case DOUBLE:
+            case BIG_DECIMAL:
+                return "Float";
+            case STRUCTURE:
+                // For structures, use the namespaced type name
+                return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
+            default:
+                return "Text"; // Fallback
+        }
+    }
+    
+    /**
+     * Generates Map extraction from XML response.
+     * 
+     * <p>AWS Query maps in XML follow the structure:
+     * <pre>
+     * &lt;MapField&gt;
+     *   &lt;entry&gt;
+     *     &lt;key&gt;KeyName&lt;/key&gt;
+     *     &lt;value&gt;ValueText&lt;/value&gt;
+     *   &lt;/entry&gt;
+     *   &lt;entry&gt;
+     *     &lt;key&gt;AnotherKey&lt;/key&gt;
+     *     &lt;value&gt;AnotherValue&lt;/value&gt;
+     *   &lt;/entry&gt;
+     * &lt;/MapField&gt;
+     * </pre>
+     * 
+     * <p>The generated code uses aws.xml.extractMap to parse the entries and
+     * converts the result to a Unison Map using Map.fromList.
+     */
+    private void generateMapExtraction(MemberShape member, MapShape mapShape, String xmlName, 
+                                       String varName, boolean isNonOptional, Model model, 
+                                       UnisonWriter writer) {
+        // Get the entry tag name - can be customized with @xmlFlattened or @xmlName
+        String entryTag = getMapEntryTag(member);
+        String keyTag = getMapKeyTag(mapShape);
+        String valueTag = getMapValueTag(mapShape);
+        
+        if (isNonOptional) {
+            // Required map - extract or use empty map
+            writer.write("$LElement = aws.xml.extractElementOpt \"$L\" resultElem", varName, xmlName);
+            writer.write("$LList = match $LElement with", varName, varName);
+            writer.indent();
+            writer.write("None -> []");
+            writer.write("Some elem -> aws.xml.extractMap \"$L\" \"$L\" \"$L\" elem", entryTag, keyTag, valueTag);
+            writer.dedent();
+            writer.write("$L = Map.fromList $LList", varName, varName);
+        } else {
+            // Optional map - wrap in Optional
+            writer.write("$LElement = aws.xml.extractElementOpt \"$L\" resultElem", varName, xmlName);
+            writer.write("$L = match $LElement with", varName, varName);
+            writer.indent();
+            writer.write("None -> None");
+            writer.write("Some elem ->");
+            writer.indent();
+            writer.write("mapList = aws.xml.extractMap \"$L\" \"$L\" \"$L\" elem", entryTag, keyTag, valueTag);
+            writer.write("Some (Map.fromList mapList)");
+            writer.dedent();
+            writer.dedent();
+        }
+    }
+    
+    /**
+     * Gets the XML tag name for map entries.
+     * Defaults to "entry" for AWS Query protocol.
+     */
+    private String getMapEntryTag(MemberShape member) {
+        // Check for @xmlFlattened trait - flattened maps don't have entry wrapper
+        if (member.hasTrait(XmlFlattenedTrait.class)) {
+            return getXmlFieldName(member);
+        }
+        return "entry";
+    }
+    
+    /**
+     * Gets the XML tag name for map keys.
+     * Checks the key member for @xmlName trait, defaults to "key".
+     */
+    private String getMapKeyTag(MapShape mapShape) {
+        MemberShape keyMember = mapShape.getKey();
+        return keyMember.getTrait(XmlNameTrait.class)
+                .map(XmlNameTrait::getValue)
+                .orElse("key");
+    }
+    
+    /**
+     * Gets the XML tag name for map values.
+     * Checks the value member for @xmlName trait, defaults to "value".
+     */
+    private String getMapValueTag(MapShape mapShape) {
+        MemberShape valueMember = mapShape.getValue();
+        return valueMember.getTrait(XmlNameTrait.class)
+                .map(XmlNameTrait::getValue)
+                .orElse("value");
+    }
+    
+    /**
+     * Generates List extraction from XML response.
+     * 
+     * <p>For lists of scalars (Text, Int, etc.), uses aws.xml.extractAll.
+     * For lists of structures, extracts all blocks and parses each one.
+     */
+    private void generateListExtraction(MemberShape member, ListShape listShape, String xmlName, 
+                                        String varName, boolean isNonOptional, Model model, 
+                                        String clientNamespace, UnisonWriter writer) {
+        Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+        String elementTag = getListElementTag(member, listShape);
+        
+        if (elementShape.getType() == ShapeType.STRUCTURE) {
+            // List of structures - need to extract blocks and parse each
+            generateStructureListExtraction(member, (StructureShape) elementShape, xmlName, elementTag, 
+                    varName, isNonOptional, model, clientNamespace, writer);
+        } else {
+            // List of scalars - use extractAll
+            if (isNonOptional) {
+                writer.write("$L = aws.xml.extractAll \"$L\" resultElem", varName, elementTag);
+            } else {
+                writer.write("$L = match aws.xml.extractElementOpt \"$L\" resultElem with", varName, xmlName);
+                writer.indent();
+                writer.write("None -> None");
+                writer.write("Some elem -> Some (aws.xml.extractAll \"$L\" elem)", elementTag);
+                writer.dedent();
+            }
+        }
+    }
+    
+    /**
+     * Generates extraction code for a list of structures from XML.
+     */
+    private void generateStructureListExtraction(MemberShape member, StructureShape elementStructure, 
+                                                  String xmlName, String elementTag, String varName, 
+                                                  boolean isNonOptional, Model model, 
+                                                  String clientNamespace, UnisonWriter writer) {
+        String structTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                elementStructure.getId().getName(), clientNamespace);
+        String parserName = varName + "_parseElement";
+        
+        // Generate helper function to parse a single element
+        writer.write("");
+        writer.write("$L : Text -> $L", parserName, structTypeName);
+        writer.write("$L elemXml =", parserName);
+        writer.indent();
+        
+        // Extract each field from the element - handle all types properly
+        List<MemberShape> structMembers = new ArrayList<>(elementStructure.getAllMembers().values());
+        for (MemberShape structMember : structMembers) {
+            String fieldName = UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName());
+            String fieldVarName = fieldName + "Val";
+            String fieldXmlName = getXmlFieldName(structMember);
+            Shape fieldTarget = model.expectShape(structMember.getTarget());
+            boolean isFieldNonOptional = structMember.isRequired() || structMember.hasTrait(DefaultTrait.class);
+            
+            // Handle different field types
+            switch (fieldTarget.getType()) {
+                case MAP:
+                    // Map field in nested structure
+                    generateMapExtractionInline(structMember, (MapShape) fieldTarget, fieldXmlName, 
+                            fieldVarName, isFieldNonOptional, model, "elemXml", writer);
+                    break;
+                case LIST:
+                    // Handle list fields in nested structures
+                    ListShape fieldListShape = (ListShape) fieldTarget;
+                    Shape fieldListElementShape = model.expectShape(fieldListShape.getMember().getTarget());
+                    
+                    if (fieldListElementShape.isStringShape() && fieldListElementShape.hasTrait(EnumTrait.class)) {
+                        // List of enums - need to convert from text
+                        String enumTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                                fieldListElementShape.getId().getName(), clientNamespace);
+                        String fromTextFunc = UnisonSymbolProvider.toUnisonFunctionName(
+                                fieldListElementShape.getId().getName() + "FromText");
+                        String enumTypeNamespace = clientNamespace;
+                        
+                        // Generate helper function for enum conversion
+                        String enumConverterName = fieldVarName + "_convertEnum";
+                        writer.write("");
+                        writer.write("$L : Text -> $L", enumConverterName, enumTypeName);
+                        writer.write("$L t = match $L.$L t with", enumConverterName, enumTypeNamespace, fromTextFunc);
+                        writer.indent();
+                        writer.write("Some v -> v");
+                        writer.write("None -> bug (\"Invalid enum value: \" ++ t)");
+                        writer.dedent();
+                        writer.write("");
+                        
+                        if (isFieldNonOptional) {
+                            writer.write("$LTexts = aws.xml.extractAll \"$L\" elemXml", fieldVarName, fieldXmlName);
+                            writer.write("$L = List.map $L $LTexts", fieldVarName, enumConverterName, fieldVarName);
+                        } else {
+                            writer.write("$L = match aws.xml.extractElementOpt \"$L\" elemXml with", fieldVarName, fieldXmlName);
+                            writer.indent();
+                            writer.write("None -> None");
+                            writer.write("Some elem ->");
+                            writer.indent();
+                            writer.write("texts = aws.xml.extractAll \"member\" elem");
+                            writer.write("enums = List.map $L texts", enumConverterName);
+                            writer.write("Some enums");
+                            writer.dedent();
+                            writer.dedent();
+                        }
+                    } else {
+                        // Other list types (strings, structures, etc.)
+                        String fieldExtractor = getXmlExtractor(fieldTarget, structMember.isRequired());
+                        writer.write("$L = $L \"$L\" elemXml", fieldVarName, fieldExtractor, fieldXmlName);
+                    }
+                    break;
+                default:
+                    // Scalar types (including enums)
+                    if (fieldTarget.isStringShape() && fieldTarget.hasTrait(EnumTrait.class)) {
+                        // Single enum field - need to convert from text
+                        String enumTypeName = getUnisonTypeName(fieldTarget, clientNamespace);
+                        String fromTextFunc = UnisonSymbolProvider.toUnisonFunctionName(
+                                fieldTarget.getId().getName() + "FromText");
+                        String enumTypeNamespace = clientNamespace;
+                        
+                        if (isFieldNonOptional) {
+                            writer.write("$LText = aws.xml.extractElement \"$L\" elemXml", fieldVarName, fieldXmlName);
+                            writer.write("$L = match $L.$L $LText with", fieldVarName, enumTypeNamespace, fromTextFunc, fieldVarName);
+                            writer.indent();
+                            writer.write("Some v -> v");
+                            writer.write("None -> bug (\"Invalid enum value: \" ++ $LText)", fieldVarName);
+                            writer.dedent();
+                        } else {
+                            writer.write("$L = match aws.xml.extractElementOpt \"$L\" elemXml with", fieldVarName, fieldXmlName);
+                            writer.indent();
+                            writer.write("None -> None");
+                            writer.write("Some textVal ->");
+                            writer.indent();
+                            writer.write("match $L.$L textVal with", enumTypeNamespace, fromTextFunc);
+                            writer.indent();
+                            writer.write("Some v -> Some v");
+                            writer.write("None -> bug (\"Invalid enum value: \" ++ textVal)");
+                            writer.dedent();
+                            writer.dedent();
+                            writer.dedent();
+                        }
+                    } else {
+                        // Other scalar types (text, int, boolean, etc.)
+                        // Handle booleans and integers with required/default trait
+                        if (fieldTarget.getType() == ShapeType.BOOLEAN) {
+                            String extractor = getXmlExtractor(fieldTarget, false); // Always use optional extractor
+                            if (isFieldNonOptional) {
+                                writer.write("$LOpt = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                                writer.write("$L = Optional.getOrElse false $LOpt", fieldVarName, fieldVarName);
+                            } else {
+                                writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                            }
+                        } else if (fieldTarget.getType() == ShapeType.INTEGER || 
+                                   fieldTarget.getType() == ShapeType.LONG ||
+                                   fieldTarget.getType() == ShapeType.BYTE ||
+                                   fieldTarget.getType() == ShapeType.SHORT) {
+                            String extractor = getXmlExtractor(fieldTarget, false); // Always use optional extractor
+                            if (isFieldNonOptional) {
+                                writer.write("$LOpt = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                                writer.write("$L = Optional.getOrElse +0 $LOpt", fieldVarName, fieldVarName);
+                            } else {
+                                writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                            }
+                        } else {
+                            // String, timestamp, and other types - use appropriate extractor based on optionality
+                            String extractor = getXmlExtractor(fieldTarget, isFieldNonOptional);
+                            writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                        }
+                    }
+                    break;
+            }
+        }
+        
+        // Construct the structure
+        writer.write("$L", structTypeName + "." + UnisonSymbolProvider.toUnisonTypeName(elementStructure.getId().getName()));
+        for (MemberShape structMember : structMembers) {
+            String fieldName = UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName());
+            writer.write("  $LVal", fieldName);
+        }
+        
+        writer.dedent();
+        writer.write("");
+        
+        // Now extract the list
+        if (isNonOptional) {
+            writer.write("$LBlocks = aws.xml.extractAllBlocks \"$L\" resultElem", varName, elementTag);
+            writer.write("$L = List.map $L $LBlocks", varName, parserName, varName);
+        } else {
+            writer.write("$L = match aws.xml.extractElementOpt \"$L\" resultElem with", varName, xmlName);
+            writer.indent();
+            writer.write("None -> None");
+            writer.write("Some elem ->");
+            writer.indent();
+            writer.write("blocks = aws.xml.extractAllBlocks \"$L\" elem", elementTag);
+            writer.write("Some (List.map $L blocks)", parserName);
+            writer.dedent();
+            writer.dedent();
+        }
+    }
+    
+    /**
+     * Generates inline Map extraction for nested structures.
+     * Similar to generateMapExtraction but uses a different root element variable.
+     */
+    private void generateMapExtractionInline(MemberShape member, MapShape mapShape, String xmlName, 
+                                             String varName, boolean isNonOptional, Model model, 
+                                             String rootVar, UnisonWriter writer) {
+        String entryTag = getMapEntryTag(member);
+        String keyTag = getMapKeyTag(mapShape);
+        String valueTag = getMapValueTag(mapShape);
+        
+        if (isNonOptional) {
+            writer.write("$LElement = aws.xml.extractElementOpt \"$L\" $L", varName, xmlName, rootVar);
+            writer.write("$LList = match $LElement with", varName, varName);
+            writer.indent();
+            writer.write("None -> []");
+            writer.write("Some elem -> aws.xml.extractMap \"$L\" \"$L\" \"$L\" elem", entryTag, keyTag, valueTag);
+            writer.dedent();
+            writer.write("$L = Map.fromList $LList", varName, varName);
+        } else {
+            writer.write("$LElement = aws.xml.extractElementOpt \"$L\" $L", varName, xmlName, rootVar);
+            writer.write("$L = match $LElement with", varName, varName);
+            writer.indent();
+            writer.write("None -> None");
+            writer.write("Some elem ->");
+            writer.indent();
+            writer.write("mapList = aws.xml.extractMap \"$L\" \"$L\" \"$L\" elem", entryTag, keyTag, valueTag);
+            writer.write("Some (Map.fromList mapList)");
+            writer.dedent();
+            writer.dedent();
+        }
+    }
+    
+    /**
+     * Gets the XML tag name for list elements.
+     * Checks the list member for @xmlName trait, defaults to "member".
+     */
+    private String getListElementTag(MemberShape listMember, ListShape listShape) {
+        MemberShape elementMember = listShape.getMember();
+        return elementMember.getTrait(XmlNameTrait.class)
+                .map(XmlNameTrait::getValue)
+                .orElse("member");
     }
     
     // ========== Response Deserialization ==========
@@ -588,18 +1153,33 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("$L response = do", functionName);
         writer.indent();
         
-        // Navigate AWS Query response wrapper structure
-        writer.write("-- AWS Query response structure:");
-        writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
-        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
-        writer.write("responseElem = aws.xml.extractElement \"$LResponse\" xmlText", operationName);
-        writer.write("resultElem = aws.xml.extractElement \"$LResult\" responseElem", operationName);
+        // Navigate response wrapper structure
+        generateResponseWrapperNavigation(operation, writer);
         
         // Extract fields from result element
         generateFieldExtraction(output, model, clientNamespace, writer);
         
         writer.dedent();
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates XML navigation to the result element containing operation output.
+     * 
+     * <p>AWS Query uses: &lt;OperationNameResponse&gt;&lt;OperationNameResult&gt;...&lt;/OperationNameResult&gt;&lt;/OperationNameResponse&gt;
+     * <p>EC2 Query uses: &lt;OperationNameResponse&gt;...&lt;/OperationNameResponse&gt; (no nested Result element)
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison writer
+     */
+    protected void generateResponseWrapperNavigation(OperationShape operation, UnisonWriter writer) {
+        String operationName = operation.getId().getName();
+        
+        writer.write("-- AWS Query response structure:");
+        writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
+        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
+        writer.write("responseElem = aws.xml.extractElement \"$LResponse\" xmlText", operationName);
+        writer.write("resultElem = aws.xml.extractElement \"$LResult\" responseElem", operationName);
     }
     
     /**
@@ -613,9 +1193,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         List<MemberShape> members = new ArrayList<>(output.getAllMembers().values());
         
         if (members.isEmpty()) {
-            // No fields - construct empty output
-            String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
-            writer.write(outputTypeName + "." + outputTypeName);
+            // No fields - return the unit type value directly
+            // Empty structures are defined as type aliases (unit types), not records
+            String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
+            writer.write(outputTypeName);
             return;
         }
         
@@ -629,8 +1210,57 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             String xmlName = getXmlFieldName(member);
             Shape target = model.expectShape(member.getTarget());
             
+            // Check if field is non-optional (required or has default) - matches StructureGenerator logic
+            boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+            
             String extractor = getXmlExtractor(target, member.isRequired());
-            writer.write("$L = $L \"$L\" resultElem", varName, extractor, xmlName);
+            
+            // Handle different return types from extractors
+            switch (target.getType()) {
+                case BOOLEAN:
+                    // Boolean extractor returns Optional Boolean
+                    if (isNonOptional) {
+                        writer.write("$LOpt = $L \"$L\" resultElem", varName, extractor, xmlName);
+                        writer.write("$L = Optional.getOrElse false $LOpt", varName, varName);
+                    } else {
+                        writer.write("$L = $L \"$L\" resultElem", varName, extractor, xmlName);
+                    }
+                    break;
+                case INTEGER:
+                case LONG:
+                case BYTE:
+                case SHORT:
+                    // Integer extractors return Optional Int
+                    if (isNonOptional) {
+                        writer.write("$LOpt = $L \"$L\" resultElem", varName, extractor, xmlName);
+                        writer.write("$L = Optional.getOrElse +0 $LOpt", varName, varName);
+                    } else {
+                        writer.write("$L = $L \"$L\" resultElem", varName, extractor, xmlName);
+                    }
+                    break;
+                case FLOAT:
+                case DOUBLE:
+                    // Extract as text and parse
+                    if (isNonOptional) {
+                        writer.write("$LText = $L \"$L\" resultElem", varName, extractor, xmlName);
+                        writer.write("$L = Float.fromText $LText |> Optional.getOrElse 0.0", varName, varName);
+                    } else {
+                        writer.write("$LText = $L \"$L\" resultElem", varName, extractor, xmlName);
+                        writer.write("$L = Optional.flatMap Float.fromText $LText", varName, varName);
+                    }
+                    break;
+                case MAP:
+                    // Maps are extracted as list of key-value pairs from XML, then converted to Map
+                    generateMapExtraction(member, (MapShape) target, xmlName, varName, isNonOptional, model, writer);
+                    break;
+                case LIST:
+                    // Lists need special handling for structured element types
+                    generateListExtraction(member, (ListShape) target, xmlName, varName, isNonOptional, model, clientNamespace, writer);
+                    break;
+                default:
+                    // String, timestamp, and other types
+                    writer.write("$L = $L \"$L\" resultElem", varName, extractor, xmlName);
+            }
         }
         
         // Construct output record with extracted fields
@@ -670,28 +1300,37 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
      * <ul>
      *   <li>aws.xml.extractElementOpt - for optional text fields</li>
      *   <li>aws.xml.extractElement - for required text fields</li>
-     *   <li>aws.xml.extractInt - for integer fields</li>
-     *   <li>aws.xml.extractBool - for boolean fields</li>
+     *   <li>aws.xml.extractInt - for integer fields (returns Optional)</li>
+     *   <li>aws.xml.extractBool - for boolean fields (returns Optional)</li>
      * </ul>
+     * 
+     * <p>Note: extractInt and extractBool always return Optional, so required fields
+     * need to unwrap the Optional or provide a default value.
      */
     private String getXmlExtractor(Shape shape, boolean isRequired) {
         switch (shape.getType()) {
             case STRING:
+            case TIMESTAMP:
                 return isRequired ? "aws.xml.extractElement" : "aws.xml.extractElementOpt";
             case BOOLEAN:
-                return isRequired ? "aws.xml.extractBool" : "aws.xml.extractBoolOpt";
+                // extractBool returns Optional Boolean, handle in caller
+                return "aws.xml.extractBool";
             case BYTE:
             case SHORT:
             case INTEGER:
             case LONG:
-                return isRequired ? "aws.xml.extractInt" : "aws.xml.extractIntOpt";
+                // extractInt returns Optional Int, handle in caller
+                return "aws.xml.extractInt";
             case FLOAT:
             case DOUBLE:
-                return isRequired ? "aws.xml.extractFloat" : "aws.xml.extractFloatOpt";
+                // No extractFloat, use extractElement and parse
+                return isRequired ? "aws.xml.extractElement" : "aws.xml.extractElementOpt";
             case LIST:
-                return "aws.xml.extractList";
+                // TODO: Implement list extraction
+                return "aws.xml.extractAll";
             case STRUCTURE:
-                return "aws.xml.extractStructure";
+                // TODO: Implement structure extraction
+                return "aws.xml.extractElement";
             default:
                 return isRequired ? "aws.xml.extractElement" : "aws.xml.extractElementOpt";
         }
@@ -703,6 +1342,27 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         ServiceShape service = context.serviceShape();
         String clientNamespace = context.settings().getClientNamespace();
+        String errorTypeName = getErrorTypeName(service, clientNamespace);
+        
+        writer.writeDocComment(getErrorParserDocComment());
+        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
+        writer.indent();
+        
+        generateErrorParserBody(service, clientNamespace, errorTypeName, writer);
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Gets the error type name for this service.
+     * 
+     * @param service The service shape
+     * @param clientNamespace The client namespace
+     * @return The fully qualified error type name
+     */
+    protected String getErrorTypeName(ServiceShape service, String clientNamespace) {
         String serviceName = service.getId().getName();
         
         // Remove "Service" suffix if present to avoid duplication
@@ -710,10 +1370,18 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             serviceName = serviceName.substring(0, serviceName.length() - 7);
         }
         
-        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+        return UnisonSymbolProvider.toNamespacedTypeName(
                 serviceName + "ServiceError", clientNamespace);
-        
-        writer.writeDocComment("Parse AWS Query error response\n\n" +
+    }
+    
+    /**
+     * Gets the documentation comment for the error parser.
+     * Can be overridden by subclasses to provide protocol-specific documentation.
+     * 
+     * @return The doc comment string
+     */
+    protected String getErrorParserDocComment() {
+        return "Parse AWS Query error response\n\n" +
                 "AWS Query error format:\n" +
                 "<ErrorResponse>\n" +
                 "  <Error>\n" +
@@ -722,12 +1390,20 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 "    <Message>...</Message>\n" +
                 "  </Error>\n" +
                 "  <RequestId>xyz789</RequestId>\n" +
-                "</ErrorResponse>");
-        
-        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
-        writer.write("$L.parseError response =", clientNamespace);
-        writer.indent();
-        
+                "</ErrorResponse>";
+    }
+    
+    /**
+     * Generates the body of the error parser function.
+     * Subclasses can override this to provide protocol-specific error parsing logic.
+     * 
+     * @param service The service shape
+     * @param clientNamespace The client namespace
+     * @param errorTypeName The error type name
+     * @param writer The Unison writer
+     */
+    protected void generateErrorParserBody(ServiceShape service, String clientNamespace, 
+                                          String errorTypeName, UnisonWriter writer) {
         // Parse AWS Query error XML structure
         writer.write("-- Convert response body to text");
         writer.write("xmlText = fromUtf8 (Http.Response.body response)");
@@ -742,8 +1418,5 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("");
         writer.write("-- Map to service-specific error type");
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);
-        
-        writer.dedent();
-        writer.writeBlankLine();
     }
 }
