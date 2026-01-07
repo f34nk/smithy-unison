@@ -65,7 +65,7 @@ public final class ProtocolGeneratorFactory {
             LOGGER.fine("Using AwsQueryProtocolGenerator");
             return Optional.of(new AwsQueryProtocolGenerator());
         } else if (protocol == AwsProtocol.EC2_QUERY) {
-            LOGGER.fine("Ec2QueryProtocolGenerator not yet fully implemented");
+            LOGGER.fine("Using Ec2QueryProtocolGenerator");
             return Optional.of(new Ec2QueryProtocolGenerator());
         } else {
             LOGGER.warning("No protocol generator available for: " + protocol);
@@ -84,7 +84,8 @@ public final class ProtocolGeneratorFactory {
             || protocol == AwsProtocol.AWS_JSON_1_0 
             || protocol == AwsProtocol.AWS_JSON_1_1
             || protocol == AwsProtocol.REST_JSON_1
-            || protocol == AwsProtocol.AWS_QUERY;
+            || protocol == AwsProtocol.AWS_QUERY
+            || protocol == AwsProtocol.EC2_QUERY;
     }
     
     private ProtocolGeneratorFactory() {

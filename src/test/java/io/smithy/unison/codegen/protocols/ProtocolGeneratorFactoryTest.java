@@ -104,9 +104,13 @@ class ProtocolGeneratorFactoryTest {
     }
     
     @Test
+    void testIsFullyImplementedEc2Query() {
+        assertTrue(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.EC2_QUERY),
+            "EC2 Query should be fully implemented");
+    }
+    
+    @Test
     void testIsFullyImplementedOtherProtocols() {
-        assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.EC2_QUERY),
-            "EC2 Query should not be fully implemented yet");
         assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.UNKNOWN),
             "UNKNOWN should not be fully implemented");
     }
