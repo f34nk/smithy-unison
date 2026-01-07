@@ -2,6 +2,60 @@
 
 ## [Unreleased]
 
+### Added
+
+#### AWS Query Protocol Full Implementation
+- Complete AWS Query protocol support (SQS, SNS, RDS) with request serialization and response deserialization
+- XML-based request parameter serialization with proper Query format encoding
+- XML response parsing with map and list extraction support
+- Structure list serialization with handling of required and optional fields
+- Support for @xmlName and @xmlFlattened traits in serialization and deserialization
+- Service error parsing from XML error responses
+- AWS SigV4 request signing integration with form-encoded body
+
+#### EC2 Query Protocol Implementation
+- EC2 Query protocol support extending AWS Query with protocol-specific differences
+- Custom response wrapper navigation (OperationNameResponse without nested Result element)
+- EC2-specific error format parsing (Response/Errors/Error structure)
+- Complete test coverage with ProtocolGeneratorFactoryTest
+
+#### AWS Query XML Map and List Deserialization
+- Implemented map extraction from XML responses using entry/key/value structure
+- Support for flattened and wrapped maps with @xmlFlattened trait
+- List extraction for scalar types and structures
+- Enum list deserialization with fromText conversion
+- Required vs optional field handling in nested structures
+- Proper namespace handling for generated type references
+
+#### SNS Demo Example
+- Integration test against LocalStack with complete SNS workflow
+- Topic creation, subscription management, and message publishing
+- Terraform configuration for LocalStack SNS setup
+- Demonstrates AWS Query protocol usage with real AWS service
+
+### Fixed
+
+#### Error Constructor Generation
+- Use fully qualified type names in error fromMessage functions to avoid ambiguity
+- Handle required vs optional message fields correctly
+- Provide appropriate default values (empty string, false, +0) for required non-message fields
+
+#### AWS Query Request Serialization
+- Support for @default trait - fields with defaults are treated as non-optional
+- Structure list serialization with proper field-by-field parameter generation
+- Skip complex nested types (maps/lists/structures within structures) with TODO markers
+- Optional field handling in structure lists using conditional parameter inclusion
+
+#### AWS Query Response Parsing
+- Empty structure response parsing using fully qualified type names
+- Enum field deserialization with proper type conversion and optionality handling
+- Required scalar field extraction without Optional wrapping in nested structures
+
+#### Trait Support Updates
+- Updated TRAITS.md to reflect @xmlFlattened and @xmlName implementation status
+- Updated TRAITS.md to reflect @default trait full support
+- Updated TRAITS.md to reflect AWS Query and EC2 Query protocol implementation
+
 ### Changed
 
 #### Namespace Naming Convention

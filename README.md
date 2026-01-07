@@ -37,7 +37,16 @@ Reference: https://smithy.io/2.0/index.html
   - HTTP header extraction and body serialization
   - Error parsing with multiple format support
   - Reserved keyword escaping (backtick syntax)
-- AWS Query / EC2 Query protocols (planned)
+- **AWS Query protocol** (SQS, SNS, RDS)
+  - Full operation implementation with XML request serialization and response deserialization
+  - Form-encoded parameter serialization with proper Query format
+  - XML map and list extraction with @xmlFlattened trait support
+  - Structure list serialization with required/optional field handling
+  - Error parsing from XML error responses
+- **EC2 Query protocol** (EC2)
+  - Extends AWS Query with EC2-specific response and error format handling
+  - Custom response wrapper navigation
+  - EC2-specific error parsing structure
 
 ### AWS Authentication
 - **AWS SigV4 request signing** - Complete implementation of Signature Version 4
@@ -90,6 +99,7 @@ The ***-demo** examples generate client code from the official [AWS SDK smithy m
 | `make examples/dynamodb-demo` | [dynamodb-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u)  |
 | `make examples/sqs-demo` | [sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
 | `make examples/kinesis-demo` | [kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
+| `make examples/sns-demo` | [sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
 
 Run integration-test:
 
