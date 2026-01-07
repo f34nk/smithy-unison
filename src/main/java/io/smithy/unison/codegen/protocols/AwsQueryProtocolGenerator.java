@@ -917,18 +917,33 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("$L response = do", functionName);
         writer.indent();
         
-        // Navigate AWS Query response wrapper structure
-        writer.write("-- AWS Query response structure:");
-        writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
-        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
-        writer.write("responseElem = aws.xml.extractElement \"$LResponse\" xmlText", operationName);
-        writer.write("resultElem = aws.xml.extractElement \"$LResult\" responseElem", operationName);
+        // Navigate response wrapper structure
+        generateResponseWrapperNavigation(operation, writer);
         
         // Extract fields from result element
         generateFieldExtraction(output, model, clientNamespace, writer);
         
         writer.dedent();
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates XML navigation to the result element containing operation output.
+     * 
+     * <p>AWS Query uses: &lt;OperationNameResponse&gt;&lt;OperationNameResult&gt;...&lt;/OperationNameResult&gt;&lt;/OperationNameResponse&gt;
+     * <p>EC2 Query uses: &lt;OperationNameResponse&gt;...&lt;/OperationNameResponse&gt; (no nested Result element)
+     * 
+     * @param operation The operation shape
+     * @param writer The Unison writer
+     */
+    protected void generateResponseWrapperNavigation(OperationShape operation, UnisonWriter writer) {
+        String operationName = operation.getId().getName();
+        
+        writer.write("-- AWS Query response structure:");
+        writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
+        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
+        writer.write("responseElem = aws.xml.extractElement \"$LResponse\" xmlText", operationName);
+        writer.write("resultElem = aws.xml.extractElement \"$LResult\" responseElem", operationName);
     }
     
     /**
@@ -1090,6 +1105,27 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     public void generateErrorParser(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         ServiceShape service = context.serviceShape();
         String clientNamespace = context.settings().getClientNamespace();
+        String errorTypeName = getErrorTypeName(service, clientNamespace);
+        
+        writer.writeDocComment(getErrorParserDocComment());
+        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
+        writer.write("$L.parseError response =", clientNamespace);
+        writer.indent();
+        
+        generateErrorParserBody(service, clientNamespace, errorTypeName, writer);
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Gets the error type name for this service.
+     * 
+     * @param service The service shape
+     * @param clientNamespace The client namespace
+     * @return The fully qualified error type name
+     */
+    protected String getErrorTypeName(ServiceShape service, String clientNamespace) {
         String serviceName = service.getId().getName();
         
         // Remove "Service" suffix if present to avoid duplication
@@ -1097,10 +1133,18 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             serviceName = serviceName.substring(0, serviceName.length() - 7);
         }
         
-        String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+        return UnisonSymbolProvider.toNamespacedTypeName(
                 serviceName + "ServiceError", clientNamespace);
-        
-        writer.writeDocComment("Parse AWS Query error response\n\n" +
+    }
+    
+    /**
+     * Gets the documentation comment for the error parser.
+     * Can be overridden by subclasses to provide protocol-specific documentation.
+     * 
+     * @return The doc comment string
+     */
+    protected String getErrorParserDocComment() {
+        return "Parse AWS Query error response\n\n" +
                 "AWS Query error format:\n" +
                 "<ErrorResponse>\n" +
                 "  <Error>\n" +
@@ -1109,12 +1153,20 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 "    <Message>...</Message>\n" +
                 "  </Error>\n" +
                 "  <RequestId>xyz789</RequestId>\n" +
-                "</ErrorResponse>");
-        
-        writer.writeSignature(clientNamespace + ".parseError", "Http.Response -> " + errorTypeName);
-        writer.write("$L.parseError response =", clientNamespace);
-        writer.indent();
-        
+                "</ErrorResponse>";
+    }
+    
+    /**
+     * Generates the body of the error parser function.
+     * Subclasses can override this to provide protocol-specific error parsing logic.
+     * 
+     * @param service The service shape
+     * @param clientNamespace The client namespace
+     * @param errorTypeName The error type name
+     * @param writer The Unison writer
+     */
+    protected void generateErrorParserBody(ServiceShape service, String clientNamespace, 
+                                          String errorTypeName, UnisonWriter writer) {
         // Parse AWS Query error XML structure
         writer.write("-- Convert response body to text");
         writer.write("xmlText = fromUtf8 (Http.Response.body response)");
@@ -1129,8 +1181,5 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("");
         writer.write("-- Map to service-specific error type");
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);
-        
-        writer.dedent();
-        writer.writeBlankLine();
     }
 }
