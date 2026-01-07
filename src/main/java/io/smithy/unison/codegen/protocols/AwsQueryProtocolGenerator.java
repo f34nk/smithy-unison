@@ -14,6 +14,7 @@ import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.ShapeType;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.DefaultTrait;
+import software.amazon.smithy.model.traits.EnumTrait;
 import software.amazon.smithy.model.traits.XmlFlattenedTrait;
 import software.amazon.smithy.model.traits.XmlNameTrait;
 
@@ -640,6 +641,11 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     private String getUnisonTypeName(Shape shape, String clientNamespace) {
         switch (shape.getType()) {
             case STRING:
+                // Check if this is an enum string
+                if (shape.hasTrait(EnumTrait.class)) {
+                    return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
+                }
+                return "Text";
             case TIMESTAMP:
                 return "Text";
             case BOOLEAN:
@@ -811,15 +817,108 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                             fieldVarName, isFieldNonOptional, model, "elemXml", writer);
                     break;
                 case LIST:
-                    // For simplicity, treat nested lists as text for now
-                    // TODO: Support fully nested list of lists or list of structures
-                    String fieldExtractor = getXmlExtractor(fieldTarget, structMember.isRequired());
-                    writer.write("$L = $L \"$L\" elemXml", fieldVarName, fieldExtractor, fieldXmlName);
+                    // Handle list fields in nested structures
+                    ListShape fieldListShape = (ListShape) fieldTarget;
+                    Shape fieldListElementShape = model.expectShape(fieldListShape.getMember().getTarget());
+                    
+                    if (fieldListElementShape.isStringShape() && fieldListElementShape.hasTrait(EnumTrait.class)) {
+                        // List of enums - need to convert from text
+                        String enumTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                                fieldListElementShape.getId().getName(), clientNamespace);
+                        String fromTextFunc = UnisonSymbolProvider.toUnisonFunctionName(
+                                fieldListElementShape.getId().getName() + "FromText");
+                        String enumTypeNamespace = clientNamespace;
+                        
+                        // Generate helper function for enum conversion
+                        String enumConverterName = fieldVarName + "_convertEnum";
+                        writer.write("");
+                        writer.write("$L : Text -> $L", enumConverterName, enumTypeName);
+                        writer.write("$L t = match $L.$L t with", enumConverterName, enumTypeNamespace, fromTextFunc);
+                        writer.indent();
+                        writer.write("Some v -> v");
+                        writer.write("None -> bug (\"Invalid enum value: \" ++ t)");
+                        writer.dedent();
+                        writer.write("");
+                        
+                        if (isFieldNonOptional) {
+                            writer.write("$LTexts = aws.xml.extractAll \"$L\" elemXml", fieldVarName, fieldXmlName);
+                            writer.write("$L = List.map $L $LTexts", fieldVarName, enumConverterName, fieldVarName);
+                        } else {
+                            writer.write("$L = match aws.xml.extractElementOpt \"$L\" elemXml with", fieldVarName, fieldXmlName);
+                            writer.indent();
+                            writer.write("None -> None");
+                            writer.write("Some elem ->");
+                            writer.indent();
+                            writer.write("texts = aws.xml.extractAll \"member\" elem");
+                            writer.write("enums = List.map $L texts", enumConverterName);
+                            writer.write("Some enums");
+                            writer.dedent();
+                            writer.dedent();
+                        }
+                    } else {
+                        // Other list types (strings, structures, etc.)
+                        String fieldExtractor = getXmlExtractor(fieldTarget, structMember.isRequired());
+                        writer.write("$L = $L \"$L\" elemXml", fieldVarName, fieldExtractor, fieldXmlName);
+                    }
                     break;
                 default:
-                    // Scalar types
-                    String extractor = getXmlExtractor(fieldTarget, structMember.isRequired());
-                    writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                    // Scalar types (including enums)
+                    if (fieldTarget.isStringShape() && fieldTarget.hasTrait(EnumTrait.class)) {
+                        // Single enum field - need to convert from text
+                        String enumTypeName = getUnisonTypeName(fieldTarget, clientNamespace);
+                        String fromTextFunc = UnisonSymbolProvider.toUnisonFunctionName(
+                                fieldTarget.getId().getName() + "FromText");
+                        String enumTypeNamespace = clientNamespace;
+                        
+                        if (isFieldNonOptional) {
+                            writer.write("$LText = aws.xml.extractElement \"$L\" elemXml", fieldVarName, fieldXmlName);
+                            writer.write("$L = match $L.$L $LText with", fieldVarName, enumTypeNamespace, fromTextFunc, fieldVarName);
+                            writer.indent();
+                            writer.write("Some v -> v");
+                            writer.write("None -> bug (\"Invalid enum value: \" ++ $LText)", fieldVarName);
+                            writer.dedent();
+                        } else {
+                            writer.write("$L = match aws.xml.extractElementOpt \"$L\" elemXml with", fieldVarName, fieldXmlName);
+                            writer.indent();
+                            writer.write("None -> None");
+                            writer.write("Some textVal ->");
+                            writer.indent();
+                            writer.write("match $L.$L textVal with", enumTypeNamespace, fromTextFunc);
+                            writer.indent();
+                            writer.write("Some v -> Some v");
+                            writer.write("None -> bug (\"Invalid enum value: \" ++ textVal)");
+                            writer.dedent();
+                            writer.dedent();
+                            writer.dedent();
+                        }
+                    } else {
+                        // Other scalar types (text, int, boolean, etc.)
+                        // Handle booleans and integers with required/default trait
+                        if (fieldTarget.getType() == ShapeType.BOOLEAN) {
+                            String extractor = getXmlExtractor(fieldTarget, false); // Always use optional extractor
+                            if (isFieldNonOptional) {
+                                writer.write("$LOpt = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                                writer.write("$L = Optional.getOrElse false $LOpt", fieldVarName, fieldVarName);
+                            } else {
+                                writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                            }
+                        } else if (fieldTarget.getType() == ShapeType.INTEGER || 
+                                   fieldTarget.getType() == ShapeType.LONG ||
+                                   fieldTarget.getType() == ShapeType.BYTE ||
+                                   fieldTarget.getType() == ShapeType.SHORT) {
+                            String extractor = getXmlExtractor(fieldTarget, false); // Always use optional extractor
+                            if (isFieldNonOptional) {
+                                writer.write("$LOpt = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                                writer.write("$L = Optional.getOrElse +0 $LOpt", fieldVarName, fieldVarName);
+                            } else {
+                                writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                            }
+                        } else {
+                            // String, timestamp, and other types - use appropriate extractor based on optionality
+                            String extractor = getXmlExtractor(fieldTarget, isFieldNonOptional);
+                            writer.write("$L = $L \"$L\" elemXml", fieldVarName, extractor, fieldXmlName);
+                        }
+                    }
                     break;
             }
         }
