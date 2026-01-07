@@ -525,14 +525,35 @@ public final class ClientModuleWriter {
             // Get all members
             List<MemberShape> members = new ArrayList<>(error.getAllMembers().values());
             
-            // Construct the error with the message field set and other fields as None
-            writer.write("$L", typeName);
+            // Construct the error with the message field set and other fields as None or default values
+            // Use fully qualified type name to avoid ambiguity
+            writer.write("$L.$L", fullTypeName, typeName);
             writer.indent();
             for (MemberShape member : members) {
                 if (member.getMemberName().equalsIgnoreCase("message")) {
-                    writer.write("(Some message)");
+                    // Check if message field is required
+                    if (member.isRequired()) {
+                        writer.write("message");
+                    } else {
+                        writer.write("(Some message)");
+                    }
                 } else {
-                    writer.write("None");
+                    // For non-message fields
+                    if (member.isRequired()) {
+                        // Required fields need a default value
+                        Shape targetShape = context.model().expectShape(member.getTarget());
+                        if (targetShape.isStringShape()) {
+                            writer.write("\"\""); // Empty string for required string fields
+                        } else if (targetShape.isBooleanShape()) {
+                            writer.write("false"); // Default boolean
+                        } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
+                            writer.write("+0"); // Default integer
+                        } else {
+                            writer.write("\"\""); // Fallback to empty string
+                        }
+                    } else {
+                        writer.write("None"); // Optional fields get None
+                    }
                 }
             }
             writer.dedent();
