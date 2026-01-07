@@ -412,7 +412,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String toTextFunc = getToTextFunction(target);
         boolean isTextType = isTextType(target);
         
-        if (member.isRequired()) {
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
             if (isTextType) {
                 writer.write("$L = [(\"$L\", $L)]", varName, paramName, accessor);
             } else {
@@ -440,13 +443,24 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                                            Model model, String clientNamespace, UnisonWriter writer) {
         String accessor = inputTypeName + "." + memberName + " input";
         Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+        
+        // Check if element is a structure - needs special handling
+        if (elementShape.isStructureShape()) {
+            generateStructureListSerialization(member, (StructureShape) elementShape, paramName, varName, 
+                    accessor, model, clientNamespace, writer);
+            return;
+        }
+        
         String toTextFunc = getToTextFunction(elementShape);
         boolean isTextType = isTextType(elementShape);
         
         // Get the Unison type name for the element
         String elementTypeName = getUnisonTypeName(elementShape, clientNamespace);
         
-        if (member.isRequired()) {
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
             String helperName = varName + "_helper";
             writer.write(helperName + " : ($L, Nat) -> (Text, Text)", elementTypeName);
             writer.write(helperName + " = cases");
@@ -480,6 +494,117 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     }
     
     /**
+     * Generates serialization for a list of structures.
+     * AWS Query format: ParamName.1.Field1=val1&ParamName.1.Field2=val2&ParamName.2.Field1=val3...
+     */
+    private void generateStructureListSerialization(MemberShape member, StructureShape structureShape, 
+                                                    String paramName, String varName, String accessor,
+                                                    Model model, String clientNamespace, UnisonWriter writer) {
+        String structTypeName = getUnisonTypeName(structureShape, clientNamespace);
+        
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        String helperName = varName + "_helper";
+        writer.write(helperName + " : ($L, Nat) -> [(Text, Text)]", structTypeName);
+        writer.write(helperName + " = cases");
+        writer.indent();
+        writer.write("(val, idx) -> let");
+        writer.indent();
+        writer.write("idxText = Nat.toText (idx + 1)");
+        
+        // Generate field serialization for each member of the structure
+        // Separate required and optional fields
+        List<String> requiredFields = new ArrayList<>();
+        List<String> optionalFieldLists = new ArrayList<>();
+        
+        for (MemberShape structMember : structureShape.getAllMembers().values()) {
+            String fieldName = getQueryParamName(structMember);
+            String fieldAccessor = structTypeName + "." + UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName()) + " val";
+            Shape fieldShape = model.expectShape(structMember.getTarget());
+            
+            // Skip complex types (maps, lists, structures) within structures for now
+            // These would require recursive/nested serialization which is complex
+            if (fieldShape.isMapShape() || fieldShape.isListShape() || fieldShape.isStructureShape()) {
+                // TODO: Implement nested complex type serialization
+                continue;
+            }
+            
+            String fieldParamName = paramName + ".\" ++ idxText ++ \"." + fieldName;
+            
+            boolean isRequired = structMember.isRequired();
+            boolean isFieldText = isTextType(fieldShape);
+            String toTextFunc = getToTextFunction(fieldShape);
+            
+            if (isRequired) {
+                // Required fields go directly in the list
+                if (isFieldText) {
+                    requiredFields.add("(\"" + fieldParamName + "\", " + fieldAccessor + ")");
+                } else {
+                    requiredFields.add("(\"" + fieldParamName + "\", " + toTextFunc + " (" + fieldAccessor + "))");
+                }
+            } else {
+                // Optional fields need conditional inclusion
+                String optFieldName = "opt_" + structMember.getMemberName();
+                if (isFieldText) {
+                    writer.write("$L = match $L with", optFieldName, fieldAccessor);
+                    writer.indent();
+                    writer.write("None -> []");
+                    writer.write("Some v -> [(\"$L\", v)]", fieldParamName);
+                    writer.dedent();
+                } else {
+                    writer.write("$L = match $L with", optFieldName, fieldAccessor);
+                    writer.indent();
+                    writer.write("None -> []");
+                    writer.write("Some v -> [(\"$L\", $L v)]", fieldParamName, toTextFunc);
+                    writer.dedent();
+                }
+                optionalFieldLists.add(optFieldName);
+            }
+        }
+        
+        // Build the result by concatenating required fields with optional field lists
+        if (requiredFields.isEmpty()) {
+            // Only optional fields
+            if (optionalFieldLists.isEmpty()) {
+                writer.write("[]");
+            } else {
+                String result = optionalFieldLists.get(0);
+                for (int i = 1; i < optionalFieldLists.size(); i++) {
+                    result = result + " List.++ " + optionalFieldLists.get(i);
+                }
+                writer.write(result);
+            }
+        } else {
+            // Start with required fields
+            String requiredList = "[ " + String.join(",\n  ", requiredFields) + " ]";
+            if (optionalFieldLists.isEmpty()) {
+                writer.write(requiredList);
+            } else {
+                // Concatenate required with optional
+                String result = requiredList;
+                for (String optList : optionalFieldLists) {
+                    result = result + " List.++ " + optList;
+                }
+                writer.write(result);
+            }
+        }
+        
+        writer.dedent();
+        writer.dedent();
+        
+        if (isNonOptional) {
+            writer.write("$L = ($L) |> List.indexed |> List.flatMap $L", varName, accessor, helperName);
+        } else {
+            writer.write("$L = match $L with", varName, accessor);
+            writer.indent();
+            writer.write("None -> []");
+            writer.write("Some list -> list |> List.indexed |> List.flatMap $L", helperName);
+            writer.dedent();
+        }
+    }
+    
+    /**
      * Generates serialization for a map field.
      * AWS Query format: MapName.1.Key=k1&MapName.1.Value=v1
      */
@@ -489,12 +614,24 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String accessor = inputTypeName + "." + memberName + " input";
         Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
         Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+        
+        // Skip maps with complex value types (structures, lists, or nested maps)
+        // These would require recursive/nested serialization which is complex
+        if (valueShape.isStructureShape() || valueShape.isListShape() || valueShape.isMapShape()) {
+            // TODO: Implement nested complex type serialization for map values
+            writer.write("$L = [] -- TODO: Map with complex value type not yet supported", varName);
+            return;
+        }
+        
         boolean isKeyText = isTextType(keyShape);
         boolean isValueText = isTextType(valueShape);
         String keyToText = getToTextFunction(keyShape);
         String valueToText = getToTextFunction(valueShape);
         
-        if (member.isRequired()) {
+        // Check if field is non-optional (required or has default)
+        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        
+        if (isNonOptional) {
             String keyExpr = isKeyText ? "k" : keyToText + " k";
             String valueExpr = isValueText ? "v" : valueToText + " v";
             writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let", varName, accessor);
@@ -1056,9 +1193,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         List<MemberShape> members = new ArrayList<>(output.getAllMembers().values());
         
         if (members.isEmpty()) {
-            // No fields - construct empty output
-            String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
-            writer.write(outputTypeName + "." + outputTypeName);
+            // No fields - return the unit type value directly
+            // Empty structures are defined as type aliases (unit types), not records
+            String outputTypeName = UnisonSymbolProvider.toNamespacedTypeName(output.getId().getName(), clientNamespace);
+            writer.write(outputTypeName);
             return;
         }
         
