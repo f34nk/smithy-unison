@@ -52,17 +52,17 @@ public final class ProtocolGeneratorFactory {
             LOGGER.fine("Using RestXmlProtocolGenerator");
             return Optional.of(new RestXmlProtocolGenerator());
         } else if (protocol == AwsProtocol.REST_JSON_1) {
-            LOGGER.fine("RestJsonProtocolGenerator not yet fully implemented");
+            LOGGER.fine("Using RestJsonProtocolGenerator");
             return Optional.of(new RestJsonProtocolGenerator());
         } else if (protocol == AwsProtocol.AWS_JSON_1_0) {
-            LOGGER.fine("AwsJsonProtocolGenerator (1.0) not yet fully implemented");
+            LOGGER.fine("Using AwsJsonProtocolGenerator (1.0)");
             return Optional.of(new AwsJsonProtocolGenerator(
                     AwsJsonProtocolGenerator.AWS_JSON_1_0, "1.0"));
         } else if (protocol == AwsProtocol.AWS_JSON_1_1) {
-            LOGGER.fine("AwsJsonProtocolGenerator (1.1) not yet fully implemented");
+            LOGGER.fine("Using AwsJsonProtocolGenerator (1.1)");
             return Optional.of(new AwsJsonProtocolGenerator());
         } else if (protocol == AwsProtocol.AWS_QUERY) {
-            LOGGER.fine("AwsQueryProtocolGenerator not yet fully implemented");
+            LOGGER.fine("Using AwsQueryProtocolGenerator");
             return Optional.of(new AwsQueryProtocolGenerator());
         } else if (protocol == AwsProtocol.EC2_QUERY) {
             LOGGER.fine("Ec2QueryProtocolGenerator not yet fully implemented");
@@ -82,7 +82,9 @@ public final class ProtocolGeneratorFactory {
     public static boolean isFullyImplemented(AwsProtocol protocol) {
         return protocol == AwsProtocol.REST_XML 
             || protocol == AwsProtocol.AWS_JSON_1_0 
-            || protocol == AwsProtocol.AWS_JSON_1_1;
+            || protocol == AwsProtocol.AWS_JSON_1_1
+            || protocol == AwsProtocol.REST_JSON_1
+            || protocol == AwsProtocol.AWS_QUERY;
     }
     
     private ProtocolGeneratorFactory() {

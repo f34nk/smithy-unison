@@ -92,11 +92,19 @@ class ProtocolGeneratorFactoryTest {
     }
     
     @Test
+    void testIsFullyImplementedRestJson() {
+        assertTrue(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.REST_JSON_1),
+            "REST-JSON should be fully implemented");
+    }
+    
+    @Test
+    void testIsFullyImplementedAwsQuery() {
+        assertTrue(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_QUERY),
+            "AWS Query should be fully implemented");
+    }
+    
+    @Test
     void testIsFullyImplementedOtherProtocols() {
-        assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.REST_JSON_1),
-            "REST-JSON should not be fully implemented yet");
-        assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.AWS_QUERY),
-            "AWS Query should not be fully implemented yet");
         assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.EC2_QUERY),
             "EC2 Query should not be fully implemented yet");
         assertFalse(ProtocolGeneratorFactory.isFullyImplemented(AwsProtocol.UNKNOWN),
