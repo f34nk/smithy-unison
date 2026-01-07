@@ -1,0 +1,240 @@
+-- Isolated test for AWS XML Response Parsing Issues
+-- This test demonstrates the problem with parsing required boolean fields from XML responses
+
+namespace aws.xml.response.test
+
+use aws.xml
+use Text ++
+
+-- === Test Response Structure ===
+
+-- Simulates a response structure similar to CheckIfPhoneNumberIsOptedOutResponse
+structural type TestBooleanResponse = { isOptedOut : Boolean }
+
+-- === Test Cases ===
+
+testExtractRequiredBool : '{Exception} Boolean
+testExtractRequiredBool = 'let
+  xml = "<Response><Result><isOptedOut>true</isOptedOut></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- Problem: extractBool returns Optional Boolean, but we need Boolean
+  isOptedOutOpt = aws.xml.extractBool "isOptedOut" resultElem
+  
+  -- Solution 1: Unwrap with a default (not ideal for required fields)
+  isOptedOut = Optional.getOrElse false isOptedOutOpt
+  
+  -- This should work
+  response = TestBooleanResponse.TestBooleanResponse isOptedOut
+  TestBooleanResponse.isOptedOut response === true
+
+testExtractRequiredBoolMissing : '{Exception} Boolean
+testExtractRequiredBoolMissing = 'let
+  xml = "<Response><Result></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- When the field is missing, extractBool returns None
+  isOptedOutOpt = aws.xml.extractBool "isOptedOut" resultElem
+  
+  -- With getOrElse, we default to false (which might not be the desired behavior)
+  isOptedOut = Optional.getOrElse false isOptedOutOpt
+  
+  -- This defaults to false, which may hide the missing required field
+  response = TestBooleanResponse.TestBooleanResponse isOptedOut
+  TestBooleanResponse.isOptedOut response === false
+
+testExtractRequiredBoolFalse : '{Exception} Boolean
+testExtractRequiredBoolFalse = 'let
+  xml = "<Response><Result><isOptedOut>false</isOptedOut></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  isOptedOutOpt = aws.xml.extractBool "isOptedOut" resultElem
+  isOptedOut = Optional.getOrElse false isOptedOutOpt
+  
+  response = TestBooleanResponse.TestBooleanResponse isOptedOut
+  TestBooleanResponse.isOptedOut response === false
+
+testExtractRequiredBoolInvalid : '{Exception} Boolean
+testExtractRequiredBoolInvalid = 'let
+  xml = "<Response><Result><isOptedOut>invalid</isOptedOut></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- extractBool returns None for invalid boolean values
+  isOptedOutOpt = aws.xml.extractBool "isOptedOut" resultElem
+  
+  -- This will default to false for invalid values
+  isOptedOut = Optional.getOrElse false isOptedOutOpt
+  
+  response = TestBooleanResponse.TestBooleanResponse isOptedOut
+  TestBooleanResponse.isOptedOut response === false
+
+-- === Proposed Solution: Helper for Required Fields ===
+
+-- Helper function to extract a required boolean field
+-- Throws an exception if the field is missing or invalid
+extractRequiredBool : Text -> Text ->{Exception} Boolean
+extractRequiredBool fieldName xml =
+  match aws.xml.extractBool fieldName xml with
+    Some value -> value
+    None -> Exception.raise (Generic.failure ("Required boolean field '" ++ fieldName ++ "' is missing or invalid") xml)
+
+testExtractRequiredBoolHelper : '{Exception} Boolean
+testExtractRequiredBoolHelper = 'let
+  xml = "<Response><Result><isOptedOut>true</isOptedOut></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- Using the helper function
+  isOptedOut = extractRequiredBool "isOptedOut" resultElem
+  
+  response = TestBooleanResponse.TestBooleanResponse isOptedOut
+  TestBooleanResponse.isOptedOut response === true
+
+testExtractRequiredBoolHelperFalse : '{Exception} Boolean
+testExtractRequiredBoolHelperFalse = 'let
+  xml = "<Response><Result><isOptedOut>false</isOptedOut></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  isOptedOut = extractRequiredBool "isOptedOut" resultElem
+  
+  response = TestBooleanResponse.TestBooleanResponse isOptedOut
+  TestBooleanResponse.isOptedOut response === false
+
+-- This test should fail/throw because the field is missing
+testExtractRequiredBoolHelperMissing : '{Exception} Boolean
+testExtractRequiredBoolHelperMissing = 'let
+  xml = "<Response><Result></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- This should throw an exception
+  result = catch do
+    _ = extractRequiredBool "isOptedOut" resultElem
+    false  -- If we get here, the test failed
+  match result with
+    Either.Left _ -> true  -- Exception was thrown as expected
+    Either.Right _ -> false
+
+-- === Similar issue with required Int fields ===
+
+structural type TestIntResponse = { count : Int }
+
+extractRequiredInt : Text -> Text ->{Exception} Int
+extractRequiredInt fieldName xml =
+  match aws.xml.extractInt fieldName xml with
+    Some value -> value
+    None -> Exception.raise (Generic.failure ("Required int field '" ++ fieldName ++ "' is missing or invalid") xml)
+
+testExtractRequiredInt : '{Exception} Boolean
+testExtractRequiredInt = 'let
+  xml = "<Response><Result><count>42</count></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  count = extractRequiredInt "count" resultElem
+  
+  response = TestIntResponse.TestIntResponse count
+  TestIntResponse.count response === +42
+
+-- === Text fields work differently ===
+
+structural type TestTextResponse = { message : Text }
+
+testExtractRequiredText : '{Exception} Boolean
+testExtractRequiredText = 'let
+  xml = "<Response><Result><message>Hello World</message></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- Note: extractElement returns Text (not Optional Text)
+  -- It returns empty string "" if the element is not found
+  message = aws.xml.extractElement "message" resultElem
+  
+  response = TestTextResponse.TestTextResponse message
+  TestTextResponse.message response === "Hello World"
+
+testExtractRequiredTextMissing : '{Exception} Boolean
+testExtractRequiredTextMissing = 'let
+  xml = "<Response><Result></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- When missing, extractElement returns ""
+  message = aws.xml.extractElement "message" resultElem
+  
+  -- This might not be desired for required fields - "" vs missing field
+  response = TestTextResponse.TestTextResponse message
+  Text.isEmpty (TestTextResponse.message response)
+
+-- Helper for required text that throws on empty/missing
+extractRequiredText : Text -> Text ->{Exception} Text
+extractRequiredText fieldName xml =
+  value = aws.xml.extractElement fieldName xml
+  if Text.isEmpty value then
+    Exception.raise (Generic.failure ("Required text field '" ++ fieldName ++ "' is missing or empty") xml)
+  else
+    value
+
+testExtractRequiredTextHelper : '{Exception} Boolean
+testExtractRequiredTextHelper = 'let
+  xml = "<Response><Result><message>Hello</message></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  message = extractRequiredText "message" resultElem
+  
+  response = TestTextResponse.TestTextResponse message
+  TestTextResponse.message response === "Hello"
+
+testExtractRequiredTextHelperMissing : '{Exception} Boolean
+testExtractRequiredTextHelperMissing = 'let
+  xml = "<Response><Result></Result></Response>"
+  resultElem = aws.xml.extractElement "Result" xml
+  
+  -- This should throw an exception
+  result = catch do
+    _ = extractRequiredText "message" resultElem
+    false  -- If we get here, the test failed
+  match result with
+    Either.Left _ -> true  -- Exception was thrown as expected
+    Either.Right _ -> false
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS XML Response Parsing Tests..."
+  printLine ""
+  
+  -- Current behavior (using getOrElse)
+  printLine "=== Current Behavior Tests ==="
+  !(runTest "extractRequiredBool" testExtractRequiredBool)
+  !(runTest "extractRequiredBoolMissing" testExtractRequiredBoolMissing)
+  !(runTest "extractRequiredBoolFalse" testExtractRequiredBoolFalse)
+  !(runTest "extractRequiredBoolInvalid" testExtractRequiredBoolInvalid)
+  
+  printLine ""
+  printLine "=== Proposed Solution Tests ==="
+  !(runTest "extractRequiredBoolHelper" testExtractRequiredBoolHelper)
+  !(runTest "extractRequiredBoolHelperFalse" testExtractRequiredBoolHelperFalse)
+  !(runTest "extractRequiredBoolHelperMissing (should throw)" testExtractRequiredBoolHelperMissing)
+  !(runTest "extractRequiredInt" testExtractRequiredInt)
+  
+  printLine ""
+  printLine "=== Text Field Tests ==="
+  !(runTest "extractRequiredText" testExtractRequiredText)
+  !(runTest "extractRequiredTextMissing" testExtractRequiredTextMissing)
+  !(runTest "extractRequiredTextHelper" testExtractRequiredTextHelper)
+  !(runTest "extractRequiredTextHelperMissing (should throw)" testExtractRequiredTextHelperMissing)
+  
+  printLine ""
+  printLine "All tests completed!"
+  printLine ""
+  printLine "ISSUE SUMMARY:"
+  printLine "- aws.xml.extractBool returns Optional Boolean"
+  printLine "- aws.xml.extractInt returns Optional Int"
+  printLine "- aws.xml.extractElement returns Text (empty string for missing)"
+  printLine "- Generated code for required fields needs non-Optional types"
+  printLine "- Solution: Use extractRequired* helpers that throw on missing/invalid fields"
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = catch do test ()
+  match result with
+    Either.Right true -> printLine ("✓ PASS - " ++ name)
+    Either.Right false -> printLine ("✗ FAIL - " ++ name)
+    Either.Left _ -> printLine ("✗ ERROR - " ++ name)

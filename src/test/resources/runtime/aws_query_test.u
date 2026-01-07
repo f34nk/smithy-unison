@@ -121,68 +121,6 @@ testUrlEncodePercent = 'let
   result = aws.query.urlEncode "100%"
   result === "100%25"
 
--- === Character Encoding Helper Tests ===
-
-testIsUnreservedAlpha : '{Exception} Boolean
-testIsUnreservedAlpha = 'let
-  test1 = isUnreserved ?A
-  test2 = isUnreserved ?Z
-  test3 = isUnreserved ?a
-  test4 = isUnreserved ?z
-  test1 && test2 && test3 && test4
-
-testIsUnreservedDigit : '{Exception} Boolean
-testIsUnreservedDigit = 'let
-  test1 = isUnreserved ?0
-  test2 = isUnreserved ?9
-  test1 && test2
-
-testIsUnreservedSpecial : '{Exception} Boolean
-testIsUnreservedSpecial = 'let
-  test1 = isUnreserved ?-
-  test2 = isUnreserved ?_
-  test3 = isUnreserved ?.
-  test4 = isUnreserved ?~
-  test1 && test2 && test3 && test4
-
-testIsUnreservedReserved : '{Exception} Boolean
-testIsUnreservedReserved = 'let
-  test1 = not (isUnreserved ?!)
-  test2 = not (isUnreserved ?@)
-  test3 = not (isUnreserved ?#)
-  test4 = not (isUnreserved ?$)
-  test1 && test2 && test3 && test4
-
-testNibbleToHexDigits : '{Exception} Boolean
-testNibbleToHexDigits = 'let
-  test1 = nibbleToHex 0 === ?0
-  test2 = nibbleToHex 5 === ?5
-  test3 = nibbleToHex 9 === ?9
-  test1 && test2 && test3
-
-testNibbleToHexLetters : '{Exception} Boolean
-testNibbleToHexLetters = 'let
-  test1 = nibbleToHex 10 === ?A
-  test2 = nibbleToHex 12 === ?C
-  test3 = nibbleToHex 15 === ?F
-  test1 && test2 && test3
-
-testByteToHex : '{Exception} Boolean
-testByteToHex = 'let
-  result = byteToHex 32  -- space character
-  test1 = List.size result === 3
-  test2 = List.at 0 result === Some ?%
-  test3 = List.at 1 result === Some ?2
-  test4 = List.at 2 result === Some ?0
-  test1 && test2 && test3 && test4
-
-testByteToHexUpperCase : '{Exception} Boolean
-testByteToHexUpperCase = 'let
-  result = byteToHex 255  -- 0xFF
-  test1 = List.at 1 result === Some ?F
-  test2 = List.at 2 result === Some ?F
-  test1 && test2
-
 -- === Parameter Flattening Tests ===
 
 testFlattenStructureEmpty : '{Exception} Boolean
@@ -334,16 +272,6 @@ runAllTests = do
   runTest "urlEncode alphanumeric" testUrlEncodeAlphanumeric ()
   runTest "urlEncode complex string" testUrlEncodeComplexString ()
   runTest "urlEncode percent" testUrlEncodePercent ()
-  
-  -- Character encoding helper tests
-  runTest "isUnreserved alpha" testIsUnreservedAlpha ()
-  runTest "isUnreserved digit" testIsUnreservedDigit ()
-  runTest "isUnreserved special" testIsUnreservedSpecial ()
-  runTest "isUnreserved reserved" testIsUnreservedReserved ()
-  runTest "nibbleToHex digits" testNibbleToHexDigits ()
-  runTest "nibbleToHex letters" testNibbleToHexLetters ()
-  runTest "byteToHex" testByteToHex ()
-  runTest "byteToHex uppercase" testByteToHexUpperCase ()
   
   -- Parameter flattening tests
   runTest "flattenStructure empty" testFlattenStructureEmpty ()

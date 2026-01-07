@@ -46,73 +46,12 @@ Encodes all characters except unreserved ones (A-Z, a-z, 0-9, hyphen, underscore
 Space is encoded as %20 (not +). All other characters are percent-encoded as %XX where XX is the hex byte value.
 
 Examples: "Hello World!" becomes "Hello%20World%21"
+
+Note: This implementation delegates to aws.http.urlEncode for consistency.
 }}
 aws.query.urlEncode : Text -> Text
 aws.query.urlEncode text =
-  text
-    |> Text.toCharList
-    |> List.flatMap encodeChar
-    |> Text.fromCharList
-
-{{
-Encode a single character.
-
-Returns the character as-is if unreserved, or percent-encoded otherwise.
-}}
-encodeChar : Char -> [Char]
-encodeChar char =
-  if isUnreserved char then [char]
-  else percentEncode char
-
-{{
-Check if a character is unreserved (doesn't need encoding).
-
-Unreserved characters per RFC 3986:
-  ALPHA / DIGIT / "-" / "." / "_" / "~"
-}}
-isUnreserved : Char -> Boolean
-isUnreserved c =
-  -- A-Z, a-z, 0-9, -, _, ., ~
-  isAlphaNum = isLetter c || isDigit c
-  if isAlphaNum then true
-  else if Char.eq c ?- then true
-  else if Char.eq c ?_ then true
-  else if Char.eq c ?. then true
-  else if Char.eq c ?~ then true
-  else false
-
-{{
-Percent-encode a character as %XX.
-
-Converts the character to its UTF-8 byte representation and formats as %XX.
-}}
-percentEncode : Char -> [Char]
-percentEncode char =
-  -- Convert char to UTF-8 bytes and encode each byte
-  bytes = Text.toUtf8 (Char.toText char)
-  Bytes.toList bytes
-    |> List.flatMap byteToHex
-
-{{
-Convert a byte to %XX format.
-}}
-byteToHex : Nat -> [Char]
-byteToHex byte =
-  highNibble = Nat.div byte 16
-  lowNibble = Nat.mod byte 16
-  [?%, nibbleToHex highNibble, nibbleToHex lowNibble]
-
-{{
-Convert a nibble (0-15) to a hex digit character.
-}}
-nibbleToHex : Nat -> Char
-nibbleToHex n =
-  if Nat.lt n 10 then
-    -- 0-9: ASCII 48-57
-    Char.fromNat (48 + n)
-  else
-    -- A-F: ASCII 65-70
-    Char.fromNat (55 + n)
+  aws.http.urlEncode text
 
 -- =============================================================================
 -- Parameter Flattening (for nested structures)
