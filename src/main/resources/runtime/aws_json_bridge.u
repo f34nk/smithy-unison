@@ -124,6 +124,56 @@ extractErrorMessage json =
     None -> getFieldAsString "Message" json
 
 -- =============================================================================
+-- Field Extraction Utilities
+-- =============================================================================
+
+{{
+  Extract an optional field from a JSON object and parse it.
+  
+  This is a generic field extractor that looks for a field by name in a JSON object,
+  applies a parser function to convert it to the desired type, and returns None if the
+  field doesn't exist or parsing fails.
+}}
+extractOptionalField : Text -> JsonValue -> (JsonValue -> Optional a) -> Optional a
+extractOptionalField fieldName json parser =
+  match getField fieldName json with
+    Some fieldValue -> parser fieldValue
+    None -> None
+
+{{
+  Expect a string value from a JSON value.
+  
+  Helper function for extractOptionalField that converts a JsonValue to Text.
+  Returns None if the value is not a string.
+}}
+expectString : JsonValue -> Optional Text
+expectString = cases
+  JsonString s -> Some s
+  _ -> None
+
+{{
+  Expect an integer value from a JSON value.
+  
+  Helper function for extractOptionalField that converts a JsonValue to Int.
+  Returns None if the value is not a number or cannot be converted to Int.
+}}
+expectInt : JsonValue -> Optional Int
+expectInt = cases
+  JsonNumber n -> Float.toInt n
+  _ -> None
+
+{{
+  Expect a boolean value from a JSON value.
+  
+  Helper function for extractOptionalField that converts a JsonValue to Boolean.
+  Returns None if the value is not a boolean.
+}}
+expectBoolean : JsonValue -> Optional Boolean
+expectBoolean = cases
+  JsonBoolean b -> Some b
+  _ -> None
+
+-- =============================================================================
 -- Convenience Functions
 -- =============================================================================
 
