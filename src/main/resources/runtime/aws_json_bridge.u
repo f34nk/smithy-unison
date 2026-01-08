@@ -128,14 +128,49 @@ extractErrorMessage json =
 -- =============================================================================
 
 {{
-  Extract an optional field from a JSON object and parse it.
+  Extract a required field from a JSON object and parse it.
+  
+  This function looks for a field by name in a JSON object, applies a parser function
+  to convert it to the desired type, and raises an exception if the field is missing.
+  
+  Use this for required fields in response parsing.
+}}
+extractField : Text -> JsonValue -> (JsonValue -> '{Exception} a) -> '{Exception} a
+extractField fieldName json parser =
+  match getField fieldName json with
+    Some fieldValue -> parser fieldValue
+    None -> Exception.raise (Generic.failure "Missing required field" fieldName)
+
+{{
+  Extract an optional field from a JSON object and parse it (with Exception-based parser).
+  
+  This function looks for a field by name in a JSON object, applies an Exception-returning
+  parser function to convert it to the desired type. Returns None if the field is missing
+  or if parsing fails (exception is caught and converted to None).
+  
+  Use this for optional fields in response parsing with Exception-based parsers.
+}}
+extractOptionalField : Text -> JsonValue -> (JsonValue -> '{Exception} a) -> Optional a
+extractOptionalField fieldName json parser =
+  match getField fieldName json with
+    Some fieldValue -> 
+      match catch do !(parser fieldValue) with
+        Right value -> Some value
+        Left _ -> None
+    None -> None
+
+{{
+  Extract an optional field from a JSON object and parse it (legacy Optional-based parser).
   
   This is a generic field extractor that looks for a field by name in a JSON object,
   applies a parser function to convert it to the desired type, and returns None if the
   field doesn't exist or parsing fails.
+  
+  NOTE: This is the legacy version using Optional-based parsers. 
+  Prefer the Exception-based version for new code.
 }}
-extractOptionalField : Text -> JsonValue -> (JsonValue -> Optional a) -> Optional a
-extractOptionalField fieldName json parser =
+extractOptionalFieldLegacy : Text -> JsonValue -> (JsonValue -> Optional a) -> Optional a
+extractOptionalFieldLegacy fieldName json parser =
   match getField fieldName json with
     Some fieldValue -> parser fieldValue
     None -> None
@@ -172,6 +207,67 @@ expectBoolean : JsonValue -> Optional Boolean
 expectBoolean = cases
   JsonBoolean b -> Some b
   _ -> None
+
+-- =============================================================================
+-- Exception-Based Field Parsers (for required fields)
+-- =============================================================================
+
+{{
+  Parse a JSON value as a string.
+  
+  Raises an exception if the value is not a string.
+  Use with extractField for required string fields.
+}}
+parseString : JsonValue -> '{Exception} Text
+parseString = cases
+  JsonString s -> '(s)
+  v -> Exception.raise (Generic.failure "Expected string" v)
+
+{{
+  Parse a JSON value as an integer.
+  
+  Raises an exception if the value is not a number or cannot be converted to Int.
+  Use with extractField for required integer fields.
+}}
+parseInt : JsonValue -> '{Exception} Int
+parseInt = cases
+  JsonNumber n -> match Float.toInt n with
+    Some i -> '(i)
+    None -> Exception.raise (Generic.failure "Number not an integer" n)
+  v -> Exception.raise (Generic.failure "Expected number" v)
+
+{{
+  Parse a JSON value as a boolean.
+  
+  Raises an exception if the value is not a boolean.
+  Use with extractField for required boolean fields.
+}}
+parseBoolean : JsonValue -> '{Exception} Boolean
+parseBoolean = cases
+  JsonBoolean b -> '(b)
+  v -> Exception.raise (Generic.failure "Expected boolean" v)
+
+{{
+  Parse a JSON value as an array.
+  
+  Raises an exception if the value is not an array.
+  Use with extractField for required array fields.
+}}
+parseArray : JsonValue -> '{Exception} [JsonValue]
+parseArray = cases
+  JsonArray items -> '(items)
+  v -> Exception.raise (Generic.failure "Expected array" v)
+
+{{
+  Parse a JSON value as an object.
+  
+  Raises an exception if the value is not an object.
+  Use with extractField for required object fields.
+}}
+parseObject : JsonValue -> '{Exception} [(Text, JsonValue)]
+parseObject = cases
+  JsonObject fields -> '(fields)
+  v -> Exception.raise (Generic.failure "Expected object" v)
 
 -- =============================================================================
 -- Convenience Functions
