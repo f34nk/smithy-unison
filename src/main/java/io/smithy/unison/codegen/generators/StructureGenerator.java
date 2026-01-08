@@ -283,10 +283,14 @@ public final class StructureGenerator {
             return "[" + memberType + "]";
         } else if (shape instanceof MapShape) {
             MapShape map = (MapShape) shape;
+            // Get key and value types
             Shape keyShape = model.expectShape(map.getKey().getTarget());
             Shape valueShape = model.expectShape(map.getValue().getTarget());
+            
+            // Use the actual key type (may be Text, or an enum)
             String keyType = getUnisonType(keyShape);
             String valueType = getUnisonType(valueShape);
+            
             return "Map " + keyType + " " + valueType;
         } else if (shape instanceof StructureShape) {
             return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
