@@ -436,12 +436,23 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 String placeholder = "{" + member.getMemberName() + "}";
                 String nextUri = "uri" + (i + 1);
                 
+                // Get the target shape to determine if conversion needed
+                software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
+                String toTextFunc = getToTextFunction(targetShape, clientNamespace);
+                
                 // Extract value from input
                 writer.write("$LValue = $L.$L input", memberName, inputType, memberName);
                 
-                // URL encode and substitute
-                writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode $LValue) $L",
-                        nextUri, placeholder, memberName, currentUri);
+                // Convert to text if needed, URL encode, and substitute
+                if (toTextFunc.isEmpty()) {
+                    // Already text - just URL encode
+                    writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode $LValue) $L",
+                            nextUri, placeholder, memberName, currentUri);
+                } else {
+                    // Convert to text first, then URL encode
+                    writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode ($L $LValue)) $L",
+                            nextUri, placeholder, toTextFunc, memberName, currentUri);
+                }
                 
                 currentUri = nextUri;
             }
@@ -490,29 +501,25 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 
                 // Get the target shape to determine serialization
                 software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
+                
+                // Skip list-valued query parameters for now (TODO: implement proper list serialization)
+                if (targetShape instanceof ListShape) {
+                    writer.write("None$L  -- TODO: list-valued query parameter not supported: $L",
+                               isLast ? "" : ",", queryName);
+                    continue;
+                }
+                
                 String toTextFunc = getToTextFunction(targetShape, clientNamespace);
                 
-                // Check if member is required
-                boolean isRequired = member.isRequired();
-                
-                if (isRequired) {
-                    // Required field: convert value directly and wrap in Some
-                    if (toTextFunc.isEmpty()) {
-                        writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L.$L input))$L",
-                                queryName, inputType, memberName, isLast ? "" : ",");
-                    } else {
-                        writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L ($L.$L input)))$L",
-                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
-                    }
+                // HTTP query parameters are always optional in the generated types
+                // (even if marked @required in Smithy) because they can be omitted from the HTTP request
+                // So we always use Optional.map here
+                if (toTextFunc.isEmpty()) {
+                    writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
+                            queryName, inputType, memberName, isLast ? "" : ",");
                 } else {
-                    // Optional field: map over the Optional
-                    if (toTextFunc.isEmpty()) {
-                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
-                                queryName, inputType, memberName, isLast ? "" : ",");
-                    } else {
-                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
-                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
-                    }
+                    writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
+                            queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
                 }
             }
             
@@ -742,21 +749,40 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("");
         writer.write("-- @httpPayload: use payload member directly");
         
+        // Check if the payload is required or optional
+        boolean isRequired = payloadMember.isRequired();
+        
         if (targetShape.isBlobShape()) {
-            // Blob payload - use as-is
-            writer.write("bodyBytes = $L.$L input", inputType, memberName);
+            // Blob payload - use as-is (unwrap Optional if needed)
+            if (isRequired) {
+                writer.write("bodyBytes = $L.$L input", inputType, memberName);
+            } else {
+                writer.write("bodyBytes = Optional.getOrElse Bytes.empty ($L.$L input)", inputType, memberName);
+            }
         } else if (targetShape.isStringShape()) {
-            // String payload - convert to UTF8
-            writer.write("bodyText = $L.$L input", inputType, memberName);
-            writer.write("bodyBytes = Text.toUtf8 bodyText");
+            // String payload - convert to UTF8 (unwrap Optional if needed)
+            if (isRequired) {
+                writer.write("bodyText = $L.$L input", inputType, memberName);
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            } else {
+                writer.write("bodyText = Optional.getOrElse \"\" ($L.$L input)", inputType, memberName);
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            }
         } else {
-            // Structure payload - serialize as JSON
+            // Structure payload - serialize as JSON (unwrap Optional if needed)
             String clientNamespace = context.settings().getClientNamespace();
             String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     targetShape.getId().getName() + "ToJson");
-            writer.write("bodyJson = $L ($L.$L input)", serializerName, inputType, memberName);
-            writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
-            writer.write("bodyBytes = Text.toUtf8 bodyText");
+            if (isRequired) {
+                writer.write("bodyJson = $L ($L.$L input)", serializerName, inputType, memberName);
+                writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            } else {
+                // For optional structure payloads, use empty JSON object as default
+                writer.write("bodyJson = Optional.map $L ($L.$L input)", serializerName, inputType, memberName);
+                writer.write("bodyText = aws.json.bridge.jsonToRequestBody (Optional.getOrElse (aws.json.JsonObject []) bodyJson)");
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            }
         }
     }
     
@@ -1364,6 +1390,15 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
                 serviceName + "ServiceError", clientNamespace);
         
+        // Generate error constructor helper first
+        writer.writeDocComment("Create a service error from error code and message");
+        writer.writeSignature(clientNamespace + ".errorFromCodeAndMessage", "Text -> Text -> " + errorTypeName);
+        writer.write("$L.errorFromCodeAndMessage code message =", clientNamespace);
+        writer.indent();
+        writer.write("$L.UnknownError code message", errorTypeName);
+        writer.dedent();
+        writer.writeBlankLine();
+        
         writer.writeDocComment("Parse REST-JSON error response\n\n" +
                 "REST-JSON has multiple error formats:\n" +
                 "- Format 1: {\"__type\": \"ErrorName\", \"message\": \"...\"}\n" +
@@ -1394,20 +1429,22 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("errorType4 = aws.json.bridge.extractOptionalField \"Code\" json aws.json.bridge.expectString");
         writer.write("");
         writer.write("-- Use first non-None error type");
-        writer.write("errorType = errorType1");
-        writer.write("  |> Optional.orElse errorType2");
-        writer.write("  |> Optional.orElse errorType3");
-        writer.write("  |> Optional.orElse errorType4");
-        writer.write("  |> Optional.getOrElse \"UnknownError\"");
+        writer.write("errorType = match errorType1 with");
+        writer.write("  Some t -> t");
+        writer.write("  None -> match errorType2 with");
+        writer.write("    Some t -> t");
+        writer.write("    None -> match errorType3 with");
+        writer.write("      Some t -> t");
+        writer.write("      None -> Optional.getOrElse \"UnknownError\" errorType4");
         writer.write("");
         
         // Extract error message
         writer.write("-- Extract error message (try both cases)");
         writer.write("errorMsg1 = aws.json.bridge.extractOptionalField \"message\" json aws.json.bridge.expectString");
         writer.write("errorMsg2 = aws.json.bridge.extractOptionalField \"Message\" json aws.json.bridge.expectString");
-        writer.write("errorMessage = errorMsg1");
-        writer.write("  |> Optional.orElse errorMsg2");
-        writer.write("  |> Optional.getOrElse \"\"");
+        writer.write("errorMessage = match errorMsg1 with");
+        writer.write("  Some m -> m");
+        writer.write("  None -> Optional.getOrElse \"\" errorMsg2");
         writer.write("");
         
         // Map to service error
