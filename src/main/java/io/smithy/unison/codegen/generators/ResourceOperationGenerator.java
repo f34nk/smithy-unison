@@ -174,17 +174,19 @@ public class ResourceOperationGenerator {
     }
     
     /**
-     * Generate collection operations from resource.operations[].
+     * Generate collection operations from resource.operations[] and resource.collectionOperations[].
      * 
      * <p>Collection operations are custom operations that act on resource
-     * instances. They are listed in the resource's operations array and
-     * typically require resource identifiers in their input.
+     * instances or collections. They are listed in the resource's operations 
+     * or collectionOperations arrays and typically require resource identifiers 
+     * in their input.
      * 
      * <p>Examples:
      * <ul>
-     *   <li>Lambda Invoke - executes a function</li>
-     *   <li>SQS SendMessage - sends message to queue</li>
-     *   <li>S3 CopyObject - copies an object</li>
+     *   <li>Lambda Invoke - executes a function (collectionOperations)</li>
+     *   <li>Lambda GetFunction - gets function details (collectionOperations)</li>
+     *   <li>SQS SendMessage - sends message to queue (operations)</li>
+     *   <li>S3 CopyObject - copies an object (operations)</li>
      * </ul>
      * 
      * @param resource The resource containing collection operations
@@ -194,7 +196,13 @@ public class ResourceOperationGenerator {
             ResourceShape resource,
             UnisonWriter writer) {
         
+        // Generate operations from operations[] array
         for (ShapeId opId : resource.getOperations()) {
+            generateOperation(opId, writer, "collection");
+        }
+        
+        // Generate operations from collectionOperations[] array
+        for (ShapeId opId : resource.getCollectionOperations()) {
             generateOperation(opId, writer, "collection");
         }
     }
