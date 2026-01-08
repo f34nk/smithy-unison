@@ -876,7 +876,12 @@ public final class ClientModuleWriter {
     private String generateFieldExtraction(MemberShape member, Shape targetShape, String xmlElementName) {
         boolean isRequired = member.hasTrait(software.amazon.smithy.model.traits.RequiredTrait.class);
         boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
-        boolean isOptional = !isRequired && !hasDefault;
+        // HTTP query and header parameters are always optional in generated types,
+        // even if marked @required in Smithy, because they can be omitted from HTTP requests
+        // Note: @httpLabel (URI path) parameters remain required
+        boolean isHttpOptional = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class)
+                || member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class);
+        boolean isOptional = !isRequired && !hasDefault || isHttpOptional;
         
         if (targetShape instanceof StructureShape) {
             // Nested structure - use parser function
