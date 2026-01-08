@@ -279,7 +279,11 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 // All extractions are Optional - we unwrap required fields at the end
                 writer.write("$L = $L", varName, extraction);
                 
-                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+                // Match StructureGenerator logic: HTTP-bound parameters are always optional
+                boolean isHttpBound = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class) ||
+                                    member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class) ||
+                                    member.hasTrait(software.amazon.smithy.model.traits.HttpPrefixHeadersTrait.class);
+                boolean isNonOptional = (member.isRequired() || member.hasTrait(DefaultTrait.class)) && !isHttpBound;
                 if (isNonOptional) {
                     requiredVars.add(varName);
                 } else {
@@ -346,7 +350,11 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
             List<String> finalArgs = new ArrayList<>();
             for (MemberShape member : members) {
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+                // Match StructureGenerator logic: HTTP-bound parameters are always optional
+                boolean isHttpBound = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class) ||
+                                    member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class) ||
+                                    member.hasTrait(software.amazon.smithy.model.traits.HttpPrefixHeadersTrait.class);
+                boolean isNonOptional = (member.isRequired() || member.hasTrait(DefaultTrait.class)) && !isHttpBound;
                 
                 if (isNonOptional) {
                     finalArgs.add(memberName);  // already escaped by toUnisonFunctionName
@@ -471,7 +479,11 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         Shape target = model.expectShape(member.getTarget());
         
         // Check if field is non-optional (required or has default) - matches StructureGenerator logic
-        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        // HTTP-bound parameters are always optional in generated types
+        boolean isHttpBound = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class) ||
+                            member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class) ||
+                            member.hasTrait(software.amazon.smithy.model.traits.HttpPrefixHeadersTrait.class);
+        boolean isNonOptional = (member.isRequired() || member.hasTrait(DefaultTrait.class)) && !isHttpBound;
         
         if (isNonOptional) {
             return generateJsonValue(target, accessor, model, clientNamespace);
@@ -620,7 +632,11 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         Shape target = model.expectShape(member.getTarget());
         
         // Check if field is non-optional (required or has default) - matches StructureGenerator logic
-        boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
+        // HTTP-bound parameters are always optional in generated types
+        boolean isHttpBound = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class) ||
+                            member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class) ||
+                            member.hasTrait(software.amazon.smithy.model.traits.HttpPrefixHeadersTrait.class);
+        boolean isNonOptional = (member.isRequired() || member.hasTrait(DefaultTrait.class)) && !isHttpBound;
         
         if (isNonOptional) {
             // Required field - extract and convert, raising exception if missing

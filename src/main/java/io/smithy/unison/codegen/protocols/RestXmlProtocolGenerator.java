@@ -307,15 +307,13 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             Shape targetShape = model.expectShape(member.getTarget());
             String toTextFunc = getToTextFunction(targetShape, clientNamespace);
             
-            // Check if the member is required (not optional)
-            boolean isRequired = member.isRequired();
-            
-            if (isRequired) {
-                // Required field: convert value directly and wrap in Some
-                writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L ($L.$L input)))$L", 
-                        queryName, toTextFunc, inputType, memberName, comma);
+            // HTTP query parameters are always optional in the generated types
+            // (even if marked @required in Smithy) because they can be omitted from the HTTP request
+            // So we always use Optional.map here
+            if (toTextFunc.isEmpty()) {
+                writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L", 
+                        queryName, inputType, memberName, comma);
             } else {
-                // Optional field: map over the Optional
                 writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L", 
                         queryName, toTextFunc, inputType, memberName, comma);
             }
@@ -403,8 +401,9 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             
             String comma = (i < httpHeaderMembers.size() - 1) ? "," : "";
             
-            // Check if the member is required
-            boolean isRequired = member.isRequired();
+            // HTTP header parameters are always optional in generated types,
+            // even if marked @required in Smithy
+            boolean isRequired = false;
             
             // Check if this is a list type - needs special handling
             if (targetShape.isListShape()) {

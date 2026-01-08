@@ -436,12 +436,23 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 String placeholder = "{" + member.getMemberName() + "}";
                 String nextUri = "uri" + (i + 1);
                 
+                // Get the target shape to determine if conversion needed
+                software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
+                String toTextFunc = getToTextFunction(targetShape, clientNamespace);
+                
                 // Extract value from input
                 writer.write("$LValue = $L.$L input", memberName, inputType, memberName);
                 
-                // URL encode and substitute
-                writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode $LValue) $L",
-                        nextUri, placeholder, memberName, currentUri);
+                // Convert to text if needed, URL encode, and substitute
+                if (toTextFunc.isEmpty()) {
+                    // Already text - just URL encode
+                    writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode $LValue) $L",
+                            nextUri, placeholder, memberName, currentUri);
+                } else {
+                    // Convert to text first, then URL encode
+                    writer.write("$L = Text.replaceAll \"$L\" (aws.http.urlEncode ($L $LValue)) $L",
+                            nextUri, placeholder, toTextFunc, memberName, currentUri);
+                }
                 
                 currentUri = nextUri;
             }
@@ -490,29 +501,25 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 
                 // Get the target shape to determine serialization
                 software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
+                
+                // Skip list-valued query parameters for now (TODO: implement proper list serialization)
+                if (targetShape instanceof ListShape) {
+                    writer.write("None$L  -- TODO: list-valued query parameter not supported: $L",
+                               isLast ? "" : ",", queryName);
+                    continue;
+                }
+                
                 String toTextFunc = getToTextFunction(targetShape, clientNamespace);
                 
-                // Check if member is required
-                boolean isRequired = member.isRequired();
-                
-                if (isRequired) {
-                    // Required field: convert value directly and wrap in Some
-                    if (toTextFunc.isEmpty()) {
-                        writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L.$L input))$L",
-                                queryName, inputType, memberName, isLast ? "" : ",");
-                    } else {
-                        writer.write("Some (\"$L=\" ++ aws.http.urlEncode ($L ($L.$L input)))$L",
-                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
-                    }
+                // HTTP query parameters are always optional in the generated types
+                // (even if marked @required in Smithy) because they can be omitted from the HTTP request
+                // So we always use Optional.map here
+                if (toTextFunc.isEmpty()) {
+                    writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
+                            queryName, inputType, memberName, isLast ? "" : ",");
                 } else {
-                    // Optional field: map over the Optional
-                    if (toTextFunc.isEmpty()) {
-                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
-                                queryName, inputType, memberName, isLast ? "" : ",");
-                    } else {
-                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
-                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
-                    }
+                    writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
+                            queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
                 }
             }
             
@@ -742,21 +749,40 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("");
         writer.write("-- @httpPayload: use payload member directly");
         
+        // Check if the payload is required or optional
+        boolean isRequired = payloadMember.isRequired();
+        
         if (targetShape.isBlobShape()) {
-            // Blob payload - use as-is
-            writer.write("bodyBytes = $L.$L input", inputType, memberName);
+            // Blob payload - use as-is (unwrap Optional if needed)
+            if (isRequired) {
+                writer.write("bodyBytes = $L.$L input", inputType, memberName);
+            } else {
+                writer.write("bodyBytes = Optional.getOrElse Bytes.empty ($L.$L input)", inputType, memberName);
+            }
         } else if (targetShape.isStringShape()) {
-            // String payload - convert to UTF8
-            writer.write("bodyText = $L.$L input", inputType, memberName);
-            writer.write("bodyBytes = Text.toUtf8 bodyText");
+            // String payload - convert to UTF8 (unwrap Optional if needed)
+            if (isRequired) {
+                writer.write("bodyText = $L.$L input", inputType, memberName);
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            } else {
+                writer.write("bodyText = Optional.getOrElse \"\" ($L.$L input)", inputType, memberName);
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            }
         } else {
-            // Structure payload - serialize as JSON
+            // Structure payload - serialize as JSON (unwrap Optional if needed)
             String clientNamespace = context.settings().getClientNamespace();
             String serializerName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     targetShape.getId().getName() + "ToJson");
-            writer.write("bodyJson = $L ($L.$L input)", serializerName, inputType, memberName);
-            writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
-            writer.write("bodyBytes = Text.toUtf8 bodyText");
+            if (isRequired) {
+                writer.write("bodyJson = $L ($L.$L input)", serializerName, inputType, memberName);
+                writer.write("bodyText = aws.json.bridge.jsonToRequestBody bodyJson");
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            } else {
+                // For optional structure payloads, use empty JSON object as default
+                writer.write("bodyJson = Optional.map $L ($L.$L input)", serializerName, inputType, memberName);
+                writer.write("bodyText = aws.json.bridge.jsonToRequestBody (Optional.getOrElse (aws.json.JsonObject []) bodyJson)");
+                writer.write("bodyBytes = Text.toUtf8 bodyText");
+            }
         }
     }
     
@@ -1148,6 +1174,240 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.writeBlankLine();
     }
     
+    // ========== Deserializer Collection and Generation (Phase 2) ==========
+    
+    /**
+     * Collects all structures that need FromJson deserializers.
+     * 
+     * <p>Walks through all operation outputs and their nested structures recursively.
+     * 
+     * @param service The service shape
+     * @param model The Smithy model
+     * @return Set of structure shapes that need deserializers
+     */
+    private Set<StructureShape> collectStructuresNeedingDeserializers(ServiceShape service, Model model) {
+        Set<StructureShape> structures = new HashSet<>();
+        
+        // Collect from all operation outputs
+        for (ShapeId opId : service.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                StructureShape output = model.expectShape(outputId, StructureShape.class);
+                collectStructuresRecursively(output, model, structures);
+            });
+        }
+        
+        return structures;
+    }
+    
+    /**
+     * Recursively collects all structure shapes that need deserializers.
+     * 
+     * @param structure The structure to process
+     * @param model The Smithy model
+     * @param collected Set to accumulate found structures
+     */
+    private void collectStructuresRecursively(StructureShape structure, Model model, Set<StructureShape> collected) {
+        // Add this structure if not already collected
+        if (collected.contains(structure)) {
+            return; // Already processed
+        }
+        
+        // Don't add yet - process members first to get dependency order (nested first)
+        
+        // Process all member target shapes
+        for (MemberShape member : structure.getAllMembers().values()) {
+            Shape targetShape = model.expectShape(member.getTarget());
+            collectShapeRecursively(targetShape, model, collected);
+        }
+        
+        // Now add this structure after its dependencies
+        collected.add(structure);
+    }
+    
+    /**
+     * Recursively collects structures from any shape type.
+     * 
+     * @param shape The shape to process
+     * @param model The Smithy model
+     * @param collected Set to accumulate found structures
+     */
+    private void collectShapeRecursively(Shape shape, Model model, Set<StructureShape> collected) {
+        if (shape.isStructureShape()) {
+            collectStructuresRecursively(shape.asStructureShape().get(), model, collected);
+        } else if (shape.isListShape()) {
+            ListShape listShape = shape.asListShape().get();
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            collectShapeRecursively(memberTarget, model, collected);
+        } else if (shape.isMapShape()) {
+            MapShape mapShape = shape.asMapShape().get();
+            Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            collectShapeRecursively(valueTarget, model, collected);
+        } else if (shape.isUnionShape()) {
+            // TODO: Handle union shapes if needed
+        }
+    }
+    
+    /**
+     * Collects all enums that need FromJson deserializers.
+     * 
+     * @param service The service shape
+     * @param model The Smithy model
+     * @return Set of enum shape IDs
+     */
+    private Set<ShapeId> collectEnumsNeedingDeserializers(ServiceShape service, Model model) {
+        Set<ShapeId> enums = new HashSet<>();
+        
+        // Collect from all operation outputs
+        for (ShapeId opId : service.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                StructureShape output = model.expectShape(outputId, StructureShape.class);
+                collectEnumsRecursively(output, model, enums);
+            });
+        }
+        
+        return enums;
+    }
+    
+    /**
+     * Recursively collects enum shapes.
+     * 
+     * @param structure The structure to process
+     * @param model The Smithy model
+     * @param collected Set to accumulate found enum IDs
+     */
+    private void collectEnumsRecursively(StructureShape structure, Model model, Set<ShapeId> collected) {
+        for (MemberShape member : structure.getAllMembers().values()) {
+            Shape targetShape = model.expectShape(member.getTarget());
+            collectEnumsFromShape(targetShape, model, collected);
+        }
+    }
+    
+    /**
+     * Collects enums from any shape type.
+     * 
+     * @param shape The shape to process
+     * @param model The Smithy model
+     * @param collected Set to accumulate found enum IDs
+     */
+    private void collectEnumsFromShape(Shape shape, Model model, Set<ShapeId> collected) {
+        if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            collected.add(shape.getId());
+        } else if (shape.isListShape()) {
+            ListShape listShape = shape.asListShape().get();
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            collectEnumsFromShape(memberTarget, model, collected);
+        } else if (shape.isMapShape()) {
+            MapShape mapShape = shape.asMapShape().get();
+            Shape keyTarget = model.expectShape(mapShape.getKey().getTarget());
+            Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            collectEnumsFromShape(keyTarget, model, collected);
+            collectEnumsFromShape(valueTarget, model, collected);
+        } else if (shape.isStructureShape()) {
+            collectEnumsRecursively(shape.asStructureShape().get(), model, collected);
+        }
+    }
+    
+    /**
+     * Generates a FromJson deserializer for a structure.
+     * 
+     * <p>Generates a function that takes JsonValue and returns the structure with Exception ability.
+     * 
+     * @param structure The structure shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    public void generateStructureDeserializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String structType = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                structure.getId().getName() + "FromJson");
+        
+        writer.writeComment("Deserialize " + structure.getId().getName() + " from JSON");
+        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + structType);
+        writer.write("$L json = do", functionName);
+        writer.indent();
+        
+        List<MemberShape> members = structure.getAllMembers().values().stream().toList();
+        
+        if (members.isEmpty()) {
+            // Empty structure
+            writer.write("{}");
+        } else {
+            // Extract fields
+            for (MemberShape member : members) {
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                String jsonName = getJsonName(member);
+                Shape targetShape = model.expectShape(member.getTarget());
+                String deserializer = getDeserializerForType(targetShape, model, clientNamespace);
+                
+                if (member.isRequired()) {
+                    // Required field
+                    writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)",
+                            memberName, jsonName, deserializer);
+                } else {
+                    // Optional field
+                    writer.write("$L = aws.json.bridge.extractOptionalField \"$L\" json $L",
+                            memberName, jsonName, deserializer);
+                }
+            }
+            
+            // Build structure
+            writer.write("");
+            writer.write("-- Build structure");
+            writer.write("{");
+            writer.indent();
+            for (int i = 0; i < members.size(); i++) {
+                MemberShape member = members.get(i);
+                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                boolean isLast = (i == members.size() - 1);
+                writer.write("$L = $L$L", memberName, memberName, isLast ? "" : ",");
+            }
+            writer.dedent();
+            writer.write("}");
+        }
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates a FromJson deserializer for an enum.
+     * 
+     * <p>Generates a function that parses a JSON string to an enum value.
+     * 
+     * @param enumId The enum shape ID
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    public void generateEnumDeserializer(ShapeId enumId, UnisonWriter writer, UnisonContext context) {
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String enumType = UnisonSymbolProvider.toNamespacedTypeName(enumId.getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                enumId.getName() + "FromJson");
+        String fromTextFunc = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                enumId.getName() + "FromText");
+        
+        writer.writeComment("Deserialize " + enumId.getName() + " from JSON");
+        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + enumType);
+        writer.write("$L json = do", functionName);
+        writer.indent();
+        
+        writer.write("value = !(aws.json.bridge.parseString json)");
+        writer.write("match $L value with", fromTextFunc);
+        writer.indent();
+        writer.write("Some e -> e");
+        writer.write("None -> Exception.raise (Generic.failure \"Invalid enum value\" value)");
+        writer.dedent();
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
     @Override
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
@@ -1206,8 +1466,16 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 // Extract from JSON body
                 String jsonName = getJsonName(member);
                 String deserializer = getJsonDeserializer(member, model, clientNamespace);
-                writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)$L",
-                        memberName, jsonName, deserializer, isLast ? "" : ",");
+                
+                if (member.isRequired()) {
+                    // Required field - use extractField (raises exception if missing)
+                    writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)$L",
+                            memberName, jsonName, deserializer, isLast ? "" : ",");
+                } else {
+                    // Optional field - use extractOptionalField (returns None if missing)
+                    writer.write("$L = aws.json.bridge.extractOptionalField \"$L\" json $L$L",
+                            memberName, jsonName, deserializer, isLast ? "" : ",");
+                }
             }
         }
         
@@ -1288,24 +1556,24 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     /**
      * Gets the JSON deserializer for a member.
      * 
+     * <p>Just returns the base deserializer - the caller will choose
+     * whether to use extractField (required) or extractOptionalField (optional).
+     * 
      * @param member The member shape
      * @param model The Smithy model
      * @param clientNamespace The client namespace
      * @return The deserializer function
      */
     private String getJsonDeserializer(MemberShape member, Model model, String clientNamespace) {
-        boolean isOptional = !member.isRequired();
         Shape targetShape = model.expectShape(member.getTarget());
-        String baseDeserializer = getDeserializerForType(targetShape, model, clientNamespace);
-        
-        if (isOptional) {
-            return "(aws.json.bridge.optionalField " + baseDeserializer + ")";
-        }
-        return baseDeserializer;
+        return getDeserializerForType(targetShape, model, clientNamespace);
     }
     
     /**
      * Gets the deserializer function for a type.
+     * 
+     * <p>Returns the appropriate parser function for the given shape type.
+     * These parsers work with the Exception-based extraction functions.
      * 
      * @param shape The target shape
      * @param model The Smithy model
@@ -1314,40 +1582,59 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      */
     private String getDeserializerForType(Shape shape, Model model, String clientNamespace) {
         if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            // Enum - use generated FromJson deserializer
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isStringShape()) {
-            return "aws.json.bridge.expectString";
+            // String - use parseString
+            return "aws.json.bridge.parseString";
         } else if (shape.isIntegerShape() || shape.isLongShape() || shape.isShortShape() || shape.isByteShape()) {
-            return "aws.json.bridge.expectInt";
+            // Integer types - use parseInt
+            return "aws.json.bridge.parseInt";
         } else if (shape.isFloatShape() || shape.isDoubleShape()) {
-            return "aws.json.bridge.expectFloat";
+            // Float types - use parseFloat (TODO: implement in bridge)
+            return "aws.json.bridge.parseInt"; // Fallback to parseInt for now
         } else if (shape.isBooleanShape()) {
-            return "aws.json.bridge.expectBoolean";
+            // Boolean - use parseBoolean
+            return "aws.json.bridge.parseBoolean";
         } else if (shape.isBlobShape()) {
-            return "aws.json.bridge.expectBase64Bytes";
+            // Blob - use parseString then base64 decode (TODO: implement)
+            return "aws.json.bridge.parseString";
         } else if (shape.isTimestampShape()) {
-            return "aws.json.bridge.expectString"; // Timestamps are Text
+            // Timestamp - parse as string (ISO 8601 in REST-JSON)
+            return "aws.json.bridge.parseString";
         } else if (shape.isListShape()) {
+            // List - generate inline list parser
             ListShape listShape = shape.asListShape().get();
-            String elementDeserializer = getDeserializerForType(
-                    model.expectShape(listShape.getMember().getTarget()), model, clientNamespace);
-            return "(aws.json.bridge.expectArray " + elementDeserializer + ")";
+            Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+            String elementDeserializer = getDeserializerForType(elementShape, model, clientNamespace);
+            
+            // Generate inline list parser: json -> do items = !(parseArray json); List.map (item -> !(deserializer item)) items
+            return "(json -> do items = !(aws.json.bridge.parseArray json); List.map (item -> !(" + 
+                   elementDeserializer + " item)) items)";
         } else if (shape.isMapShape()) {
+            // Map - generate inline map parser
             MapShape mapShape = shape.asMapShape().get();
-            String valueDeserializer = getDeserializerForType(
-                    model.expectShape(mapShape.getValue().getTarget()), model, clientNamespace);
-            return "(aws.json.bridge.expectObject " + valueDeserializer + ")";
+            Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+            String valueDeserializer = getDeserializerForType(valueShape, model, clientNamespace);
+            
+            // Generate inline map parser: json -> do fields = !(parseObject json); List.map (cases (k, v) -> (k, !(deserializer v))) fields
+            return "(json -> do fields = !(aws.json.bridge.parseObject json); List.map (cases (k, v) -> (k, !(" + 
+                   valueDeserializer + " v))) fields)";
         } else if (shape.isStructureShape()) {
+            // Structure - use generated FromJson deserializer
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isUnionShape()) {
+            // Union - use generated FromJson deserializer (TODO: implement union deserializers)
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isDocumentShape()) {
-            return "(x -> x)"; // Document is already JsonValue
+            // Document - already JsonValue, no parsing needed
+            return "('(x) -> x)";
         } else {
-            return "aws.json.bridge.expectString"; // Fallback
+            // Fallback - parse as string
+            return "aws.json.bridge.parseString";
         }
     }
     
@@ -1363,6 +1650,15 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         }
         String errorTypeName = UnisonSymbolProvider.toNamespacedTypeName(
                 serviceName + "ServiceError", clientNamespace);
+        
+        // Generate error constructor helper first
+        writer.writeDocComment("Create a service error from error code and message");
+        writer.writeSignature(clientNamespace + ".errorFromCodeAndMessage", "Text -> Text -> " + errorTypeName);
+        writer.write("$L.errorFromCodeAndMessage code message =", clientNamespace);
+        writer.indent();
+        writer.write("$L.UnknownError code message", errorTypeName);
+        writer.dedent();
+        writer.writeBlankLine();
         
         writer.writeDocComment("Parse REST-JSON error response\n\n" +
                 "REST-JSON has multiple error formats:\n" +
@@ -1386,28 +1682,30 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         // Extract error code from multiple possible locations
         writer.write("-- Extract error code (try multiple locations)");
         writer.write("-- Format 1: __type field");
-        writer.write("errorType1 = aws.json.bridge.extractOptionalField \"__type\" json aws.json.bridge.expectString");
+        writer.write("errorType1 = aws.json.bridge.extractOptionalField \"__type\" json aws.json.bridge.parseString");
         writer.write("-- Format 2: Type field");
-        writer.write("errorType2 = aws.json.bridge.extractOptionalField \"Type\" json aws.json.bridge.expectString");
+        writer.write("errorType2 = aws.json.bridge.extractOptionalField \"Type\" json aws.json.bridge.parseString");
         writer.write("-- Format 3: code/Code field");
-        writer.write("errorType3 = aws.json.bridge.extractOptionalField \"code\" json aws.json.bridge.expectString");
-        writer.write("errorType4 = aws.json.bridge.extractOptionalField \"Code\" json aws.json.bridge.expectString");
+        writer.write("errorType3 = aws.json.bridge.extractOptionalField \"code\" json aws.json.bridge.parseString");
+        writer.write("errorType4 = aws.json.bridge.extractOptionalField \"Code\" json aws.json.bridge.parseString");
         writer.write("");
         writer.write("-- Use first non-None error type");
-        writer.write("errorType = errorType1");
-        writer.write("  |> Optional.orElse errorType2");
-        writer.write("  |> Optional.orElse errorType3");
-        writer.write("  |> Optional.orElse errorType4");
-        writer.write("  |> Optional.getOrElse \"UnknownError\"");
+        writer.write("errorType = match errorType1 with");
+        writer.write("  Some t -> t");
+        writer.write("  None -> match errorType2 with");
+        writer.write("    Some t -> t");
+        writer.write("    None -> match errorType3 with");
+        writer.write("      Some t -> t");
+        writer.write("      None -> Optional.getOrElse \"UnknownError\" errorType4");
         writer.write("");
         
         // Extract error message
         writer.write("-- Extract error message (try both cases)");
-        writer.write("errorMsg1 = aws.json.bridge.extractOptionalField \"message\" json aws.json.bridge.expectString");
-        writer.write("errorMsg2 = aws.json.bridge.extractOptionalField \"Message\" json aws.json.bridge.expectString");
-        writer.write("errorMessage = errorMsg1");
-        writer.write("  |> Optional.orElse errorMsg2");
-        writer.write("  |> Optional.getOrElse \"\"");
+        writer.write("errorMsg1 = aws.json.bridge.extractOptionalField \"message\" json aws.json.bridge.parseString");
+        writer.write("errorMsg2 = aws.json.bridge.extractOptionalField \"Message\" json aws.json.bridge.parseString");
+        writer.write("errorMessage = match errorMsg1 with");
+        writer.write("  Some m -> m");
+        writer.write("  None -> Optional.getOrElse \"\" errorMsg2");
         writer.write("");
         
         // Map to service error

@@ -10,6 +10,10 @@ import software.amazon.smithy.model.traits.DefaultTrait;
 import software.amazon.smithy.model.traits.DocumentationTrait;
 import software.amazon.smithy.model.traits.EnumTrait;
 import software.amazon.smithy.model.traits.RequiredTrait;
+import software.amazon.smithy.model.traits.HttpHeaderTrait;
+import software.amazon.smithy.model.traits.HttpQueryTrait;
+import software.amazon.smithy.model.traits.HttpPrefixHeadersTrait;
+import software.amazon.smithy.model.traits.HttpLabelTrait;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -189,17 +193,35 @@ public final class StructureGenerator {
      * <p>Members are wrapped in Optional unless:
      * <ul>
      *   <li>They have the {@code @required} trait</li>
-     *   <li>They have the {@code @default} trait</li>
+     *   <li>They have the {@code @default} trait AND are not HTTP-bound parameters</li>
      * </ul>
+     * 
+     * <p>HTTP-bound parameters (@httpQuery, @httpHeader, @httpPrefixHeaders) are always
+     * optional in request structures, even if they have @default, because they can be
+     * omitted from the HTTP request.
      */
     private String getFieldType(MemberShape member) {
         Shape targetShape = model.expectShape(member.getTarget());
         String baseType = getUnisonType(targetShape);
         
-        // Check if required or has default
+        // Check if required
         boolean isRequired = member.hasTrait(RequiredTrait.class);
+        
+        // Check if has default
         boolean hasDefault = member.hasTrait(DefaultTrait.class);
         
+        // Check if HTTP-bound (query, header, etc.)
+        boolean isHttpBound = member.hasTrait(HttpQueryTrait.class) ||
+                              member.hasTrait(HttpHeaderTrait.class) ||
+                              member.hasTrait(HttpPrefixHeadersTrait.class);
+        
+        // HTTP-bound parameters are always optional, even with @default
+        // because they can be omitted from the HTTP request
+        if (isHttpBound) {
+            return "Optional " + wrapIfComplex(baseType);
+        }
+        
+        // Non-HTTP-bound fields: required or has default → non-optional
         if (isRequired || hasDefault) {
             return baseType;
         }
