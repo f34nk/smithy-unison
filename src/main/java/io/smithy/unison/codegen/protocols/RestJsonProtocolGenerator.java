@@ -8,6 +8,7 @@ import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
+import software.amazon.smithy.model.shapes.ResourceShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.Shape;
 import software.amazon.smithy.model.shapes.ShapeId;
@@ -19,8 +20,11 @@ import software.amazon.smithy.model.traits.HttpQueryTrait;
 import software.amazon.smithy.model.traits.HttpResponseCodeTrait;
 import software.amazon.smithy.model.traits.HttpTrait;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -780,7 +784,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             } else {
                 // For optional structure payloads, use empty JSON object as default
                 writer.write("bodyJson = Optional.map $L ($L.$L input)", serializerName, inputType, memberName);
-                writer.write("bodyText = aws.json.bridge.jsonToRequestBody (Optional.getOrElse (aws.json.JsonObject []) bodyJson)");
+                writer.write("bodyText = aws.json.bridge.jsonToRequestBody (Optional.getOrElse (jsonObject []) bodyJson)");
                 writer.write("bodyBytes = Text.toUtf8 bodyText");
             }
         }
@@ -913,11 +917,8 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         // Check for @httpPayload member
         Optional<MemberShape> payloadMember = ProtocolUtils.getPayloadMember(inputShape.get());
         if (payloadMember.isPresent()) {
-            // @httpPayload present - may need structure serializer
-            software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(payloadMember.get().getTarget());
-            if (targetShape.isStructureShape()) {
-                generateStructureSerializer((StructureShape) targetShape, writer, context);
-            }
+            // @httpPayload present - structure serializer is generated upfront by ClientModuleWriter
+            // No need to generate it here
             return;
         }
         
@@ -1120,7 +1121,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      * @param writer The Unison code writer
      * @param context The code generation context
      */
-    private void generateStructureSerializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
+    public void generateStructureSerializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
         
@@ -1271,6 +1272,192 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     }
     
     /**
+     * Collects all map shapes that need FromJson deserializers.
+     * 
+     * <p>Returns one representative map shape for each unique key+value type combination.
+     * We deduplicate by key and value type names since maps with different key types
+     * need different deserializer functions (e.g., for enum key conversion).
+     * 
+     * @param service The service shape
+     * @param model The Smithy model
+     * @return Set of map shapes (one per unique key+value type combination)
+     */
+    public Set<MapShape> collectMapsNeedingDeserializers(ServiceShape service, Model model) {
+        Map<String, MapShape> mapsByKeyAndValueType = new HashMap<>();
+        
+        // Collect from direct service operations
+        for (ShapeId opId : service.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                StructureShape output = model.expectShape(outputId, StructureShape.class);
+                collectMapsRecursively(output, model, mapsByKeyAndValueType);
+            });
+        }
+        
+        // Also collect from resource operations
+        for (ShapeId resourceId : service.getResources()) {
+            software.amazon.smithy.model.shapes.ResourceShape resource = model.expectShape(resourceId, software.amazon.smithy.model.shapes.ResourceShape.class);
+            collectMapsFromResource(resource, model, mapsByKeyAndValueType);
+        }
+        
+        return new HashSet<>(mapsByKeyAndValueType.values());
+    }
+    
+    /**
+     * Recursively collects maps from a resource and its operations.
+     */
+    private void collectMapsFromResource(software.amazon.smithy.model.shapes.ResourceShape resource, Model model, Map<String, MapShape> collected) {
+        // Collect from all resource operations
+        for (ShapeId opId : resource.getAllOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                StructureShape output = model.expectShape(outputId, StructureShape.class);
+                collectMapsRecursively(output, model, collected);
+            });
+        }
+        
+        // Recursively collect from child resources
+        for (ShapeId childResourceId : resource.getResources()) {
+            software.amazon.smithy.model.shapes.ResourceShape childResource = model.expectShape(childResourceId, software.amazon.smithy.model.shapes.ResourceShape.class);
+            collectMapsFromResource(childResource, model, collected);
+        }
+    }
+    
+    /**
+     * Collects all list shapes that need FromJson deserializers.
+     * 
+     * <p>Returns one representative list shape for each unique element type.
+     * We deduplicate by element type name since multiple list shapes with the same
+     * element type should generate the same deserializer function.
+     * 
+     * @param service The service shape
+     * @param model The Smithy model
+     * @return Set of list shapes (one per unique element type)
+     */
+    public Set<ListShape> collectListsNeedingDeserializers(ServiceShape service, Model model) {
+        Map<String, ListShape> listsByElementType = new HashMap<>();
+        
+        // Collect from direct service operations
+        for (ShapeId opId : service.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                StructureShape output = model.expectShape(outputId, StructureShape.class);
+                collectListsRecursively(output, model, listsByElementType);
+            });
+        }
+        
+        // Also collect from resource operations
+        for (ShapeId resourceId : service.getResources()) {
+            software.amazon.smithy.model.shapes.ResourceShape resource = model.expectShape(resourceId, software.amazon.smithy.model.shapes.ResourceShape.class);
+            collectListsFromResource(resource, model, listsByElementType);
+        }
+        
+        return new HashSet<>(listsByElementType.values());
+    }
+    
+    /**
+     * Recursively collects lists from a resource and its operations.
+     */
+    private void collectListsFromResource(software.amazon.smithy.model.shapes.ResourceShape resource, Model model, Map<String, ListShape> collected) {
+        // Collect from all resource operations
+        for (ShapeId opId : resource.getAllOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                StructureShape output = model.expectShape(outputId, StructureShape.class);
+                collectListsRecursively(output, model, collected);
+            });
+        }
+        
+        // Recursively collect from child resources
+        for (ShapeId childResourceId : resource.getResources()) {
+            software.amazon.smithy.model.shapes.ResourceShape childResource = model.expectShape(childResourceId, software.amazon.smithy.model.shapes.ResourceShape.class);
+            collectListsFromResource(childResource, model, collected);
+        }
+    }
+    
+    /**
+     * Recursively collects list shapes from a structure.
+     * 
+     * @param structure The structure to process
+     * @param model The Smithy model
+     * @param collected Map from element type name to list shape
+     */
+    private void collectListsRecursively(StructureShape structure, Model model, Map<String, ListShape> collected) {
+        for (MemberShape member : structure.getAllMembers().values()) {
+            Shape targetShape = model.expectShape(member.getTarget());
+            collectListsFromShape(targetShape, model, collected);
+        }
+    }
+    
+    /**
+     * Collects lists from any shape type.
+     * 
+     * @param shape The shape to process
+     * @param model The Smithy model
+     * @param collected Map from element type name to list shape
+     */
+    private void collectListsFromShape(Shape shape, Model model, Map<String, ListShape> collected) {
+        if (shape.isListShape()) {
+            ListShape listShape = shape.asListShape().get();
+            Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+            String elementTypeName = getShapeTypeName(elementShape, model);
+            // Only store if not already present (deduplicate by element type)
+            collected.putIfAbsent(elementTypeName, listShape);
+            // Also collect from element type (in case it contains nested lists)
+            collectListsFromShape(elementShape, model, collected);
+        } else if (shape.isMapShape()) {
+            MapShape mapShape = shape.asMapShape().get();
+            Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+            collectListsFromShape(valueShape, model, collected);
+        } else if (shape.isStructureShape()) {
+            collectListsRecursively(shape.asStructureShape().get(), model, collected);
+        }
+    }
+    
+    /**
+     * Recursively collects map shapes from a structure.
+     * 
+     * @param structure The structure to process
+     * @param model The Smithy model
+     * @param collected Map from value type name to map shape
+     */
+    private void collectMapsRecursively(StructureShape structure, Model model, Map<String, MapShape> collected) {
+        for (MemberShape member : structure.getAllMembers().values()) {
+            Shape targetShape = model.expectShape(member.getTarget());
+            collectMapsFromShape(targetShape, model, collected);
+        }
+    }
+    
+    /**
+     * Collects maps from any shape type.
+     * 
+     * @param shape The shape to process
+     * @param model The Smithy model
+     * @param collected Map from key+value type name to map shape
+     */
+    private void collectMapsFromShape(Shape shape, Model model, Map<String, MapShape> collected) {
+        if (shape.isMapShape()) {
+            MapShape mapShape = shape.asMapShape().get();
+            Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
+            Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+            String keyTypeName = getShapeTypeName(keyShape, model);
+            String valueTypeName = getShapeTypeName(valueShape, model);
+            // Deduplicate by both key and value types
+            String mapKey = keyTypeName + "_" + valueTypeName;
+            collected.putIfAbsent(mapKey, mapShape);
+            // Also collect from key and value types (in case they contain nested maps)
+            collectMapsFromShape(keyShape, model, collected);
+            collectMapsFromShape(valueShape, model, collected);
+        } else if (shape.isListShape()) {
+            ListShape listShape = shape.asListShape().get();
+            Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+            collectMapsFromShape(elementShape, model, collected);
+        } else if (shape.isStructureShape()) {
+            collectMapsRecursively(shape.asStructureShape().get(), model, collected);
+        }
+    }
+    
+    /**
      * Recursively collects enum shapes.
      * 
      * @param structure The structure to process
@@ -1328,15 +1515,19 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         
         writer.writeComment("Deserialize " + structure.getId().getName() + " from JSON");
         writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + structType);
-        writer.write("$L json = do", functionName);
-        writer.indent();
         
         List<MemberShape> members = structure.getAllMembers().values().stream().toList();
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
         
         if (members.isEmpty()) {
-            // Empty structure
-            writer.write("{}");
+            // Empty structure - just return the constructor
+            writer.write("$L json = do", functionName);
+            writer.indent();
+            writer.write(baseTypeName);
+            writer.dedent();
         } else {
+            writer.write("$L json = do", functionName);
+            writer.indent();
             // Extract fields
             for (MemberShape member : members) {
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
@@ -1344,8 +1535,17 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 Shape targetShape = model.expectShape(member.getTarget());
                 String deserializer = getDeserializerForType(targetShape, model, clientNamespace);
                 
-                if (member.isRequired()) {
-                    // Required field
+                // Check if field is non-optional - must match StructureGenerator and AwsJsonProtocolGenerator logic
+                // HTTP-bound parameters are always optional in generated types
+                // Fields with @required OR @default are non-optional in the generated type
+                boolean isHttpBound = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class) ||
+                                    member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class) ||
+                                    member.hasTrait(software.amazon.smithy.model.traits.HttpPrefixHeadersTrait.class);
+                boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
+                boolean isNonOptional = (member.isRequired() || hasDefault) && !isHttpBound;
+                
+                if (isNonOptional) {
+                    // Non-optional field (required or has default)
                     writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)",
                             memberName, jsonName, deserializer);
                 } else {
@@ -1355,22 +1555,21 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 }
             }
             
-            // Build structure
+            // Build structure using positional constructor
             writer.write("");
             writer.write("-- Build structure");
-            writer.write("{");
-            writer.indent();
-            for (int i = 0; i < members.size(); i++) {
-                MemberShape member = members.get(i);
+            List<String> fieldNames = new ArrayList<>();
+            for (MemberShape member : members) {
                 String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                boolean isLast = (i == members.size() - 1);
-                writer.write("$L = $L$L", memberName, memberName, isLast ? "" : ",");
+                fieldNames.add(memberName);
             }
+            
+            // Use base type name for constructor (Unison constructor resolution)
+            writer.write("$L $L", baseTypeName, String.join(" ", fieldNames));
+            
             writer.dedent();
-            writer.write("}");
         }
         
-        writer.dedent();
         writer.writeBlankLine();
     }
     
@@ -1408,6 +1607,229 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.writeBlankLine();
     }
     
+    /**
+     * Generates a FromJson deserializer for a union type.
+     * 
+     * <p>For REST-JSON, unions are untagged and we try to parse each variant.
+     * 
+     * @param unionShape The union shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    public void generateUnionDeserializer(software.amazon.smithy.model.shapes.UnionShape unionShape, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        String unionType = UnisonSymbolProvider.toNamespacedTypeName(unionShape.getId().getName(), clientNamespace);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                unionShape.getId().getName() + "FromJson");
+        
+        writer.writeComment("Deserialize " + unionShape.getId().getName() + " from JSON (union type)");
+        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + unionType);
+        writer.write("$L json = do", functionName);
+        writer.indent();
+        
+        // For REST-JSON unions, try to parse as each variant
+        // We attempt each variant and use the first that succeeds
+        List<MemberShape> members = new ArrayList<>(unionShape.getAllMembers().values());
+        
+        if (members.isEmpty()) {
+            writer.write("Exception.raise (Generic.failure \"Empty union\" \"No members\")");
+        } else {
+            // Generate try-parse logic for each member
+            // Use nested match on Either to try each variant
+            for (int i = 0; i < members.size(); i++) {
+                MemberShape member = members.get(i);
+                Shape memberTarget = model.expectShape(member.getTarget());
+                String constructorName = UnisonSymbolProvider.toUnisonTypeName(unionShape.getId().getName()) + "'" +
+                        UnisonSymbolProvider.toUnisonTypeName(member.getMemberName());
+                String memberDeserializer = getDeserializerForType(memberTarget, model, clientNamespace);
+                
+                writer.write("match catch do");
+                writer.indent();
+                writer.write("value = !($L json)", memberDeserializer);
+                writer.write("$L value", constructorName);
+                writer.dedent();
+                writer.write("with");
+                writer.indent();
+                writer.write("Right result -> result");
+                
+                if (i < members.size() - 1) {
+                    writer.write("Left _ ->");
+                    writer.indent();
+                } else {
+                    // Last variant - re-raise the exception
+                    writer.write("Left err -> Exception.raise err");
+                    writer.dedent(); // Close match
+                }
+            }
+            
+            // Close all the nested "Left _ ->" blocks
+            for (int i = 0; i < members.size() - 1; i++) {
+                writer.dedent(); // Close the "Left _ ->" indent
+                writer.dedent(); // Close match indent
+            }
+        }
+        
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates a FromJson deserializer for a map type.
+     * 
+     * <p>Generates a function that parses a JSON object to a Map.
+     * 
+     * @param mapShape The map shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    public void generateMapDeserializer(MapShape mapShape, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        // Get key and value shapes
+        Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
+        Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+        
+        String keyTypeName = getShapeTypeName(keyShape, model);
+        String valueTypeName = getShapeTypeName(valueShape, model);
+        
+        // Generate a unique function name based on both key and value types
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                "mapOf" + keyTypeName + "To" + valueTypeName + "FromJson");
+        
+        String valueDeserializer = getDeserializerForType(valueShape, model, clientNamespace);
+        String keyType = getUnisonTypeForShape(keyShape, model, clientNamespace);
+        String valueType = getUnisonTypeForShape(valueShape, model, clientNamespace);
+        
+        writer.writeComment("Deserialize map from " + keyTypeName + " to " + valueTypeName + " from JSON");
+        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} Map " + keyType + " " + valueType);
+        writer.write("$L json =", functionName);
+        writer.indent();
+        writer.write("do");
+        writer.indent();
+        writer.write("fields = !(aws.json.bridge.parseObject json)");
+        writer.write("valuePairs = !(aws.json.bridge.mapPairsWithException fields $L)", valueDeserializer);
+        
+        // If key is an enum, convert Text keys to enum keys
+        if (keyShape.isEnumShape() || (keyShape.isStringShape() && keyShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            String keyDeserializer = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    keyTypeName + "FromText");
+            writer.write("-- Convert Text keys to enum keys");
+            writer.write("convertKey = cases k -> match ($L k) with", keyDeserializer);
+            writer.indent();
+            writer.write("Some e -> e");
+            writer.write("None -> Exception.raise (Generic.failure \"Invalid enum key\" k)");
+            writer.dedent();
+            writer.write("keyPairs = List.map (cases (k, v) -> (convertKey k, v)) valuePairs");
+            writer.write("Map.fromList keyPairs");
+        } else {
+            writer.write("Map.fromList valuePairs");
+        }
+        
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates a FromJson deserializer for a list type.
+     * 
+     * <p>Generates a function that parses a JSON array to a list.
+     * 
+     * @param listShape The list shape
+     * @param writer The Unison code writer
+     * @param context The code generation context
+     */
+    public void generateListDeserializer(ListShape listShape, UnisonWriter writer, UnisonContext context) {
+        Model model = context.model();
+        String clientNamespace = context.settings().getClientNamespace();
+        
+        // Generate a unique function name based on the element type
+        Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+        String elementTypeName = getShapeTypeName(elementShape, model);
+        String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                "listOf" + elementTypeName + "FromJson");
+        
+        String elementDeserializer = getDeserializerForType(elementShape, model, clientNamespace);
+        
+        writer.writeComment("Deserialize list of " + elementTypeName + " from JSON");
+        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} [" + 
+                             getUnisonTypeForShape(elementShape, model, clientNamespace) + "]");
+        writer.write("$L json =", functionName);
+        writer.indent();
+        writer.write("do");
+        writer.indent();
+        writer.write("items = !(aws.json.bridge.parseArray json)");
+        writer.write("!(aws.json.bridge.mapWithException items $L)", elementDeserializer);
+        writer.dedent();
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Gets a simple type name for a shape (used for naming map/list deserializers).
+     */
+    private String getShapeTypeName(Shape shape, Model model) {
+        // Check enum FIRST (before string check, since enums may be string-based)
+        if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            return shape.getId().getName();
+        } else if (shape.isStringShape()) {
+            return "Text";
+        } else if (shape.isIntegerShape() || shape.isLongShape()) {
+            return "Int";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "Float";
+        } else if (shape.isBooleanShape()) {
+            return "Boolean";
+        } else if (shape.isBlobShape()) {
+            return "Bytes";
+        } else if (shape.isStructureShape()) {
+            return shape.getId().getName();
+        } else if (shape.isListShape()) {
+            // For lists, generate name based on element type
+            ListShape listShape = shape.asListShape().get();
+            Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+            return "ListOf" + getShapeTypeName(elementShape, model);
+        } else if (shape.isMapShape()) {
+            // For maps, generate name based on value type
+            MapShape mapShape = shape.asMapShape().get();
+            Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
+            return "MapOf" + getShapeTypeName(valueShape, model);
+        } else {
+            return "Value";
+        }
+    }
+    
+    /**
+     * Gets the Unison type string for a shape.
+     */
+    private String getUnisonTypeForShape(Shape shape, Model model, String clientNamespace) {
+        // Check enum FIRST (before string check, since enums may be string-based)
+        if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
+        } else if (shape.isStringShape()) {
+            return "Text";
+        } else if (shape.isIntegerShape() || shape.isLongShape() || shape.isShortShape() || shape.isByteShape()) {
+            return "Int";
+        } else if (shape.isFloatShape() || shape.isDoubleShape()) {
+            return "Float";
+        } else if (shape.isBooleanShape()) {
+            return "Boolean";
+        } else if (shape.isBlobShape()) {
+            return "Bytes";
+        } else if (shape.isStructureShape()) {
+            return UnisonSymbolProvider.toNamespacedTypeName(shape.getId().getName(), clientNamespace);
+        } else if (shape.isListShape()) {
+            ListShape listShape = shape.asListShape().get();
+            Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+            return "[" + getUnisonTypeForShape(elementShape, model, clientNamespace) + "]";
+        } else {
+            return "Text"; // fallback
+        }
+    }
+    
     @Override
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
@@ -1441,46 +1863,58 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             writer.write("");
         }
         
-        // Build output structure
-        writer.write("-- Build output structure");
-        writer.write("{");
-        writer.indent();
-        
+        // Extract field values
         List<MemberShape> members = output.getAllMembers().values().stream().toList();
-        for (int i = 0; i < members.size(); i++) {
-            MemberShape member = members.get(i);
+        for (MemberShape member : members) {
             String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-            boolean isLast = (i == members.size() - 1);
             
             // Check if member is HTTP-bound
             if (member.hasTrait(HttpHeaderTrait.class)) {
                 // Extract from response header
                 generateResponseHeaderExtraction(member, model, writer, context);
             } else if (member.hasTrait(HttpResponseCodeTrait.class)) {
-                // Extract status code
-                writer.write("$L = Http.Response.statusCode response$L", memberName, isLast ? "" : ",");
+                // Extract status code (convert Nat to Int)
+                writer.write("$L = Nat.toInt (Http.Response.statusCode response)", memberName);
             } else if (member.hasTrait(HttpPayloadTrait.class)) {
                 // Extract raw payload
-                generateResponsePayloadExtraction(member, model, writer, context, isLast);
+                generateResponsePayloadExtraction(member, model, writer, context);
             } else {
                 // Extract from JSON body
                 String jsonName = getJsonName(member);
                 String deserializer = getJsonDeserializer(member, model, clientNamespace);
                 
-                if (member.isRequired()) {
+                // Check if field is non-optional (required or has default value)
+                boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
+                boolean isNonOptional = member.isRequired() || hasDefault;
+                
+                if (isNonOptional) {
                     // Required field - use extractField (raises exception if missing)
-                    writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)$L",
-                            memberName, jsonName, deserializer, isLast ? "" : ",");
+                    writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)",
+                            memberName, jsonName, deserializer);
                 } else {
                     // Optional field - use extractOptionalField (returns None if missing)
-                    writer.write("$L = aws.json.bridge.extractOptionalField \"$L\" json $L$L",
-                            memberName, jsonName, deserializer, isLast ? "" : ",");
+                    writer.write("$L = aws.json.bridge.extractOptionalField \"$L\" json $L",
+                            memberName, jsonName, deserializer);
                 }
             }
         }
         
-        writer.dedent();
-        writer.write("}");
+        // Build output structure using positional constructor
+        writer.write("");
+        writer.write("-- Build output structure");
+        List<String> fieldNames = new ArrayList<>();
+        for (MemberShape member : members) {
+            String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+            fieldNames.add(memberName);
+        }
+        
+        // Use base type name for constructor (Unison constructor resolution)
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(output.getId().getName());
+        if (fieldNames.isEmpty()) {
+            writer.write(baseTypeName);
+        } else {
+            writer.write("$L $L", baseTypeName, String.join(" ", fieldNames));
+        }
         
         writer.dedent();
         writer.writeBlankLine();
@@ -1526,30 +1960,53 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      * @param model The Smithy model
      * @param writer The Unison code writer
      * @param context The code generation context
-     * @param isLast Whether this is the last member
      */
     private void generateResponsePayloadExtraction(MemberShape member, Model model,
-                                                     UnisonWriter writer, UnisonContext context, boolean isLast) {
+                                                     UnisonWriter writer, UnisonContext context) {
         String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
         Shape targetShape = model.expectShape(member.getTarget());
         String clientNamespace = context.settings().getClientNamespace();
+        boolean isOptional = !member.isRequired() && !member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
         
         if (targetShape.isBlobShape()) {
             // Blob payload - use response body directly
-            writer.write("$L = Http.Response.body response$L", memberName, isLast ? "" : ",");
+            if (isOptional) {
+                writer.write("body = Http.Response.body response");
+                writer.write("$L = if Bytes.size body Nat.== 0 then None else Some body", memberName);
+            } else {
+                writer.write("$L = Http.Response.body response", memberName);
+            }
         } else if (targetShape.isStringShape()) {
             // String payload - convert from bytes
-            writer.write("$L = aws.http.bytesToText (Http.Response.body response)$L", memberName, isLast ? "" : ",");
+            if (isOptional) {
+                writer.write("body = Http.Response.body response");
+                writer.write("$L = if Bytes.size body Nat.== 0 then None else Some (aws.http.bytesToText body)", memberName);
+            } else {
+                writer.write("$L = aws.http.bytesToText (Http.Response.body response)", memberName);
+            }
         } else if (targetShape.isStructureShape() || targetShape.isUnionShape()) {
             // Structure/Union payload - parse as JSON
             String deserializer = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     targetShape.getId().getName() + "FromJson");
             writer.write("payloadText = aws.http.bytesToText (Http.Response.body response)");
-            writer.write("payloadJson = !(aws.json.parseJson payloadText)");
-            writer.write("$L = !($L payloadJson)$L", memberName, deserializer, isLast ? "" : ",");
+            if (isOptional) {
+                writer.write("$L = if Text.size payloadText Nat.== 0 then None else", memberName);
+                writer.indent();
+                writer.write("payloadJson = !(aws.json.parseJson payloadText)");
+                writer.write("Some (!($L payloadJson))", deserializer);
+                writer.dedent();
+            } else {
+                writer.write("payloadJson = !(aws.json.parseJson payloadText)");
+                writer.write("$L = !($L payloadJson)", memberName, deserializer);
+            }
         } else {
             // Fallback - treat as text
-            writer.write("$L = aws.http.bytesToText (Http.Response.body response)$L", memberName, isLast ? "" : ",");
+            if (isOptional) {
+                writer.write("body = Http.Response.body response");
+                writer.write("$L = if Bytes.size body Nat.== 0 then None else Some (aws.http.bytesToText body)", memberName);
+            } else {
+                writer.write("$L = aws.http.bytesToText (Http.Response.body response)", memberName);
+            }
         }
     }
     
@@ -1592,35 +2049,33 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             // Integer types - use parseInt
             return "aws.json.bridge.parseInt";
         } else if (shape.isFloatShape() || shape.isDoubleShape()) {
-            // Float types - use parseFloat (TODO: implement in bridge)
-            return "aws.json.bridge.parseInt"; // Fallback to parseInt for now
+            // Float types - use parseFloat
+            return "aws.json.bridge.parseFloat";
         } else if (shape.isBooleanShape()) {
             // Boolean - use parseBoolean
             return "aws.json.bridge.parseBoolean";
         } else if (shape.isBlobShape()) {
-            // Blob - use parseString then base64 decode (TODO: implement)
-            return "aws.json.bridge.parseString";
+            // Blob - parse as base64-encoded string and decode to Bytes
+            return "aws.json.bridge.parseBlob";
         } else if (shape.isTimestampShape()) {
             // Timestamp - parse as string (ISO 8601 in REST-JSON)
             return "aws.json.bridge.parseString";
         } else if (shape.isListShape()) {
-            // List - generate inline list parser
+            // List - use generated list deserializer function
             ListShape listShape = shape.asListShape().get();
             Shape elementShape = model.expectShape(listShape.getMember().getTarget());
-            String elementDeserializer = getDeserializerForType(elementShape, model, clientNamespace);
-            
-            // Generate inline list parser: json -> do items = !(parseArray json); List.map (item -> !(deserializer item)) items
-            return "(json -> do items = !(aws.json.bridge.parseArray json); List.map (item -> !(" + 
-                   elementDeserializer + " item)) items)";
+            String elementTypeName = getShapeTypeName(elementShape, model);
+            return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    "listOf" + elementTypeName + "FromJson");
         } else if (shape.isMapShape()) {
-            // Map - generate inline map parser
+            // Map - use generated map deserializer function
             MapShape mapShape = shape.asMapShape().get();
+            Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
             Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
-            String valueDeserializer = getDeserializerForType(valueShape, model, clientNamespace);
-            
-            // Generate inline map parser: json -> do fields = !(parseObject json); List.map (cases (k, v) -> (k, !(deserializer v))) fields
-            return "(json -> do fields = !(aws.json.bridge.parseObject json); List.map (cases (k, v) -> (k, !(" + 
-                   valueDeserializer + " v))) fields)";
+            String keyTypeName = getShapeTypeName(keyShape, model);
+            String valueTypeName = getShapeTypeName(valueShape, model);
+            return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    "mapOf" + keyTypeName + "To" + valueTypeName + "FromJson");
         } else if (shape.isStructureShape()) {
             // Structure - use generated FromJson deserializer
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
