@@ -171,14 +171,34 @@ public final class ClientModuleWriter {
             gen.generateErrorParser(firstOp, writer, context);
             
             // For AWS JSON and AWS Query protocols, generate standalone serializer/deserializer functions
-            // (REST protocols do inline serialization within each operation)
+            // For REST-JSON, generate response parsers and request serializers separately
             if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1 ||
-                protocol == AwsProtocol.AWS_QUERY) {
+                protocol == AwsProtocol.AWS_QUERY || protocol == AwsProtocol.REST_JSON_1) {
                 writer.writeComment("=== Request/Response Serializers ===");
                 writer.writeBlankLine();
                 
+                // Collect all operations (direct service operations + resource operations)
+                Set<OperationShape> allOperations = new HashSet<>();
                 for (ShapeId opId : service.getOperations()) {
-                    OperationShape operation = model.expectShape(opId, OperationShape.class);
+                    allOperations.add(model.expectShape(opId, OperationShape.class));
+                }
+                for (ShapeId resourceId : service.getResources()) {
+                    ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+                    collectResourceOperations(resource, allOperations);
+                }
+                
+                // For REST-JSON, generate nested structure serializers first to avoid duplicates
+                if (protocol == AwsProtocol.REST_JSON_1 && gen instanceof io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator) {
+                    Set<StructureShape> nestedStructures = collectNestedStructuresForSerialization(allOperations);
+                    io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator jsonGen = 
+                            (io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator) gen;
+                    for (StructureShape structure : nestedStructures) {
+                        jsonGen.generateStructureSerializer(structure, writer, context);
+                    }
+                }
+                
+                // Generate operation-specific request serializers and response deserializers
+                for (OperationShape operation : allOperations) {
                     gen.generateRequestSerializer(operation, writer, context);
                     gen.generateResponseDeserializer(operation, writer, context);
                 }
@@ -799,7 +819,8 @@ public final class ClientModuleWriter {
      * Generates JSON deserializers for REST-JSON protocol.
      * 
      * <p>For REST-JSON, structures and enums need FromJson deserializers
-     * so they can be parsed from response bodies.
+     * so they can be parsed from response bodies. Only generates deserializers
+     * for structures that appear in operation outputs.
      */
     private void generateRestJsonDeserializers(Set<StructureShape> structures, Set<Shape> enums, UnisonWriter writer) {
         if (structures.isEmpty() && enums.isEmpty()) {
@@ -816,20 +837,207 @@ public final class ClientModuleWriter {
         io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator jsonGen = 
                 (io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator) protocolGenerator.get();
         
+        // Filter structures to only include those that appear in operation outputs
+        Set<StructureShape> outputStructures = new HashSet<>();
+        Set<ShapeId> visited = new HashSet<>();
+        
+        // Collect from direct service operations
+        for (ShapeId opId : service.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                collectOutputStructures(outputId, outputStructures, visited);
+            });
+        }
+        
+        // Collect from resource operations
+        for (ShapeId resourceId : service.getResources()) {
+            ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+            collectOutputStructuresFromResource(resource, outputStructures, visited);
+        }
+        
         writer.writeComment("=== JSON Deserializers ===");
         writer.writeBlankLine();
         
-        // Generate enum deserializers first (they may be referenced by structures)
+        // Generate list deserializers first (they may be referenced by maps and structures)
+        Set<software.amazon.smithy.model.shapes.ListShape> lists = jsonGen.collectListsNeedingDeserializers(service, model);
+        for (software.amazon.smithy.model.shapes.ListShape listShape : lists) {
+            jsonGen.generateListDeserializer(listShape, writer, context);
+        }
+        
+        // Generate map deserializers (they may be referenced by structures)
+        Set<software.amazon.smithy.model.shapes.MapShape> maps = jsonGen.collectMapsNeedingDeserializers(service, model);
+        for (software.amazon.smithy.model.shapes.MapShape mapShape : maps) {
+            jsonGen.generateMapDeserializer(mapShape, writer, context);
+        }
+        
+        // Generate enum deserializers (they may be referenced by structures)
         for (Shape enumShape : enums) {
             if (enumShape.isEnumShape() || 
                 (enumShape.isStringShape() && enumShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
                 jsonGen.generateEnumDeserializer(enumShape.getId(), writer, context);
+            } else if (enumShape.isUnionShape()) {
+                // Generate union deserializers
+                jsonGen.generateUnionDeserializer(enumShape.asUnionShape().get(), writer, context);
             }
         }
         
-        // Generate structure deserializers
-        for (StructureShape structure : structures) {
+        // Generate structure deserializers (only for output structures)
+        for (StructureShape structure : outputStructures) {
             jsonGen.generateStructureDeserializer(structure, writer, context);
+        }
+    }
+    
+    /**
+     * Collects structures from an output shape recursively.
+     */
+    private void collectOutputStructures(ShapeId shapeId, Set<StructureShape> structures, Set<ShapeId> visited) {
+        if (visited.contains(shapeId)) {
+            return;
+        }
+        visited.add(shapeId);
+        
+        Shape shape = model.expectShape(shapeId);
+        
+        if (shape instanceof StructureShape) {
+            StructureShape structure = (StructureShape) shape;
+            structures.add(structure);
+            
+            // Recursively collect from members
+            for (MemberShape member : structure.getAllMembers().values()) {
+                collectOutputStructures(member.getTarget(), structures, visited);
+            }
+        } else if (shape instanceof ListShape) {
+            ListShape listShape = (ListShape) shape;
+            collectOutputStructures(listShape.getMember().getTarget(), structures, visited);
+        } else if (shape instanceof MapShape) {
+            MapShape mapShape = (MapShape) shape;
+            collectOutputStructures(mapShape.getValue().getTarget(), structures, visited);
+        } else if (shape instanceof software.amazon.smithy.model.shapes.UnionShape) {
+            // Unions can reference structures in their members
+            software.amazon.smithy.model.shapes.UnionShape unionShape = (software.amazon.smithy.model.shapes.UnionShape) shape;
+            for (MemberShape member : unionShape.getAllMembers().values()) {
+                collectOutputStructures(member.getTarget(), structures, visited);
+            }
+        }
+    }
+    
+    /**
+     * Collects output structures from a resource and its operations recursively.
+     */
+    private void collectOutputStructuresFromResource(ResourceShape resource, Set<StructureShape> structures, Set<ShapeId> visited) {
+        // Collect from all resource operations
+        for (ShapeId opId : resource.getAllOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            operation.getOutput().ifPresent(outputId -> {
+                collectOutputStructures(outputId, structures, visited);
+            });
+        }
+        
+        // Recursively collect from child resources
+        for (ShapeId childResourceId : resource.getResources()) {
+            ResourceShape childResource = model.expectShape(childResourceId, ResourceShape.class);
+            collectOutputStructuresFromResource(childResource, structures, visited);
+        }
+    }
+    
+    /**
+     * Collects all operations from a resource and its child resources recursively.
+     */
+    private void collectResourceOperations(ResourceShape resource, Set<OperationShape> operations) {
+        // Collect all operations from this resource
+        for (ShapeId opId : resource.getAllOperations()) {
+            operations.add(model.expectShape(opId, OperationShape.class));
+        }
+        
+        // Recursively collect from child resources
+        for (ShapeId childResourceId : resource.getResources()) {
+            ResourceShape childResource = model.expectShape(childResourceId, ResourceShape.class);
+            collectResourceOperations(childResource, operations);
+        }
+    }
+    
+    /**
+     * Collects all nested structures that need serializers for REST-JSON.
+     * These are structures referenced by input structure fields, including @httpPayload structures.
+     * Does NOT include the operation input structures themselves.
+     */
+    private Set<StructureShape> collectNestedStructuresForSerialization(Set<OperationShape> operations) {
+        Set<StructureShape> structures = new HashSet<>();
+        Set<ShapeId> visited = new HashSet<>();
+        Set<ShapeId> inputStructures = new HashSet<>();
+        
+        // First, collect all operation input structure IDs
+        for (OperationShape operation : operations) {
+            operation.getInput().ifPresent(inputStructures::add);
+        }
+        
+        // Collect @httpPayload structures first (these would otherwise be generated multiple times)
+        for (OperationShape operation : operations) {
+            if (operation.getInput().isPresent()) {
+                StructureShape input = model.expectShape(operation.getInput().get(), StructureShape.class);
+                Optional<MemberShape> payloadMember = io.smithy.unison.codegen.protocols.ProtocolUtils.getPayloadMember(input);
+                if (payloadMember.isPresent()) {
+                    Shape payloadShape = model.expectShape(payloadMember.get().getTarget());
+                    if (payloadShape.isStructureShape()) {
+                        collectNestedStructuresFromShape(payloadShape.getId(), structures, visited, inputStructures);
+                    }
+                }
+            }
+        }
+        
+        // Then collect other nested structures (excluding operation inputs)
+        for (OperationShape operation : operations) {
+            if (operation.getInput().isPresent()) {
+                StructureShape input = model.expectShape(operation.getInput().get(), StructureShape.class);
+                // Collect from members, but don't add the input itself
+                for (MemberShape member : input.getAllMembers().values()) {
+                    // Skip @httpPayload members as they're already handled above
+                    if (!member.hasTrait(software.amazon.smithy.model.traits.HttpPayloadTrait.class)) {
+                        collectNestedStructuresFromShape(member.getTarget(), structures, visited, inputStructures);
+                    }
+                }
+            }
+        }
+        
+        return structures;
+    }
+    
+    /**
+     * Collects nested structures from any shape type.
+     * Excludes operation input structures.
+     */
+    private void collectNestedStructuresFromShape(ShapeId shapeId, 
+                                                    Set<StructureShape> collected, 
+                                                    Set<ShapeId> visited,
+                                                    Set<ShapeId> inputStructures) {
+        if (visited.contains(shapeId)) {
+            return;
+        }
+        visited.add(shapeId);
+        
+        Shape shape = model.expectShape(shapeId);
+        
+        if (shape instanceof StructureShape) {
+            StructureShape structure = (StructureShape) shape;
+            // Only add if it's NOT an operation input and has members to serialize
+            if (!inputStructures.contains(shapeId) && !structure.getAllMembers().isEmpty()) {
+                collected.add(structure);
+                // Recursively collect from its members
+                for (MemberShape member : structure.getAllMembers().values()) {
+                    collectNestedStructuresFromShape(member.getTarget(), collected, visited, inputStructures);
+                }
+            }
+        } else if (shape instanceof ListShape) {
+            ListShape listShape = (ListShape) shape;
+            collectNestedStructuresFromShape(listShape.getMember().getTarget(), collected, visited, inputStructures);
+        } else if (shape instanceof MapShape) {
+            MapShape mapShape = (MapShape) shape;
+            collectNestedStructuresFromShape(mapShape.getValue().getTarget(), collected, visited, inputStructures);
+        } else if (shape instanceof software.amazon.smithy.model.shapes.UnionShape) {
+            software.amazon.smithy.model.shapes.UnionShape unionShape = (software.amazon.smithy.model.shapes.UnionShape) shape;
+            for (MemberShape member : unionShape.getAllMembers().values()) {
+                collectNestedStructuresFromShape(member.getTarget(), collected, visited, inputStructures);
+            }
         }
     }
     
