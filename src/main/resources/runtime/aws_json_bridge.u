@@ -219,9 +219,10 @@ expectBoolean = cases
   Use with extractField for required string fields.
 }}
 parseString : JsonValue -> '{Exception} Text
-parseString = cases
-  JsonString s -> '(s)
-  v -> Exception.raise (Generic.failure "Expected string" v)
+parseString json = 'let
+  match json with
+    JsonString s -> s
+    v -> Exception.raise (Generic.failure "Expected string" v)
 
 {{
   Parse a JSON value as an integer.
@@ -230,11 +231,12 @@ parseString = cases
   Use with extractField for required integer fields.
 }}
 parseInt : JsonValue -> '{Exception} Int
-parseInt = cases
-  JsonNumber n -> match Float.toInt n with
-    Some i -> '(i)
-    None -> Exception.raise (Generic.failure "Number not an integer" n)
-  v -> Exception.raise (Generic.failure "Expected number" v)
+parseInt json = 'let
+  match json with
+    JsonNumber n -> match Float.toInt n with
+      Some i -> i
+      None -> Exception.raise (Generic.failure "Number not an integer" n)
+    v -> Exception.raise (Generic.failure "Expected number" v)
 
 {{
   Parse a JSON value as a boolean.
@@ -243,9 +245,22 @@ parseInt = cases
   Use with extractField for required boolean fields.
 }}
 parseBoolean : JsonValue -> '{Exception} Boolean
-parseBoolean = cases
-  JsonBoolean b -> '(b)
-  v -> Exception.raise (Generic.failure "Expected boolean" v)
+parseBoolean json = 'let
+  match json with
+    JsonBoolean b -> b
+    v -> Exception.raise (Generic.failure "Expected boolean" v)
+
+{{
+  Parse a JSON value as a float.
+  
+  Raises an exception if the value is not a number.
+  Use with extractField for required float fields.
+}}
+parseFloat : JsonValue -> '{Exception} Float
+parseFloat json = 'let
+  match json with
+    JsonNumber f -> f
+    v -> Exception.raise (Generic.failure "Expected number" v)
 
 {{
   Parse a JSON value as an array.
@@ -254,9 +269,10 @@ parseBoolean = cases
   Use with extractField for required array fields.
 }}
 parseArray : JsonValue -> '{Exception} [JsonValue]
-parseArray = cases
-  JsonArray items -> '(items)
-  v -> Exception.raise (Generic.failure "Expected array" v)
+parseArray json = 'let
+  match json with
+    JsonArray items -> items
+    v -> Exception.raise (Generic.failure "Expected array" v)
 
 {{
   Parse a JSON value as an object.
@@ -265,9 +281,57 @@ parseArray = cases
   Use with extractField for required object fields.
 }}
 parseObject : JsonValue -> '{Exception} [(Text, JsonValue)]
-parseObject = cases
-  JsonObject fields -> '(fields)
-  v -> Exception.raise (Generic.failure "Expected object" v)
+parseObject json = 'let
+  match json with
+    JsonObject fields -> fields
+    v -> Exception.raise (Generic.failure "Expected object" v)
+
+{{
+  Parse a JSON value as a blob (base64-encoded bytes).
+  
+  Raises an exception if the value is not a string or cannot be decoded from base64.
+  Use with extractField for required blob fields.
+}}
+parseBlob : JsonValue -> '{Exception} Bytes
+parseBlob json = 'let
+  match json with
+    JsonString s -> 
+      match builtin.Bytes.fromBase64 (toUtf8 s) with
+        Right bytes -> bytes
+        Left err -> Exception.raise (Generic.failure "Invalid base64 encoding" err)
+    v -> Exception.raise (Generic.failure "Expected base64-encoded string for blob" v)
+
+{{
+  Map a list of JSON values with an exception-raising deserializer.
+  
+  This function properly sequences exception-raising deserializations for list elements.
+  Use this when deserializing lists where each element needs to be parsed with an exception-raising function.
+}}
+mapWithException : [a] -> (a -> '{Exception} b) -> '{Exception} [b]
+mapWithException items deserializer = 'let
+  go = cases
+    [] -> []
+    h +: t -> 
+      head = !(deserializer h)
+      tail = go t
+      head List.+: tail
+  go items
+
+{{
+  Map a list of key-value pairs with an exception-raising value deserializer.
+  
+  This function properly sequences exception-raising deserializations for map values.
+  Use this when deserializing maps where values need to be parsed with an exception-raising function.
+}}
+mapPairsWithException : [(Text, JsonValue)] -> (JsonValue -> '{Exception} a) -> '{Exception} [(Text, a)]
+mapPairsWithException pairs valueDeserializer = 'let
+  go = cases
+    [] -> []
+    (k, v) +: t ->
+      value = !(valueDeserializer v)
+      tail = go t
+      (k, value) List.+: tail
+  go pairs
 
 -- =============================================================================
 -- Convenience Functions
