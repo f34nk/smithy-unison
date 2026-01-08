@@ -370,6 +370,11 @@ public final class ClientModuleWriter {
             if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1) {
                 generateJsonSerializers(structures, enums, writer);
             }
+            
+            // Generate JSON deserializers for REST-JSON protocol
+            if (protocol == AwsProtocol.REST_JSON_1) {
+                generateRestJsonDeserializers(structures, enums, writer);
+            }
         }
         
         // Generate error types
@@ -787,6 +792,44 @@ public final class ClientModuleWriter {
                     jsonGen.generateUnionDeserializer(unionShape, writer, context);
                 }
             }
+        }
+    }
+    
+    /**
+     * Generates JSON deserializers for REST-JSON protocol.
+     * 
+     * <p>For REST-JSON, structures and enums need FromJson deserializers
+     * so they can be parsed from response bodies.
+     */
+    private void generateRestJsonDeserializers(Set<StructureShape> structures, Set<Shape> enums, UnisonWriter writer) {
+        if (structures.isEmpty() && enums.isEmpty()) {
+            return;
+        }
+        
+        // Get the protocol generator
+        Optional<ProtocolGenerator> protocolGenerator = ProtocolGeneratorFactory.getGenerator(
+                AwsProtocolDetector.detectProtocol(service));
+        if (protocolGenerator.isEmpty() || !(protocolGenerator.get() instanceof io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator)) {
+            return;
+        }
+        
+        io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator jsonGen = 
+                (io.smithy.unison.codegen.protocols.RestJsonProtocolGenerator) protocolGenerator.get();
+        
+        writer.writeComment("=== JSON Deserializers ===");
+        writer.writeBlankLine();
+        
+        // Generate enum deserializers first (they may be referenced by structures)
+        for (Shape enumShape : enums) {
+            if (enumShape.isEnumShape() || 
+                (enumShape.isStringShape() && enumShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+                jsonGen.generateEnumDeserializer(enumShape.getId(), writer, context);
+            }
+        }
+        
+        // Generate structure deserializers
+        for (StructureShape structure : structures) {
+            jsonGen.generateStructureDeserializer(structure, writer, context);
         }
     }
     

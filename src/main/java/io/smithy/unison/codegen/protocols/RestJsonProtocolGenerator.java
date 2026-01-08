@@ -1318,7 +1318,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      * @param writer The Unison code writer
      * @param context The code generation context
      */
-    private void generateStructureDeserializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
+    public void generateStructureDeserializer(StructureShape structure, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
         
@@ -1383,7 +1383,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      * @param writer The Unison code writer
      * @param context The code generation context
      */
-    private void generateEnumDeserializer(ShapeId enumId, UnisonWriter writer, UnisonContext context) {
+    public void generateEnumDeserializer(ShapeId enumId, UnisonWriter writer, UnisonContext context) {
         String clientNamespace = context.settings().getClientNamespace();
         
         String enumType = UnisonSymbolProvider.toNamespacedTypeName(enumId.getName(), clientNamespace);
