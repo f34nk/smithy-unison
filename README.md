@@ -31,11 +31,13 @@ Reference: https://smithy.io/2.0/index.html
   - Nested structure serializer/deserializer generation
   - Error parsing (JSON error responses with `__type` field)
   - Service error union types with exception handling
-- **REST-JSON protocol** (EventBridge, Step Functions, API Gateway)
-  - Full operation implementation with HTTP bindings and JSON serialization
+- **REST-JSON protocol** (EventBridge, Step Functions, API Gateway, Lambda)
+  - Full operation implementation with HTTP bindings and JSON serialization/deserialization
+  - Complete response deserializer generation (structures, enums, lists, maps, unions)
   - Path parameter substitution and query string building
   - HTTP header extraction and body serialization
   - Error parsing with multiple format support
+  - Resource operation support
   - Reserved keyword escaping (backtick syntax)
 - **AWS Query protocol** (SQS, SNS, RDS)
   - Full operation implementation with XML request serialization and response deserialization
@@ -58,7 +60,7 @@ Reference: https://smithy.io/2.0/index.html
 ### AWS SDK Support
 - Credential provider chain (environment variables, config files)
 - Retry logic with exponential backoff and jitter
-- Pagination with automatic helper function generation
+- Pagination with automatic helper function generation and token field inference
 
 Check out [AWS_SDK_SUPPORT.md](https://github.com/f34nk/smithy-unison/blob/main/AWS_SDK_SUPPORT.md) with a full list of AWS SDK features and their support status in smithy-unison.
 
@@ -91,16 +93,16 @@ Run any example with:
 make examples/<example_name> # <----- without trailing slash
 ```
 
-The ***-demo** examples generate client code from the official [AWS SDK smithy models](https://github.com/aws/api-models-aws/tree/main/models/) (in **JSON AST** format) and create AWS infrastructure using [localstack](https://github.com/localstack/localstack). The demo app then executes functions from the generated client against the mocked infrastructure.
+The ***-demo** examples generate client code from the official [AWS SDK smithy models](https://github.com/aws/api-models-aws/tree/main/models/) and create AWS infrastructure using [LocalStack](https://github.com/localstack/localstack). The demo app then executes functions from the generated client against the mocked infrastructure.
 
-|  |    |
-|--|:--:|
-| `make examples/s3-demo` | [s3-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u)  |
-| `make examples/dynamodb-demo` | [dynamodb-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u)  |
-| `make examples/sqs-demo` | [sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
-| `make examples/kinesis-demo` | [kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
-| `make examples/sns-demo` | [sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
-| `make examples/lambda-demo` | [lambda-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/lambda-demo/src/main.u)  |
+|  |
+|--|
+| make [examples/s3-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u)  |
+| make [examples/dynamodb-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u)  |
+| make [examples/sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
+| make [examples/kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
+| make [examples/sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
+| make [examples/lambda-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/lambda-demo/src/main.u)  |
 
 Run integration-test:
 
@@ -108,7 +110,7 @@ Run integration-test:
 make integration-test/s3
 ```
 
-The **integration-test** installs and compiles the [Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.md) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked infrastructure.
+The **integration-test** [installs and compiles the Unison AWS library](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/compile-with-lib.md) (generated with `smithy-unison` and released to [Unison Share @f34nk/aws](https://share.unison-lang.org/@f34nk/aws)) and runs the [S3 demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u) against a mocked infrastructure.
 
 ```bash
 make integration-test/dynamodb
@@ -159,7 +161,8 @@ For AWS services, additional runtime modules are copied:
 - `aws_sigv4.u` - AWS Signature V4 request signing
 - `aws_xml.u` - XML encoding/decoding (REST-XML protocol only)
 - `aws_json.u` - JSON encoding/decoding with DynamoDB AttributeValue support
-- `aws_json_bridge.u` - JSON-HTTP integration for AWS JSON protocols
+- `aws_json_bridge.u` - JSON-HTTP integration with parsing utilities (parseFloat, parseBlob, mapWithException)
+- `aws_restjson.u` - REST-JSON URL building and parameter handling
 - `aws_http.u` - HTTP request/response utilities
 - `aws_http_bridge.u` - Bridge for @unison/http library (enables real HTTP)
 - `aws_s3.u` - S3-specific URL routing (S3 only)

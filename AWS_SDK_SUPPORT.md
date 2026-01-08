@@ -18,7 +18,7 @@ General SDK features not specific to AWS traits.
 |---------|--------|-------|
 | HTTP Protocol Bindings | ✅ | `@httpLabel`, `@httpHeader`, `@httpQuery`, `@httpPayload` implemented in RestXmlProtocolGenerator |
 | Input Validation | ❌ | `@required` trait validation |
-| Pagination Helpers | ✅ | Auto-generated pagination functions for `@paginated` operations |
+| Pagination Helpers | ✅ | Auto-generated pagination functions for `@paginated` operations with automatic token field inference |
 | Retry with Exponential Backoff | ✅ | Configurable retry with jitter in aws_http.u |
 | Error Handling | ✅ | Error parsing implemented for REST-XML and AWS JSON protocols |
 | HTTP Prefix Headers | ❌ | `@httpPrefixHeaders` trait not implemented |
@@ -41,7 +41,7 @@ Protocol implementations for AWS services.
 | [AWS JSON 1.0 protocol](https://smithy.io/2.0/aws/protocols/aws-json-1_0-protocol.html) | ✅ | Implemented with request/response serialization and error parsing |
 | [AWS JSON 1.1 protocol](https://smithy.io/2.0/aws/protocols/aws-json-1_1-protocol.html) | ✅ | Implemented with request/response serialization and error parsing |
 | [AWS Query protocol](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html) | ✅ | Implemented with form-encoded request serialization, XML response parsing, and error handling |
-| [AWS restJson1 protocol](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html) | ✅ | Fully implemented with HTTP bindings, JSON serialization, error parsing, and EventBridge validation |
+| [AWS restJson1 protocol](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html) | ✅ | Fully implemented with HTTP bindings, JSON serialization/deserialization (structures, enums, lists, maps, unions), error parsing, and resource operation support |
 | [AWS restXml protocol](https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html) | ✅ | Implemented with operation generation, request/response serialization |
 
 ---

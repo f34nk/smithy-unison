@@ -131,7 +131,8 @@ public final class ClientModuleWriter {
             generateModelTypes(writer);
         }
         
-        // Generate operations
+        // Generate operations (including resource operations)
+        // For REST-JSON, generate nested structure serializers upfront
         // Copy runtime modules (only for AWS services)
         copyRuntimeModules(protocol);
     }
@@ -245,7 +246,7 @@ public interface ProtocolGenerator {
 |----------|----------------|--------|----------|
 | REST-XML | `RestXmlProtocolGenerator` | ✅ | S3, CloudFront, Route 53 |
 | AWS JSON 1.0/1.1 | `AwsJsonProtocolGenerator` | ✅ | DynamoDB, Lambda, Kinesis |
-| REST-JSON | `RestJsonProtocolGenerator` | ✅ | EventBridge, Step Functions, API Gateway |
+| REST-JSON | `RestJsonProtocolGenerator` | ✅ | EventBridge, Step Functions, API Gateway, Lambda |
 | AWS Query | `AwsQueryProtocolGenerator` | ✅ | SQS, SNS, RDS, CloudWatch |
 | EC2 Query | `Ec2QueryProtocolGenerator` | ✅ | EC2, Auto Scaling, ELB Classic |
 
@@ -372,7 +373,7 @@ The generator conditionally generates AWS-specific code based on service traits:
 **Status:** ✅ Fully Implemented  
 **Generator:** `RestJsonProtocolGenerator.java`  
 **Trait:** `aws.protocols#restJson1`  
-**Services:** EventBridge, Step Functions, API Gateway, Lambda (streaming), AppSync, IoT, Cognito, WAF
+**Services:** EventBridge, Step Functions, API Gateway, Lambda, AppSync, IoT, Cognito, WAF
 
 #### Overview
 
@@ -466,8 +467,22 @@ The generator extracts HTTP bindings from Smithy traits to determine where each 
 │     │ Body         │    │ Headers      │    │ Output     │ │
 │     └──────────────┘    └──────────────┘    └────────────┘ │
 │                                                              │
+│  4. Deserializer Generation                                  │
+│     ┌──────────────┐    ┌──────────────┐    ┌────────────┐ │
+│     │ Generate     │───▶│ Generate     │───▶│ Generate   │ │
+│     │ List/Map     │    │ Enum/Union   │    │ Structure  │ │
+│     │ Deserializers│    │ Deserializers│    │ Deserial.  │ │
+│     └──────────────┘    └──────────────┘    └────────────┘ │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+The generator produces complete JSON deserializer functions for:
+- **Structures**: Field-by-field parsing with exception handling
+- **Enums**: String-to-enum conversion with validation
+- **Unions**: Tagged union deserialization
+- **Lists**: Element-wise deserialization with `mapWithException`
+- **Maps**: Key-value pair deserialization with `mapPairsWithException`
 
 #### Error Handling
 
@@ -512,6 +527,7 @@ Optional.flatMap (`type` -> ...) typeOpt
 The REST-JSON protocol requires these runtime modules:
 - `aws_restjson.u` - URL building, path/query parameter handling
 - `aws_json.u` - JSON serialization/deserialization
+- `aws_json_bridge.u` - JSON parsing utilities (`parseFloat`, `parseBlob`, `mapWithException`, `mapPairsWithException`)
 - `aws_http.u` - HTTP client with retry
 - `aws_sigv4.u` - SigV4 request signing
 

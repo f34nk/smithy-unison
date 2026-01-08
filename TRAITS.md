@@ -57,7 +57,7 @@ AWS-specific protocol traits.
 | [`aws.protocols#awsJson1_1`](https://smithy.io/2.0/aws/protocols/aws-json-1_1-protocol.html#aws-protocols-awsjson1_1-trait) | ✅ | AWS JSON 1.1 protocol (Lambda, ECS) - Implemented in AwsJsonProtocolGenerator |
 | [`aws.protocols#awsQuery`](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html#aws-protocols-awsquery-trait) | ✅ | AWS Query protocol (SQS, SNS, RDS) - Implemented in AwsQueryProtocolGenerator |
 | [`aws.protocols#ec2Query`](https://smithy.io/2.0/aws/protocols/aws-ec2-query-protocol.html#aws-protocols-ec2query-trait) | ✅ | EC2 Query protocol - Implemented in Ec2QueryProtocolGenerator |
-| [`aws.protocols#restJson1`](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#aws-protocols-restjson1-trait) | ❌ | REST-JSON protocol (API Gateway, Step Functions) |
+| [`aws.protocols#restJson1`](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#aws-protocols-restjson1-trait) | ✅ | REST-JSON protocol (API Gateway, Step Functions, Lambda) - Implemented in RestJsonProtocolGenerator |
 | [`aws.protocols#restXml`](https://smithy.io/2.0/aws/protocols/aws-restxml-protocol.html#aws-protocols-restxml-trait) | ✅ | REST-XML protocol (S3, CloudFront, Route 53) - Implemented |
 | [`aws.protocols#awsQueryCompatible`](https://smithy.io/2.0/aws/protocols/aws-query-protocol.html#aws-protocols-awsquerycompatible-trait) | ❌ | Query protocol compatibility mode |
 | [`aws.protocols#httpChecksum`](https://smithy.io/2.0/aws/aws-core.html#aws-protocols-httpchecksum-trait) | ❌ | HTTP checksum configuration |

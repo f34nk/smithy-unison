@@ -4,6 +4,43 @@
 
 ### Added
 
+#### REST-JSON Response Deserializer Generation
+- Complete JSON deserializer generation for REST-JSON protocol responses
+- Structure deserializers with field-by-field parsing and exception handling
+- Enum deserializers with string-to-enum conversion and validation
+- Union deserializers with tagged union deserialization
+- List deserializers with element-wise deserialization using `mapWithException`
+- Map deserializers with key-value pair deserialization using `mapPairsWithException`
+- Recursive collection of shapes needing deserializers from service and resource operations
+- Upfront nested structure serializer generation to avoid duplication
+
+#### Resource Operation Support
+- Resource operation collection throughout code generator components
+- ClientModuleWriter collects operations from both service and resources
+- RestJsonProtocolGenerator supports resource operations
+- PaginationGenerator handles resource operations
+
+#### Pagination Token Field Inference
+- Automatic inference of input token field names when not explicitly specified in `@paginated` trait
+- Automatic inference of output token field names with fallback defaults
+- Case-insensitive search for common token field patterns (marker, continuationToken, nextToken, pageToken)
+- Fallback to sensible defaults (continuationToken, nextContinuationToken)
+
+#### JSON Bridge Enhancements
+- `parseFloat` function for REST-JSON float field parsing
+- `parseBlob` function for base64-encoded blob deserialization
+- `mapWithException` helper for sequencing exception-raising list deserializations
+- `mapPairsWithException` helper for sequencing exception-raising map value deserializations
+- Refactored existing parse functions to use explicit match expressions
+
+### Fixed
+
+#### REST-JSON Optional Payload Handling
+- Corrected jsonObject reference from `aws.json.JsonObject` to `jsonObject` in optional payload serialization
+- Proper empty JSON object default for optional structure payloads
+
+### Added
+
 #### AWS Query Protocol Full Implementation
 - Complete AWS Query protocol support (SQS, SNS, RDS) with request serialization and response deserialization
 - XML-based request parameter serialization with proper Query format encoding
