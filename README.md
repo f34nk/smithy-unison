@@ -100,6 +100,7 @@ The ***-demo** examples generate client code from the official [AWS SDK smithy m
 | `make examples/sqs-demo` | [sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
 | `make examples/kinesis-demo` | [kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
 | `make examples/sns-demo` | [sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
+| `make examples/lambda-demo` | [lambda-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/lambda-demo/src/main.u)  |
 
 Run integration-test:
 

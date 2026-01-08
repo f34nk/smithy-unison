@@ -1,0 +1,203 @@
+-- Lambda Demo Application
+-- Tests the generated Lambda client against LocalStack mock server
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests, install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
+
+-- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create Lambda client configuration for LocalStack
+defaultConfig : '{IO, Exception} aws.lambda.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = aws.lambda.Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  Config.Config endpoint region creds false
+
+-- Test function name - created by terraform provisioner
+testFunctionName : Text
+testFunctionName = "lambda-demo-function"
+
+-- Test payload for Lambda invocation
+testPayload : Text
+testPayload = """{"message": "Hello from Unison Lambda Client!"}"""
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
+main : '{IO, Exception} ()
+main = do
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║   Lambda Client Demo (LocalStack Backend)   ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ aws.lambda.Config.endpoint config)
+  printLine ("Region: " ++ aws.lambda.Config.region config)
+  printLine ("Function: " ++ testFunctionName)
+  printLine ""
+  
+  -- Demo 1: List Functions
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: List Functions"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(listFunctionsDemo config)
+  
+  -- Demo 2: Get Function Configuration
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Get Function Configuration"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(getFunctionDemo config)
+  
+  -- Demo 3: Invoke Function
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: Invoke Function"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(invokeFunctionDemo config)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║          Lambda Demo Complete!               ║"
+  printLine "╚══════════════════════════════════════════════╝"
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+List all Lambda functions.
+Verifies that our test function exists.
+}}
+listFunctionsDemo : aws.lambda.Config -> '{IO, Exception, Threads} ()
+listFunctionsDemo config = do
+  printLine "  → Calling ListFunctions..."
+  
+  -- Create request with empty options (will list all functions)
+  request = aws.lambda.ListFunctionsRequest.ListFunctionsRequest None None None None
+  
+  -- Call the API
+  response = !(aws.lambda.listFunctions config request)
+  
+  printLine "  ✓ SUCCESS: ListFunctions returned"
+  
+  -- Extract and display functions
+  functionsOpt = aws.lambda.ListFunctionsResponse.functions response
+  functions = Optional.getOrElse [] functionsOpt
+  
+  if List.isEmpty functions then
+    printLine "  → No functions found"
+  else
+    printLine ("  → Found " ++ Nat.toText (List.size functions) ++ " function(s):")
+    printFunctionInfo fn =
+      name = Optional.getOrElse "unnamed" (aws.lambda.FunctionConfiguration.functionName fn)
+      runtime = Optional.getOrElse "unknown" (Optional.map aws.lambda.runtimeToText (aws.lambda.FunctionConfiguration.runtime fn))
+      handler = Optional.getOrElse "unknown" (aws.lambda.FunctionConfiguration.handler fn)
+      printLine ("    - " ++ name)
+      printLine ("      Runtime: " ++ runtime)
+      printLine ("      Handler: " ++ handler)
+    List.foreach printFunctionInfo functions
+
+{{
+Get configuration details for the test function.
+}}
+getFunctionDemo : aws.lambda.Config -> '{IO, Exception, Threads} ()
+getFunctionDemo config = do
+  printLine "  → Calling GetFunction..."
+  printLine ("    FunctionName: " ++ testFunctionName)
+  
+  -- Create request with function name
+  request = aws.lambda.GetFunctionRequest.GetFunctionRequest testFunctionName None
+  
+  -- Call the API
+  response = !(aws.lambda.getFunction config request)
+  
+  printLine "  ✓ SUCCESS: GetFunction returned"
+  
+  -- Extract and display function details
+  configOpt = aws.lambda.GetFunctionResponse.configuration response
+  match configOpt with
+    None -> printLine "  → No configuration found"
+    Some fnConfig ->
+      name = Optional.getOrElse "unnamed" (aws.lambda.FunctionConfiguration.functionName fnConfig)
+      runtime = Optional.getOrElse "unknown" (Optional.map aws.lambda.runtimeToText (aws.lambda.FunctionConfiguration.runtime fnConfig))
+      handler = Optional.getOrElse "unknown" (aws.lambda.FunctionConfiguration.handler fnConfig)
+      memSize = Optional.getOrElse +0 (aws.lambda.FunctionConfiguration.memorySize fnConfig)
+      timeout = Optional.getOrElse +0 (aws.lambda.FunctionConfiguration.timeout fnConfig)
+      state = Optional.getOrElse "unknown" (Optional.map aws.lambda.stateToText (aws.lambda.FunctionConfiguration.state fnConfig))
+      
+      printLine ("  → Function Name: " ++ name)
+      printLine ("  → Runtime: " ++ runtime)
+      printLine ("  → Handler: " ++ handler)
+      printLine ("  → Memory Size: " ++ Int.toText memSize ++ " MB")
+      printLine ("  → Timeout: " ++ Int.toText timeout ++ " seconds")
+      printLine ("  → State: " ++ state)
+
+{{
+Invoke the Lambda function with test payload.
+}}
+invokeFunctionDemo : aws.lambda.Config -> '{IO, Exception, Threads} ()
+invokeFunctionDemo config = do
+  printLine "  → Calling Invoke..."
+  printLine ("    FunctionName: " ++ testFunctionName)
+  printLine ("    Payload: " ++ testPayload)
+  
+  -- Create request with function name and payload
+  -- InvocationRequest fields (alphabetically): clientContext durableExecutionName functionName invocationType logType payload qualifier tenantId
+  payloadBytes = Text.toUtf8 testPayload
+  request = aws.lambda.InvocationRequest.InvocationRequest None None testFunctionName None None (Some payloadBytes) None None
+  
+  -- Call the API
+  response = !(aws.lambda.invoke config request)
+  
+  -- Extract response details
+  statusCode = aws.lambda.InvocationResponse.statusCode response
+  payloadResponseOpt = aws.lambda.InvocationResponse.payload response
+  
+  printLine "  ✓ SUCCESS: Invoke completed"
+  printLine ("  → Status Code: " ++ Int.toText statusCode)
+  printLine "  → Response Payload:"
+  
+  -- Try to decode the response payload
+  match payloadResponseOpt with
+    None -> printLine "    (no payload)"
+    Some payloadResponse ->
+      responseText = catch do fromUtf8 payloadResponse
+      match responseText with
+        Either.Right text -> printLine ("    " ++ text)
+        Either.Left _ -> printLine "    (binary response)"
+  
+  printLine "  ✓ Function executed successfully!"
