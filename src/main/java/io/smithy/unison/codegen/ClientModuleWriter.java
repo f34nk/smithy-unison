@@ -292,7 +292,7 @@ public final class ClientModuleWriter {
         Set<StructureShape> errors = new HashSet<>();
         Set<Shape> enums = new HashSet<>();
         
-        // Collect all shapes referenced by operations
+        // Collect all shapes referenced by service operations
         for (ShapeId opId : service.getOperations()) {
             OperationShape operation = model.expectShape(opId, OperationShape.class);
             
@@ -310,6 +310,12 @@ public final class ClientModuleWriter {
             for (ShapeId errorId : operation.getErrors()) {
                 collectReferencedShapes(errorId, structures, errors, enums, generatedTypes);
             }
+        }
+        
+        // Collect all shapes referenced by resource operations
+        for (ShapeId resourceId : service.getResources()) {
+            ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+            collectResourceOperationTypes(resource, structures, errors, enums, generatedTypes);
         }
         
         // Generate enums first (they may be referenced by structures)
@@ -436,6 +442,82 @@ public final class ClientModuleWriter {
             }
         }
         // Simple types (String, Integer, etc.) don't need generation
+    }
+    
+    /**
+     * Recursively collects types from resource operations (lifecycle and collection operations).
+     */
+    private void collectResourceOperationTypes(ResourceShape resource, Set<StructureShape> structures,
+                                               Set<StructureShape> errors, Set<Shape> enums, Set<ShapeId> visited) {
+        // Collect lifecycle operation types
+        resource.getCreate().ifPresent(opId -> {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        });
+        
+        resource.getPut().ifPresent(opId -> {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        });
+        
+        resource.getRead().ifPresent(opId -> {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        });
+        
+        resource.getUpdate().ifPresent(opId -> {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        });
+        
+        resource.getDelete().ifPresent(opId -> {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        });
+        
+        resource.getList().ifPresent(opId -> {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        });
+        
+        // Collect collection operation types
+        for (ShapeId opId : resource.getOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        }
+        
+        // Collect collectionOperations types
+        for (ShapeId opId : resource.getCollectionOperations()) {
+            OperationShape operation = model.expectShape(opId, OperationShape.class);
+            collectOperationTypes(operation, structures, errors, enums, visited);
+        }
+        
+        // Recursively process child resources
+        for (ShapeId childResourceId : resource.getResources()) {
+            ResourceShape childResource = model.expectShape(childResourceId, ResourceShape.class);
+            collectResourceOperationTypes(childResource, structures, errors, enums, visited);
+        }
+    }
+    
+    /**
+     * Collects types from an operation's input, output, and errors.
+     */
+    private void collectOperationTypes(OperationShape operation, Set<StructureShape> structures,
+                                       Set<StructureShape> errors, Set<Shape> enums, Set<ShapeId> visited) {
+        // Collect input shape
+        operation.getInput().ifPresent(inputId -> {
+            collectReferencedShapes(inputId, structures, errors, enums, visited);
+        });
+        
+        // Collect output shape
+        operation.getOutput().ifPresent(outputId -> {
+            collectReferencedShapes(outputId, structures, errors, enums, visited);
+        });
+        
+        // Collect error shapes
+        for (ShapeId errorId : operation.getErrors()) {
+            collectReferencedShapes(errorId, structures, errors, enums, visited);
+        }
     }
     
     /**
