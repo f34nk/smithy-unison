@@ -141,8 +141,15 @@ public class PaginationGenerator {
                 operation.getId().getName(), clientNamespace);
         
         // Get pagination configuration
-        String inputToken = pagination.getInputToken().orElse("continuationToken");
-        String outputToken = pagination.getOutputToken().orElse("nextContinuationToken");
+        // Try to infer token field names if not explicitly specified
+        String inputToken = pagination.getInputToken().orElse(null);
+        if (inputToken == null) {
+            inputToken = inferInputTokenField(operation, model);
+        }
+        String outputToken = pagination.getOutputToken().orElse(null);
+        if (outputToken == null) {
+            outputToken = inferOutputTokenField(operation, model);
+        }
         String items = pagination.getItems().orElse("contents");
         
         // Get input/output types with namespace
@@ -292,8 +299,15 @@ public class PaginationGenerator {
         PaginatedTrait pagination = paginatedTrait.get();
         String opName = UnisonSymbolProvider.toUnisonFunctionName(operation.getId().getName());
         
-        String inputToken = pagination.getInputToken().orElse("continuationToken");
-        String outputToken = pagination.getOutputToken().orElse("nextContinuationToken");
+        // Try to infer token field names if not explicitly specified
+        String inputToken = pagination.getInputToken().orElse(null);
+        if (inputToken == null) {
+            inputToken = inferInputTokenField(operation, model);
+        }
+        String outputToken = pagination.getOutputToken().orElse(null);
+        if (outputToken == null) {
+            outputToken = inferOutputTokenField(operation, model);
+        }
         
         String inputType = operation.getInput()
                 .map(id -> UnisonSymbolProvider.toUnisonTypeName(id.getName()))
@@ -342,6 +356,58 @@ public class PaginationGenerator {
         
         writer.dedent();
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Infers the input token field name from the input structure.
+     * Looks for common pagination token field names.
+     */
+    private String inferInputTokenField(OperationShape operation, Model model) {
+        if (operation.getInput().isEmpty()) {
+            return "continuationToken";
+        }
+        
+        StructureShape input = model.expectShape(operation.getInput().get(), StructureShape.class);
+        
+        // Check for common token field names (case-insensitive)
+        for (MemberShape member : input.getAllMembers().values()) {
+            String memberName = member.getMemberName();
+            String lowerName = memberName.toLowerCase();
+            
+            if (lowerName.equals("marker") || lowerName.equals("continuationtoken") || 
+                lowerName.equals("token") || lowerName.equals("nexttoken") || 
+                lowerName.equals("pagetoken")) {
+                return memberName;
+            }
+        }
+        
+        return "continuationToken"; // fallback default
+    }
+    
+    /**
+     * Infers the output token field name from the output structure.
+     * Looks for common pagination token field names.
+     */
+    private String inferOutputTokenField(OperationShape operation, Model model) {
+        if (operation.getOutput().isEmpty()) {
+            return "nextContinuationToken";
+        }
+        
+        StructureShape output = model.expectShape(operation.getOutput().get(), StructureShape.class);
+        
+        // Check for common next token field names (case-insensitive)
+        for (MemberShape member : output.getAllMembers().values()) {
+            String memberName = member.getMemberName();
+            String lowerName = memberName.toLowerCase();
+            
+            if (lowerName.equals("nextmarker") || lowerName.equals("nextcontinuationtoken") || 
+                lowerName.equals("nexttoken") || lowerName.equals("nextpagetoken") ||
+                lowerName.equals("marker")) {
+                return memberName;
+            }
+        }
+        
+        return "nextContinuationToken"; // fallback default
     }
     
     /**
