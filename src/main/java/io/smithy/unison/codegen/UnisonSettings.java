@@ -1,8 +1,12 @@
 package io.smithy.unison.codegen;
 
 import software.amazon.smithy.model.node.ObjectNode;
+import software.amazon.smithy.model.node.BooleanNode;
 import software.amazon.smithy.model.shapes.ShapeId;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -34,12 +38,16 @@ public final class UnisonSettings {
     private final String namespace;
     private final String outputDir;
     private final String protocol;
+    private final List<String> operations;
+    private final boolean generateAllOperations;
     
     private UnisonSettings(Builder builder) {
         this.service = Objects.requireNonNull(builder.service, "service is required");
         this.namespace = builder.namespace;
         this.outputDir = builder.outputDir != null ? builder.outputDir : DEFAULT_OUTPUT_DIR;
         this.protocol = builder.protocol;
+        this.operations = builder.operations != null ? List.copyOf(builder.operations) : Collections.emptyList();
+        this.generateAllOperations = builder.generateAllOperations;
     }
     
     /**
@@ -66,6 +74,24 @@ public final class UnisonSettings {
         node.getStringMember("protocol")
                 .map(n -> n.getValue())
                 .ifPresent(builder::protocol);
+        
+        // Parse operations list
+        node.getArrayMember("operations")
+            .map(arrayNode -> {
+                List<String> ops = new ArrayList<>();
+                for (var element : arrayNode.getElements()) {
+                    if (element.isStringNode()) {
+                        ops.add(element.asStringNode().get().getValue());
+                    }
+                }
+                return ops;
+            })
+            .ifPresent(builder::operations);
+        
+        // Parse generateAllOperations flag (defaults to true)
+        node.getBooleanMember("generateAllOperations")
+            .map(BooleanNode::getValue)
+            .ifPresent(builder::generateAllOperations);
         
         return builder.build();
     }
@@ -125,6 +151,33 @@ public final class UnisonSettings {
         return namespace;
     }
     
+    /**
+     * Gets the list of operations to generate.
+     * 
+     * @return List of operation names, or empty list if none specified
+     */
+    public List<String> operations() {
+        return operations;
+    }
+    
+    /**
+     * Gets whether to generate all operations (default behavior).
+     * 
+     * @return true to generate all operations, false for selective generation
+     */
+    public boolean generateAllOperations() {
+        return generateAllOperations;
+    }
+    
+    /**
+     * Checks if selective operation filtering is enabled.
+     * 
+     * @return true if operations list is specified and generateAllOperations is false
+     */
+    public boolean hasOperationFilter() {
+        return !operations.isEmpty() && !generateAllOperations;
+    }
+    
     public static Builder builder() {
         return new Builder();
     }
@@ -134,7 +187,9 @@ public final class UnisonSettings {
                 .service(service)
                 .namespace(namespace)
                 .outputDir(outputDir)
-                .protocol(protocol);
+                .protocol(protocol)
+                .operations(operations)
+                .generateAllOperations(generateAllOperations);
     }
     
     @Override
@@ -142,15 +197,17 @@ public final class UnisonSettings {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         UnisonSettings that = (UnisonSettings) o;
-        return Objects.equals(service, that.service) &&
+        return generateAllOperations == that.generateAllOperations &&
+               Objects.equals(service, that.service) &&
                Objects.equals(namespace, that.namespace) &&
                Objects.equals(outputDir, that.outputDir) &&
-               Objects.equals(protocol, that.protocol);
+               Objects.equals(protocol, that.protocol) &&
+               Objects.equals(operations, that.operations);
     }
     
     @Override
     public int hashCode() {
-        return Objects.hash(service, namespace, outputDir, protocol);
+        return Objects.hash(service, namespace, outputDir, protocol, operations, generateAllOperations);
     }
     
     @Override
@@ -160,6 +217,8 @@ public final class UnisonSettings {
                ", namespace='" + namespace + '\'' +
                ", outputDir='" + outputDir + '\'' +
                ", protocol='" + protocol + '\'' +
+               ", operations=" + operations +
+               ", generateAllOperations=" + generateAllOperations +
                '}';
     }
     
@@ -168,6 +227,8 @@ public final class UnisonSettings {
         private String namespace;
         private String outputDir;
         private String protocol;
+        private List<String> operations;
+        private boolean generateAllOperations = true;  // Default: generate all operations
         
         private Builder() {}
         
@@ -191,7 +252,24 @@ public final class UnisonSettings {
             return this;
         }
         
+        public Builder operations(List<String> operations) {
+            this.operations = operations;
+            return this;
+        }
+        
+        public Builder generateAllOperations(boolean generateAllOperations) {
+            this.generateAllOperations = generateAllOperations;
+            return this;
+        }
+        
         public UnisonSettings build() {
+            // Validate: can't specify operations AND generateAllOperations=true
+            if (operations != null && !operations.isEmpty() && generateAllOperations) {
+                throw new IllegalArgumentException(
+                    "Cannot specify both 'operations' list and 'generateAllOperations=true'. " +
+                    "Either omit 'operations' to generate all, or set 'generateAllOperations=false'");
+            }
+            
             return new UnisonSettings(this);
         }
     }
