@@ -178,13 +178,20 @@ public final class ClientModuleWriter {
                 writer.writeBlankLine();
                 
                 // Collect all operations (direct service operations + resource operations)
-                Set<OperationShape> allOperations = new HashSet<>();
-                for (ShapeId opId : service.getOperations()) {
-                    allOperations.add(model.expectShape(opId, OperationShape.class));
-                }
-                for (ShapeId resourceId : service.getResources()) {
-                    ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
-                    collectResourceOperations(resource, allOperations);
+                // Use same filtering logic as operation generation
+                Set<OperationShape> allOperations;
+                if (context.settings().hasOperationFilter()) {
+                    OperationSelector selector = new OperationSelector(model, service, context.settings());
+                    allOperations = selector.selectOperations();
+                } else {
+                    allOperations = new HashSet<>();
+                    for (ShapeId opId : service.getOperations()) {
+                        allOperations.add(model.expectShape(opId, OperationShape.class));
+                    }
+                    for (ShapeId resourceId : service.getResources()) {
+                        ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+                        collectResourceOperations(resource, allOperations);
+                    }
                 }
                 
                 // For REST-JSON, generate nested structure serializers first to avoid duplicates
@@ -207,31 +214,34 @@ public final class ClientModuleWriter {
             }
         }
         
-        // Generate operations
-        for (ShapeId opId : service.getOperations()) {
-            OperationShape operation = model.expectShape(opId, OperationShape.class);
-            
-            if (useProtocolGenerator && protocolGenerator.isPresent()) {
-                // Use protocol generator for full implementation
-                protocolGenerator.get().generateOperation(operation, writer, context);
-            } else {
-                // Fall back to stub generation
-                generateOperationStub(operation, writer);
+        // Determine which operations to generate
+        Set<OperationShape> operationsToGenerate;
+        if (context.settings().hasOperationFilter()) {
+            // Selective generation
+            OperationSelector selector = new OperationSelector(model, service, context.settings());
+            operationsToGenerate = selector.selectOperations();
+            LOGGER.info("Generating " + operationsToGenerate.size() + " selected operations");
+        } else {
+            // Generate all operations (default)
+            operationsToGenerate = new HashSet<>();
+            for (ShapeId opId : service.getOperations()) {
+                operationsToGenerate.add(model.expectShape(opId, OperationShape.class));
             }
-        }
-        
-        // Generate resource-bound operations
-        if (!service.getResources().isEmpty()) {
-            writer.writeBlankLine();
-            writer.writeComment("=== Resource Operations ===");
-            writer.writeBlankLine();
             
-            ResourceOperationGenerator resourceGen = new ResourceOperationGenerator(
-                model, context, protocolGenerator);
-            
+            // Add resource operations
             for (ShapeId resourceId : service.getResources()) {
                 ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
-                resourceGen.generateResourceOperations(resource, writer);
+                collectResourceOperations(resource, operationsToGenerate);
+            }
+            LOGGER.info("Generating all " + operationsToGenerate.size() + " operations");
+        }
+        
+        // Generate selected operations
+        for (OperationShape operation : operationsToGenerate) {
+            if (useProtocolGenerator && protocolGenerator.isPresent()) {
+                protocolGenerator.get().generateOperation(operation, writer, context);
+            } else {
+                generateOperationStub(operation, writer);
             }
         }
         
@@ -307,35 +317,59 @@ public final class ClientModuleWriter {
      * and generates Unison record types for structures and sum types for enums.
      */
     private void generateModelTypes(UnisonWriter writer, AwsProtocol protocol) {
-        Set<ShapeId> generatedTypes = new HashSet<>();
-        Set<StructureShape> structures = new HashSet<>();
-        Set<StructureShape> errors = new HashSet<>();
-        Set<Shape> enums = new HashSet<>();
+        final Set<StructureShape> structures;
+        final Set<StructureShape> errors;
+        final Set<Shape> enums;
         
-        // Collect all shapes referenced by service operations
-        for (ShapeId opId : service.getOperations()) {
-            OperationShape operation = model.expectShape(opId, OperationShape.class);
+        // Check if we're doing selective generation
+        if (context.settings().hasOperationFilter()) {
+            // Selective generation path
+            OperationSelector selector = new OperationSelector(model, service, context.settings());
+            Set<OperationShape> selectedOperations = selector.selectOperations();
             
-            // Collect input shape
-            operation.getInput().ifPresent(inputId -> {
-                collectReferencedShapes(inputId, structures, errors, enums, generatedTypes);
-            });
+            // Collect only types needed by selected operations
+            TransitiveDependencyCollector collector = new TransitiveDependencyCollector(model, selectedOperations);
+            structures = collector.collectStructures();
+            errors = collector.collectErrors();
+            enums = collector.collectEnums();
             
-            // Collect output shape
-            operation.getOutput().ifPresent(outputId -> {
-                collectReferencedShapes(outputId, structures, errors, enums, generatedTypes);
-            });
+            collector.logSummary(structures, errors, enums);
+        } else {
+            // Generate all types (default behavior)
+            Set<ShapeId> generatedTypes = new HashSet<>();
+            Set<StructureShape> mutableStructures = new HashSet<>();
+            Set<StructureShape> mutableErrors = new HashSet<>();
+            Set<Shape> mutableEnums = new HashSet<>();
             
-            // Collect error shapes
-            for (ShapeId errorId : operation.getErrors()) {
-                collectReferencedShapes(errorId, structures, errors, enums, generatedTypes);
+            // Collect all shapes referenced by service operations
+            for (ShapeId opId : service.getOperations()) {
+                OperationShape operation = model.expectShape(opId, OperationShape.class);
+                
+                // Collect input shape
+                operation.getInput().ifPresent(inputId -> {
+                    collectReferencedShapes(inputId, mutableStructures, mutableErrors, mutableEnums, generatedTypes);
+                });
+                
+                // Collect output shape
+                operation.getOutput().ifPresent(outputId -> {
+                    collectReferencedShapes(outputId, mutableStructures, mutableErrors, mutableEnums, generatedTypes);
+                });
+                
+                // Collect error shapes
+                for (ShapeId errorId : operation.getErrors()) {
+                    collectReferencedShapes(errorId, mutableStructures, mutableErrors, mutableEnums, generatedTypes);
+                }
             }
-        }
-        
-        // Collect all shapes referenced by resource operations
-        for (ShapeId resourceId : service.getResources()) {
-            ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
-            collectResourceOperationTypes(resource, structures, errors, enums, generatedTypes);
+            
+            // Collect all shapes referenced by resource operations
+            for (ShapeId resourceId : service.getResources()) {
+                ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+                collectResourceOperationTypes(resource, mutableStructures, mutableErrors, mutableEnums, generatedTypes);
+            }
+            
+            structures = mutableStructures;
+            errors = mutableErrors;
+            enums = mutableEnums;
         }
         
         // Generate enums first (they may be referenced by structures)
