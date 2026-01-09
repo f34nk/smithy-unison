@@ -37,6 +37,26 @@ aws.xml.decodeToSoup bytes =
   Soup.parseXML text
 
 {{
+Parse XML text to a Soup cursor with Exception handling.
+
+Unlike the basic `aws.xml.parse`, this function handles parsing errors
+by converting XMLError to Exception Failure. This allows it to be used
+in Exception-based error handling flows without explicit error conversion.
+
+Example:
+  soup = aws.xml.parseSoup xmlText
+  -- Can now use soup with Exception-based functions
+
+Raises Exception with XMLError if parsing fails.
+}}
+aws.xml.parseSoup : Text -> '{Exception} Soup
+aws.xml.parseSoup xmlText = do
+  match Soup.withXML xmlText (s -> Soup.root s) with
+    Left err -> Exception.raise (Failure (typeLink XMLError) err (Any ()))
+    Right [soup] -> soup
+    Right _ -> Exception.raise (Failure (typeLink XMLError) "Failed to parse XML" (Any ()))
+
+{{
 Parse and process XML with error handling.
 
 Wraps Soup.withXML to provide safe XML processing that returns
@@ -93,6 +113,18 @@ Iterate over all descendant elements.
 }}
 aws.xml.descendants : Soup ->{Each, Throw XMLError} Soup
 aws.xml.descendants = Soup.descendants
+
+{{
+Drill down through multiple XML tags in sequence.
+
+Takes a list of tag names and navigates through them in order.
+Useful for navigating nested response wrappers like AWS Query.
+
+Throws XMLError if any element in the path is not found.
+}}
+aws.xml.findAndDrill : Soup -> [Text] -> '{Throw XMLError} Soup
+aws.xml.findAndDrill soup path = do
+  List.foldLeft (s tag -> Soup.findFirst tag s) soup path
 
 -- =============================================================================
 -- Data Extraction (Soup-based)
@@ -313,15 +345,19 @@ Parse a list of child elements using a mapper function.
 Finds all child elements with the given tag name and applies
 the parser function to each one.
 
+The parser function takes XML text, not Soup, for compatibility
+with generated parsers.
+
 Example:
-  buckets = aws.xml.parseList "Bucket" parseBucket bucketsElem
+  buckets = aws.xml.parseList "Bucket" parseBucketFromXml bucketsElem
 }}
-aws.xml.parseList : Text -> (Soup -> a) -> Soup -> [a]
+aws.xml.parseList : Text -> (Text -> a) -> Soup -> [a]
 aws.xml.parseList tagName parser soup =
-  match Soup.withXML (Soup.toXML soup) (s ->
-      parser (Soup.named tagName (Soup.root s))) with
-    Left _ -> []
-    Right results -> results
+  xmlText = handle Soup.toXML soup with cases
+    { x } -> x
+    { Throw.throw _ -> _ } -> ""
+  blocks = aws.xml.extractAllBlocks tagName xmlText
+  List.map parser blocks
 
 {{
 Parse a list of child elements without filtering by tag name.
@@ -344,14 +380,20 @@ Parse a nested structure element.
 Finds the element by name and applies the parser function.
 Returns None if element not found.
 
+The parser function takes XML text, not Soup, for compatibility
+with generated parsers.
+
 Example:
-  owner = aws.xml.parseNested "Owner" parseOwner response
+  owner = aws.xml.parseNested "Owner" parseOwnerFromXml response
 }}
-aws.xml.parseNested : Text -> (Soup -> a) -> Soup -> Optional a
+aws.xml.parseNested : Text -> (Text -> a) -> Soup -> Optional a
 aws.xml.parseNested tagName parser soup =
-  match aws.xml.findOpt tagName soup with
-    None -> None
-    Some elem -> Some (parser elem)
+  xmlText = handle Soup.toXML soup with cases
+    { x } -> x
+    { Throw.throw _ -> _ } -> ""
+  block = aws.xml.extractBlock tagName xmlText
+  if Text.isEmpty block then None
+  else Some (parser block)
 
 {{
 Parse a nested structure that wraps a list.
@@ -359,28 +401,38 @@ Parse a nested structure that wraps a list.
 Common S3 pattern where a container element holds a list:
 <Buckets><Bucket>...</Bucket><Bucket>...</Bucket></Buckets>
 
+The parser function takes XML text, not Soup, for compatibility
+with generated parsers.
+
 Example:
-  buckets = aws.xml.parseWrappedList "Buckets" "Bucket" parseBucket response
+  buckets = aws.xml.parseWrappedList "Buckets" "Bucket" parseBucketFromXml response
 }}
-aws.xml.parseWrappedList : Text -> Text -> (Soup -> a) -> Soup -> [a]
+aws.xml.parseWrappedList : Text -> Text -> (Text -> a) -> Soup -> [a]
 aws.xml.parseWrappedList containerTag itemTag parser soup =
-  match aws.xml.findOpt containerTag soup with
-    None -> []
-    Some container -> aws.xml.parseList itemTag parser container
+  xmlText = handle Soup.toXML soup with cases
+    { x } -> x
+    { Throw.throw _ -> _ } -> ""
+  containerXml = aws.xml.extractBlock containerTag xmlText
+  if Text.isEmpty containerXml then []
+  else aws.xml.parseListFromXml itemTag parser containerXml
 
 {{
 Parse a nested structure that wraps a list, returning Optional.
 
 Returns `None` if container element not found, `Some []` if empty.
 
+The parser function takes XML text, not Soup, for compatibility
+with generated parsers.
+
 Example:
-  buckets = aws.xml.parseOptionalWrappedList "Buckets" "Bucket" parseBucket response
+  buckets = aws.xml.parseOptionalWrappedList "Buckets" "Bucket" parseBucketFromXml response
 }}
-aws.xml.parseOptionalWrappedList : Text -> Text -> (Soup -> a) -> Soup -> Optional [a]
+aws.xml.parseOptionalWrappedList : Text -> Text -> (Text -> a) -> Soup -> Optional [a]
 aws.xml.parseOptionalWrappedList containerTag itemTag parser soup =
-  match aws.xml.findOpt containerTag soup with
-    None -> None
-    Some container -> Some (aws.xml.parseList itemTag parser container)
+  xmlText = handle Soup.toXML soup with cases
+    { x } -> x
+    { Throw.throw _ -> _ } -> ""
+  aws.xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText
 
 {{
 Parse a flattened list (no container element).
@@ -388,10 +440,13 @@ Parse a flattened list (no container element).
 Some AWS APIs use flattened lists where items appear directly:
 <Item>...</Item><Item>...</Item>
 
+The parser function takes XML text, not Soup, for compatibility
+with generated parsers.
+
 Example:
-  items = aws.xml.parseFlatList "Item" parseItem response
+  items = aws.xml.parseFlatList "Item" parseItemFromXml response
 }}
-aws.xml.parseFlatList : Text -> (Soup -> a) -> Soup -> [a]
+aws.xml.parseFlatList : Text -> (Text -> a) -> Soup -> [a]
 aws.xml.parseFlatList = aws.xml.parseList
 
 -- =============================================================================

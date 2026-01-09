@@ -66,9 +66,13 @@ public class Ec2QueryProtocolGenerator extends AwsQueryProtocolGenerator {
         
         writer.write("-- EC2 Query response structure (no nested Result element):");
         writer.write("-- <OperationNameResponse>...</OperationNameResponse>");
-        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
-        writer.write("responseElem = aws.xml.extractElement \"$LResponse\" xmlText", operationName);
-        writer.write("resultElem = responseElem  -- EC2 Query: response element IS the result element");
+        writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
+        writer.write("resultSoup = handle !(Soup.findFirst \"$LResponse\" soup) with cases", operationName);
+        writer.indent();
+        writer.write("{ x } -> x");
+        writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
+        writer.dedent();
+        writer.write("-- EC2 Query: response element IS the result element");
     }
     
     /**
@@ -95,18 +99,16 @@ public class Ec2QueryProtocolGenerator extends AwsQueryProtocolGenerator {
     @Override
     protected void generateErrorParserBody(ServiceShape service, String clientNamespace, 
                                           String errorTypeName, UnisonWriter writer) {
-        // Parse EC2 Query error XML structure
-        writer.write("-- Convert response body to text");
-        writer.write("xmlText = fromUtf8 (Http.Response.body response)");
-        writer.write("");
-        writer.write("-- Navigate to Error element within Response/Errors");
-        writer.write("responseElem = aws.xml.extractElement \"Response\" xmlText");
-        writer.write("errorsElem = aws.xml.extractElement \"Errors\" responseElem");
-        writer.write("errorElem = aws.xml.extractElement \"Error\" errorsElem");
-        writer.write("");
-        writer.write("-- Extract error code and message");
-        writer.write("code = aws.xml.extractElement \"Code\" errorElem");
-        writer.write("message = aws.xml.extractElement \"Message\" errorElem");
+        // Parse EC2 Query error XML structure using Soup
+        writer.write("-- Parse EC2 Query error response using Soup");
+        writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
+        writer.write("errorSoup = handle !(aws.xml.findAndDrill soup [\"Response\", \"Errors\", \"Error\"]) with cases");
+        writer.indent();
+        writer.write("{ x } -> x");
+        writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
+        writer.dedent();
+        writer.write("code = aws.xml.findText \"Code\" errorSoup |> Optional.getOrElse \"UnknownError\"");
+        writer.write("message = aws.xml.findText \"Message\" errorSoup |> Optional.getOrElse \"\"");
         writer.write("");
         writer.write("-- Map to service-specific error type");
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);

@@ -186,10 +186,12 @@ public class AwsQueryProtocolGeneratorTest {
         
         String code = writer.toString();
         
-        // Verify AWS Query response structure navigation
+        // Verify AWS Query response structure navigation (Soup-based)
         assertTrue(code.contains("SendMessageResponse"), "Should look for operation response wrapper");
         assertTrue(code.contains("SendMessageResult"), "Should extract result element");
-        assertTrue(code.contains("aws.xml.extractElement"), "Should use XML extraction");
+        assertTrue(code.contains("Soup.parseXML") || code.contains("aws.xml.findAndDrill"), 
+                "Should use Soup-based XML parsing");
+        assertTrue(code.contains("resultSoup"), "Should use resultSoup for field extraction");
         
         // Verify field extraction
         assertTrue(code.contains("MessageId"), "Should extract MessageId field");
@@ -205,9 +207,9 @@ public class AwsQueryProtocolGeneratorTest {
         
         String code = writer.toString();
         
-        // Verify different extraction methods for different types
-        assertTrue(code.contains("extractElement") || code.contains("extractInt") || code.contains("extractBool"), 
-                "Should use appropriate extractors for field types");
+        // Verify different extraction methods for different types (Soup-based)
+        assertTrue(code.contains("aws.xml.findText") || code.contains("aws.xml.findInt") || code.contains("aws.xml.findBool"), 
+                "Should use appropriate Soup-based extractors for field types");
     }
 
     @Test
@@ -220,9 +222,12 @@ public class AwsQueryProtocolGeneratorTest {
         
         String code = writer.toString();
         
-        // Verify AWS Query error structure
+        // Verify AWS Query error structure (Soup-based)
         assertTrue(code.contains("ErrorResponse"), "Should parse ErrorResponse wrapper");
         assertTrue(code.contains("Error"), "Should extract Error element");
+        assertTrue(code.contains("Soup.parseXML") || code.contains("aws.xml.findAndDrill"), 
+                "Should use Soup-based parsing");
+        assertTrue(code.contains("aws.xml.findText"), "Should use Soup-based text extraction");
         assertTrue(code.contains("Code"), "Should extract error code");
         assertTrue(code.contains("Message"), "Should extract error message");
         
