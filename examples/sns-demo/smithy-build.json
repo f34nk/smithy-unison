@@ -25,7 +25,16 @@
       "service": "com.amazonaws.sns#AmazonSimpleNotificationService",
       "name": "sns",
       "namespace": "aws.sns",
-      "outputDir": "generated"
+      "outputDir": "generated",
+      "operations": [
+        "CreateTopic",
+        "DeleteTopic",
+        "Publish",
+        "Subscribe",
+        "Unsubscribe",
+        "ListTopics"
+      ],
+      "generateAllOperations": false
     }
   }
 }
