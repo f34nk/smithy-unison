@@ -33,7 +33,7 @@ test/runtime:
 	# Run runtime tests
 	#
 	cd src && \
-	ucm transcript test.md
+	time ucm transcript test.md
 
 .PHONY: clean
 clean:
