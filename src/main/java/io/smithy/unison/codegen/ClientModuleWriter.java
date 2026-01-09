@@ -21,7 +21,19 @@ import io.smithy.unison.codegen.protocols.ProtocolGeneratorFactory;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.build.FileManifest;
 import software.amazon.smithy.model.Model;
-import software.amazon.smithy.model.shapes.*;
+import software.amazon.smithy.model.shapes.EnumShape;
+import software.amazon.smithy.model.shapes.IntEnumShape;
+import software.amazon.smithy.model.shapes.ListShape;
+import software.amazon.smithy.model.shapes.MapShape;
+import software.amazon.smithy.model.shapes.MemberShape;
+import software.amazon.smithy.model.shapes.OperationShape;
+import software.amazon.smithy.model.shapes.ResourceShape;
+import software.amazon.smithy.model.shapes.ServiceShape;
+import software.amazon.smithy.model.shapes.Shape;
+import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StringShape;
+import software.amazon.smithy.model.shapes.StructureShape;
+import software.amazon.smithy.model.shapes.UnionShape;
 import software.amazon.smithy.model.traits.ErrorTrait;
 
 /**
@@ -69,6 +81,25 @@ public final class ClientModuleWriter {
         this.fileManifest = fileManifest;
         this.outputDir = outputDir;
         this.context = context;
+    }
+    
+    /**
+     * Describes how a structure is used across operations.
+     * 
+     * <p>This is used for serializer/deserializer optimization:
+     * <ul>
+     *   <li>INPUT_ONLY structures only need serializers (used in requests)</li>
+     *   <li>OUTPUT_ONLY structures only need deserializers (used in responses)</li>
+     *   <li>SHARED structures need both (used in requests and responses)</li>
+     * </ul>
+     */
+    private enum StructureUsage {
+        /** Structure only appears in operation inputs */
+        INPUT_ONLY,
+        /** Structure only appears in operation outputs */
+        OUTPUT_ONLY,
+        /** Structure appears in both inputs and outputs */
+        SHARED
     }
     
     /**
