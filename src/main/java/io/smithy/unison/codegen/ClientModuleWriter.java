@@ -856,21 +856,34 @@ public final class ClientModuleWriter {
         // Analyze structure usage patterns across operations
         Map<ShapeId, StructureUsage> usageMap = analyzeStructureUsage();
         
-        // Collect all error structures that are referenced by unions
-        // These need serializers even though they're errors
-        Set<StructureShape> errorStructuresInUnions = new HashSet<>();
+        // Collect all structures that are referenced by unions
+        // Union members need both serializers and deserializers regardless of usage
+        Set<ShapeId> structuresInUnions = new HashSet<>();
         for (Shape enumShape : enums) {
             if (enumShape instanceof UnionShape) {
                 UnionShape unionShape = (UnionShape) enumShape;
                 for (MemberShape member : unionShape.getAllMembers().values()) {
                     Shape memberTarget = model.expectShape(member.getTarget());
                     if (memberTarget.isStructureShape()) {
-                        StructureShape structTarget = memberTarget.asStructureShape().get();
-                        // Check if this is an error structure
-                        if (structTarget.hasTrait(software.amazon.smithy.model.traits.ErrorTrait.class)) {
-                            errorStructuresInUnions.add(structTarget);
-                        }
+                        structuresInUnions.add(memberTarget.getId());
                     }
+                }
+            }
+        }
+        
+        // Override usage for structures in unions - they always need both directions
+        for (ShapeId unionMemberId : structuresInUnions) {
+            usageMap.put(unionMemberId, StructureUsage.SHARED);
+        }
+        
+        // Collect error structures in unions for separate handling (not in main structures set)
+        Set<StructureShape> errorStructuresInUnions = new HashSet<>();
+        for (ShapeId unionMemberId : structuresInUnions) {
+            Shape shape = model.expectShape(unionMemberId);
+            if (shape.isStructureShape()) {
+                StructureShape structShape = shape.asStructureShape().get();
+                if (structShape.hasTrait(software.amazon.smithy.model.traits.ErrorTrait.class)) {
+                    errorStructuresInUnions.add(structShape);
                 }
             }
         }
@@ -899,17 +912,29 @@ public final class ClientModuleWriter {
                     // Generate both
                     jsonGen.generateStructureSerializer(structure, writer, context);
                     jsonGen.generateStructureDeserializer(structure, writer, context);
+                    if (structuresInUnions.contains(structure.getId())) {
+                        LOGGER.fine("Generated both for union member structure: " + structure.getId());
+                    }
                     break;
             }
         }
         
         // Generate serializers for error structures that are in unions
-        // Error structures are OUTPUT_ONLY (clients never send errors)
-        // But if in a union, they may need both for union serialization
+        // These are typically not in the main structures set
         for (StructureShape errorStruct : errorStructuresInUnions) {
-            // Generate both to be safe - unions may need both directions
-            jsonGen.generateStructureSerializer(errorStruct, writer, context);
-            jsonGen.generateStructureDeserializer(errorStruct, writer, context);
+            // Check if already generated in the loop above
+            boolean alreadyGenerated = false;
+            for (StructureShape struct : structures) {
+                if (struct.getId().equals(errorStruct.getId())) {
+                    alreadyGenerated = true;
+                    break;
+                }
+            }
+            
+            if (!alreadyGenerated) {
+                jsonGen.generateStructureSerializer(errorStruct, writer, context);
+                jsonGen.generateStructureDeserializer(errorStruct, writer, context);
+            }
         }
         
         // Log optimization statistics
