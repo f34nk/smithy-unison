@@ -411,13 +411,19 @@ public final class ClientModuleWriter {
                 generateErrorToFailure(error, writer);
                 writer.writeBlankLine();
             }
-            
-            // Generate service-level error union type (for all AWS protocols that need error parsing)
-            if (protocol == AwsProtocol.REST_XML || protocol == AwsProtocol.REST_JSON_1 ||
-                protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1 ||
-                protocol == AwsProtocol.AWS_QUERY) {
-                generateServiceErrorUnion(errors, writer);
+        }
+        
+        // Generate service-level error union type (for all AWS protocols that need error parsing)
+        // This is generated even when errors is empty to provide UnknownError handling
+        if (protocol == AwsProtocol.REST_XML || protocol == AwsProtocol.REST_JSON_1 ||
+            protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1 ||
+            protocol == AwsProtocol.AWS_QUERY || protocol == AwsProtocol.EC2_QUERY) {
+            if (!errors.isEmpty()) {
+                // Only add the header if we have actual error structures
+                writer.writeComment("=== Service Error Union ===");
+                writer.writeBlankLine();
             }
+            generateServiceErrorUnion(errors, writer);
         }
     }
     
@@ -607,7 +613,8 @@ public final class ClientModuleWriter {
         }
         
         // Add a generic unknown error constructor
-        writer.write("| UnknownError Text Text"); // code, message
+        String prefix = isFirst ? "=" : "|";
+        writer.write("$L UnknownError Text Text", prefix); // code, message
         writer.dedent();
         writer.writeBlankLine();
         
