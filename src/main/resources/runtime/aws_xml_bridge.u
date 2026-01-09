@@ -37,6 +37,26 @@ aws.xml.decodeToSoup bytes =
   Soup.parseXML text
 
 {{
+Parse XML text to a Soup cursor with Exception handling.
+
+Unlike the basic `aws.xml.parse`, this function handles parsing errors
+by converting XMLError to Exception Failure. This allows it to be used
+in Exception-based error handling flows without explicit error conversion.
+
+Example:
+  soup = aws.xml.parseSoup xmlText
+  -- Can now use soup with Exception-based functions
+
+Raises Exception with XMLError if parsing fails.
+}}
+aws.xml.parseSoup : Text -> '{Exception} Soup
+aws.xml.parseSoup xmlText = do
+  match Soup.withXML xmlText (s -> Soup.root s) with
+    Left err -> Exception.raise (Failure (typeLink XMLError) err (Any ()))
+    Right [soup] -> soup
+    Right _ -> Exception.raise (Failure (typeLink XMLError) "Failed to parse XML" (Any ()))
+
+{{
 Parse and process XML with error handling.
 
 Wraps Soup.withXML to provide safe XML processing that returns
@@ -93,6 +113,22 @@ Iterate over all descendant elements.
 }}
 aws.xml.descendants : Soup ->{Each, Throw XMLError} Soup
 aws.xml.descendants = Soup.descendants
+
+{{
+Drill down through multiple XML tags in sequence.
+
+Takes a list of tag names and navigates through them in order.
+Useful for navigating nested response wrappers like AWS Query:
+`<OperationResponse><OperationResult>...</OperationResult></OperationResponse>`
+
+Example:
+  resultSoup = aws.xml.findAndDrill soup ["DescribeInstancesResponse", "DescribeInstancesResult"]
+
+Throws XMLError if any element in the path is not found.
+}}
+aws.xml.findAndDrill : Soup -> [Text] -> '{Throw XMLError} Soup
+aws.xml.findAndDrill soup path = do
+  List.foldLeft (s tag -> Soup.findFirst tag s) soup path
 
 -- =============================================================================
 -- Data Extraction (Soup-based)
