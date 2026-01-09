@@ -853,6 +853,9 @@ public final class ClientModuleWriter {
         writer.writeComment("=== Structure JSON Serializers/Deserializers ===");
         writer.writeBlankLine();
         
+        // Analyze structure usage patterns across operations
+        Map<ShapeId, StructureUsage> usageMap = analyzeStructureUsage();
+        
         // Collect all error structures that are referenced by unions
         // These need serializers even though they're errors
         Set<StructureShape> errorStructuresInUnions = new HashSet<>();
@@ -872,16 +875,67 @@ public final class ClientModuleWriter {
             }
         }
         
-        // Generate serializers for regular structures
+        // Generate serializers and deserializers based on usage patterns
         for (StructureShape structure : structures) {
-            jsonGen.generateStructureSerializer(structure, writer, context);
-            jsonGen.generateStructureDeserializer(structure, writer, context);
+            StructureUsage usage = usageMap.getOrDefault(
+                structure.getId(), 
+                StructureUsage.SHARED  // Default to SHARED to be safe
+            );
+            
+            switch (usage) {
+                case INPUT_ONLY:
+                    // Only serialize (for requests)
+                    jsonGen.generateStructureSerializer(structure, writer, context);
+                    LOGGER.fine("Skipped deserializer for input-only structure: " + structure.getId());
+                    break;
+                    
+                case OUTPUT_ONLY:
+                    // Only deserialize (for responses)
+                    jsonGen.generateStructureDeserializer(structure, writer, context);
+                    LOGGER.fine("Skipped serializer for output-only structure: " + structure.getId());
+                    break;
+                    
+                case SHARED:
+                    // Generate both
+                    jsonGen.generateStructureSerializer(structure, writer, context);
+                    jsonGen.generateStructureDeserializer(structure, writer, context);
+                    break;
+            }
         }
         
         // Generate serializers for error structures that are in unions
+        // Error structures are OUTPUT_ONLY (clients never send errors)
+        // But if in a union, they may need both for union serialization
         for (StructureShape errorStruct : errorStructuresInUnions) {
+            // Generate both to be safe - unions may need both directions
             jsonGen.generateStructureSerializer(errorStruct, writer, context);
             jsonGen.generateStructureDeserializer(errorStruct, writer, context);
+        }
+        
+        // Log optimization statistics
+        if (!structures.isEmpty()) {
+            int totalStructures = structures.size();
+            long inputOnly = usageMap.values().stream()
+                .filter(u -> u == StructureUsage.INPUT_ONLY).count();
+            long outputOnly = usageMap.values().stream()
+                .filter(u -> u == StructureUsage.OUTPUT_ONLY).count();
+            long shared = usageMap.values().stream()
+                .filter(u -> u == StructureUsage.SHARED).count();
+            
+            int skippedSerializers = (int) outputOnly;
+            int skippedDeserializers = (int) inputOnly;
+            int totalSkipped = skippedSerializers + skippedDeserializers;
+            
+            LOGGER.info("Structure serialization optimization:");
+            LOGGER.info("  Total structures: " + totalStructures);
+            LOGGER.info("  Input-only: " + inputOnly + " (skipped " + inputOnly + " deserializers)");
+            LOGGER.info("  Output-only: " + outputOnly + " (skipped " + outputOnly + " serializers)");
+            LOGGER.info("  Shared: " + shared + " (both needed)");
+            LOGGER.info("  Total functions skipped: " + totalSkipped);
+            if (totalStructures > 0) {
+                LOGGER.info("  Estimated code reduction: ~" + 
+                    (totalSkipped * 100 / (totalStructures * 2)) + "%");
+            }
         }
         
         // Generate serializers for unions (not enums or DynamoDB AttributeValue)
