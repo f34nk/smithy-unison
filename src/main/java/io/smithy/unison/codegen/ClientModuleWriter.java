@@ -858,6 +858,7 @@ public final class ClientModuleWriter {
         
         // Collect all structures that are referenced by unions
         // Union members need both serializers and deserializers regardless of usage
+        // This needs to be recursive because structures in unions may reference other structures
         Set<ShapeId> structuresInUnions = new HashSet<>();
         for (Shape enumShape : enums) {
             if (enumShape instanceof UnionShape) {
@@ -865,7 +866,8 @@ public final class ClientModuleWriter {
                 for (MemberShape member : unionShape.getAllMembers().values()) {
                     Shape memberTarget = model.expectShape(member.getTarget());
                     if (memberTarget.isStructureShape()) {
-                        structuresInUnions.add(memberTarget.getId());
+                        // Recursively collect this structure and all nested structures it references
+                        collectStructuresRecursively(memberTarget.getId(), structuresInUnions, new HashSet<>());
                     }
                 }
             }
