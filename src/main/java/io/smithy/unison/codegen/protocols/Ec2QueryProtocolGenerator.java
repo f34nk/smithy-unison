@@ -67,7 +67,11 @@ public class Ec2QueryProtocolGenerator extends AwsQueryProtocolGenerator {
         writer.write("-- EC2 Query response structure (no nested Result element):");
         writer.write("-- <OperationNameResponse>...</OperationNameResponse>");
         writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
-        writer.write("resultSoup = !(Soup.findFirst \"$LResponse\" soup)", operationName);
+        writer.write("resultSoup = handle !(Soup.findFirst \"$LResponse\" soup) with cases", operationName);
+        writer.indent();
+        writer.write("{ x } -> x");
+        writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
+        writer.dedent();
         writer.write("-- EC2 Query: response element IS the result element");
     }
     
@@ -98,7 +102,11 @@ public class Ec2QueryProtocolGenerator extends AwsQueryProtocolGenerator {
         // Parse EC2 Query error XML structure using Soup
         writer.write("-- Parse EC2 Query error response using Soup");
         writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
-        writer.write("errorSoup = !(aws.xml.findAndDrill soup [\"Response\", \"Errors\", \"Error\"])");
+        writer.write("errorSoup = handle !(aws.xml.findAndDrill soup [\"Response\", \"Errors\", \"Error\"]) with cases");
+        writer.indent();
+        writer.write("{ x } -> x");
+        writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
+        writer.dedent();
         writer.write("code = aws.xml.findText \"Code\" errorSoup |> Optional.getOrElse \"UnknownError\"");
         writer.write("message = aws.xml.findText \"Message\" errorSoup |> Optional.getOrElse \"\"");
         writer.write("");

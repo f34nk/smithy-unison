@@ -998,7 +998,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 StructureShape structShape = (StructureShape) memberTarget;
                 String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
                 String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                        "parse" + baseTypeName, clientNamespace);
+                        "parse" + baseTypeName + "FromXml", clientNamespace);
                 
                 // Generate Soup-based list parsing
                 if (isOptional) {
@@ -1048,7 +1048,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             StructureShape structShape = (StructureShape) targetShape;
             String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
             String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                    "parse" + baseTypeName, clientNamespace);
+                    "parse" + baseTypeName + "FromXml", clientNamespace);
             
             if (isOptional) {
                 writer.write("$L = aws.xml.parseNested \"$L\" $L soup", varName, xmlElementName, parserName);
