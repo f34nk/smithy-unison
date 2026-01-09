@@ -1,13 +1,16 @@
 ```ucm
 scratch/main> builtins.merge
 scratch/main> lib.install @unison/base/releases/3.18.0
-
 scratch/main> lib.install @unison/http/releases/8.0.0
+scratch/main> lib.install @unison/xml/releases/1.2.0
 
 scratch/main> load generated/aws_http.u
 scratch/main> add
 
 scratch/main> load generated/aws_xml.u
+scratch/main> add
+
+scratch/main> load generated/aws_xml_bridge.u
 scratch/main> add
 
 scratch/main> load generated/aws_sigv4.u
