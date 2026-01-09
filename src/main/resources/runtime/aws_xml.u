@@ -704,90 +704,19 @@ aws.xml.toXml : a -> Text
 aws.xml.toXml value = ""
 
 -- =============================================================================
--- XML to Record Mapping (Text-based)
+-- XML to Record Mapping (Text-based) - DEPRECATED
 -- =============================================================================
 --
--- These functions help map XML elements to Unison record types using
--- text-based extraction. Used by generated code for parsing response bodies.
+-- NOTE: These text-based parsing functions have been replaced by Soup-based
+-- equivalents in aws_xml_bridge.u:
+--   - aws.xml.parseListFromXml → aws.xml.parseList (Soup-based)
+--   - aws.xml.parseWrappedListFromXml → aws.xml.parseWrappedList (Soup-based)
+--   - aws.xml.parseNestedFromXml → aws.xml.parseNested (Soup-based)
+--   - aws.xml.parseOptionalWrappedListFromXml → aws.xml.parseOptionalWrappedList (Soup-based)
 --
-
-{{
-Parse a list of structure elements from XML text.
-
-Extracts all blocks matching the tag name and applies the parser to each.
-
-Example:
-  buckets = aws.xml.parseListFromXml "Bucket" parseBucketFromXml xmlText
-}}
-aws.xml.parseListFromXml : Text -> (Text -> a) -> Text -> [a]
-aws.xml.parseListFromXml tagName parser xmlText =
-  blocks = aws.xml.extractAllBlocks tagName xmlText
-  List.map parser blocks
-
-{{
-Parse a wrapped list from XML text.
-
-Common S3 pattern: container element holds a list of item elements.
-
-Example:
-  buckets = aws.xml.parseWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
-}}
-aws.xml.parseWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> [a]
-aws.xml.parseWrappedListFromXml containerTag itemTag parser xmlText =
-  containerXml = aws.xml.extractBlock containerTag xmlText
-  if Text.isEmpty containerXml then []
-  else aws.xml.parseListFromXml itemTag parser containerXml
-
-{{
-Parse a nested structure from XML text.
-
-Returns Optional - None if the element doesn't exist.
-
-Example:
-  owner = aws.xml.parseNestedFromXml "Owner" parseOwnerFromXml xmlText
-}}
-aws.xml.parseNestedFromXml : Text -> (Text -> a) -> Text -> Optional a
-aws.xml.parseNestedFromXml tagName parser xmlText =
-  block = aws.xml.extractBlock tagName xmlText
-  if Text.isEmpty block then None
-  else Some (parser block)
-
-{{
-Parse an optional wrapped list from XML text.
-
-Returns None if container not found, Some empty list if container is empty.
-
-Handles two XML patterns:
-1. Wrapped: container holds item elements, e.g., Buckets with Bucket items
-2. Flat: container IS the item tag, repeated directly in parent
-
-Example (wrapped):
-  buckets = aws.xml.parseOptionalWrappedListFromXml "Buckets" "Bucket" parseBucketFromXml xmlText
-
-Example (flat - used when itemTag is "Member" but XML has no Member tags):
-  contents = aws.xml.parseOptionalWrappedListFromXml "Contents" "Member" parseObjectFromXml xmlText
-  This will parse all Contents elements directly from xmlText
-}}
-aws.xml.parseOptionalWrappedListFromXml : Text -> Text -> (Text -> a) -> Text -> Optional [a]
-aws.xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText =
-  -- First try flat list pattern: multiple containerTag elements directly in xmlText
-  -- This handles S3's <Contents>...</Contents><Contents>...</Contents> pattern
-  allContainerBlocks = aws.xml.extractAllBlocks containerTag xmlText
-  if Nat.gt (List.size allContainerBlocks) 1 then
-    -- Multiple container elements found - flat list pattern
-    Some (List.map parser allContainerBlocks)
-  else
-    -- Single or no container element - try wrapped pattern
-    containerXml = aws.xml.extractBlock containerTag xmlText
-    if Text.isEmpty containerXml then None
-    else
-      -- Container found - try to extract items from inside it
-      wrappedItems = aws.xml.parseListFromXml itemTag parser containerXml
-      if List.isEmpty wrappedItems then
-        -- No items found inside - containerTag IS the item (single item or flat pattern)
-        Some [parser containerXml]
-      else
-        Some wrappedItems
+-- Low-level extraction functions (extractElement, extractAllBlocks, etc.) are kept
+-- for backward compatibility and internal use by AWS Query protocol generators.
+-- New code should use aws_xml_bridge.u Soup-based functions instead.
 
 -- =============================================================================
 -- XML Decoding (Placeholder)
