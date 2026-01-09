@@ -2,8 +2,10 @@ package io.smithy.unison.codegen;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -1282,6 +1284,150 @@ public final class ClientModuleWriter {
                 return "(bug \"unsupported required field type: " + targetShape.getType() + "\")";
             }
         }
+    }
+    
+    /**
+     * Analyzes how structures are used across all operations.
+     * 
+     * <p>This method classifies structures into three categories:
+     * <ul>
+     *   <li>INPUT_ONLY: Structure only appears in operation inputs (needs serializer only)</li>
+     *   <li>OUTPUT_ONLY: Structure only appears in operation outputs (needs deserializer only)</li>
+     *   <li>SHARED: Structure appears in both inputs and outputs (needs both)</li>
+     * </ul>
+     * 
+     * <p>The classification is done by:
+     * <ol>
+     *   <li>Collecting all operations from the service and its resources</li>
+     *   <li>Recursively collecting structures referenced by operation inputs</li>
+     *   <li>Recursively collecting structures referenced by operation outputs</li>
+     *   <li>Classifying each structure based on where it appears</li>
+     * </ol>
+     * 
+     * @return A map from structure shape ID to its usage pattern
+     */
+    private Map<ShapeId, StructureUsage> analyzeStructureUsage() {
+        Map<ShapeId, StructureUsage> usageMap = new HashMap<>();
+        
+        // Track which structures appear in inputs
+        Set<ShapeId> inputStructures = new HashSet<>();
+        // Track which structures appear in outputs
+        Set<ShapeId> outputStructures = new HashSet<>();
+        
+        // Collect all operations (service + resources)
+        Set<OperationShape> allOperations = new HashSet<>();
+        for (ShapeId opId : service.getOperations()) {
+            allOperations.add(model.expectShape(opId, OperationShape.class));
+        }
+        for (ShapeId resourceId : service.getResources()) {
+            ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+            collectResourceOperations(resource, allOperations);
+        }
+        
+        // Collect structures referenced by inputs
+        for (OperationShape operation : allOperations) {
+            if (operation.getInput().isPresent()) {
+                collectStructuresRecursively(
+                    operation.getInput().get(), 
+                    inputStructures, 
+                    new HashSet<>()
+                );
+            }
+        }
+        
+        // Collect structures referenced by outputs
+        for (OperationShape operation : allOperations) {
+            if (operation.getOutput().isPresent()) {
+                collectStructuresRecursively(
+                    operation.getOutput().get(), 
+                    outputStructures, 
+                    new HashSet<>()
+                );
+            }
+        }
+        
+        // Build usage map
+        Set<ShapeId> allStructureIds = new HashSet<>();
+        allStructureIds.addAll(inputStructures);
+        allStructureIds.addAll(outputStructures);
+        
+        for (ShapeId structId : allStructureIds) {
+            boolean inInput = inputStructures.contains(structId);
+            boolean inOutput = outputStructures.contains(structId);
+            
+            if (inInput && inOutput) {
+                usageMap.put(structId, StructureUsage.SHARED);
+            } else if (inInput) {
+                usageMap.put(structId, StructureUsage.INPUT_ONLY);
+            } else if (inOutput) {
+                usageMap.put(structId, StructureUsage.OUTPUT_ONLY);
+            }
+        }
+        
+        return usageMap;
+    }
+    
+    /**
+     * Recursively collects all structure shapes referenced by a shape.
+     * 
+     * <p>This method traverses the shape graph starting from the given shape ID,
+     * collecting all structures that are directly or transitively referenced.
+     * It handles:
+     * <ul>
+     *   <li>Structures: adds them and recurses into their members</li>
+     *   <li>Lists: recurses into the member type</li>
+     *   <li>Maps: recurses into key and value types</li>
+     *   <li>Unions: recurses into all member types</li>
+     *   <li>Primitives, enums, etc.: stops recursion (no further types to collect)</li>
+     * </ul>
+     * 
+     * <p>Uses a visited set to prevent infinite loops in case of circular references.
+     * 
+     * @param shapeId The shape ID to start collecting from
+     * @param collected The set to add collected structure IDs to
+     * @param visited The set of already visited shape IDs (to avoid infinite loops)
+     */
+    private void collectStructuresRecursively(
+            ShapeId shapeId, 
+            Set<ShapeId> collected, 
+            Set<ShapeId> visited) {
+        
+        if (visited.contains(shapeId)) {
+            return; // Avoid infinite loops
+        }
+        visited.add(shapeId);
+        
+        Shape shape = model.expectShape(shapeId);
+        
+        // If it's a structure, add it
+        if (shape.isStructureShape()) {
+            collected.add(shapeId);
+            
+            // Recurse into members
+            StructureShape structure = shape.asStructureShape().get();
+            for (MemberShape member : structure.getAllMembers().values()) {
+                collectStructuresRecursively(member.getTarget(), collected, visited);
+            }
+        }
+        // If it's a list, recurse into member
+        else if (shape.isListShape()) {
+            ListShape list = shape.asListShape().get();
+            collectStructuresRecursively(list.getMember().getTarget(), collected, visited);
+        }
+        // If it's a map, recurse into key and value
+        else if (shape.isMapShape()) {
+            MapShape map = shape.asMapShape().get();
+            collectStructuresRecursively(map.getKey().getTarget(), collected, visited);
+            collectStructuresRecursively(map.getValue().getTarget(), collected, visited);
+        }
+        // If it's a union, recurse into members
+        else if (shape.isUnionShape()) {
+            UnionShape union = shape.asUnionShape().get();
+            for (MemberShape member : union.getAllMembers().values()) {
+                collectStructuresRecursively(member.getTarget(), collected, visited);
+            }
+        }
+        // Primitives, enums, etc. - no further recursion needed
     }
     
     /**
