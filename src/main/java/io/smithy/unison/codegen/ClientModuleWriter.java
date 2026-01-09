@@ -427,7 +427,14 @@ public final class ClientModuleWriter {
             
             // Generate JSON deserializers for REST-JSON protocol
             if (protocol == AwsProtocol.REST_JSON_1) {
-                generateRestJsonDeserializers(structures, enums, writer);
+                // For selective generation, pass the selected operations so we only generate deserializers for their outputs
+                if (context.settings().hasOperationFilter()) {
+                    OperationSelector selector = new OperationSelector(model, service, context.settings());
+                    Set<OperationShape> selectedOperations = selector.selectOperations();
+                    generateRestJsonDeserializers(structures, enums, selectedOperations, writer);
+                } else {
+                    generateRestJsonDeserializers(structures, enums, null, writer);
+                }
             }
         }
         
@@ -863,7 +870,7 @@ public final class ClientModuleWriter {
      * so they can be parsed from response bodies. Only generates deserializers
      * for structures that appear in operation outputs.
      */
-    private void generateRestJsonDeserializers(Set<StructureShape> structures, Set<Shape> enums, UnisonWriter writer) {
+    private void generateRestJsonDeserializers(Set<StructureShape> structures, Set<Shape> enums, Set<OperationShape> operations, UnisonWriter writer) {
         if (structures.isEmpty() && enums.isEmpty()) {
             return;
         }
@@ -882,31 +889,43 @@ public final class ClientModuleWriter {
         Set<StructureShape> outputStructures = new HashSet<>();
         Set<ShapeId> visited = new HashSet<>();
         
-        // Collect from direct service operations
-        for (ShapeId opId : service.getOperations()) {
-            OperationShape operation = model.expectShape(opId, OperationShape.class);
-            operation.getOutput().ifPresent(outputId -> {
-                collectOutputStructures(outputId, outputStructures, visited);
-            });
-        }
-        
-        // Collect from resource operations
-        for (ShapeId resourceId : service.getResources()) {
-            ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
-            collectOutputStructuresFromResource(resource, outputStructures, visited);
+        if (operations != null) {
+            // Selective generation: collect only from filtered operations
+            for (OperationShape operation : operations) {
+                operation.getOutput().ifPresent(outputId -> {
+                    collectOutputStructures(outputId, outputStructures, visited);
+                });
+            }
+        } else {
+            // Generate all: collect from all service operations
+            // Collect from direct service operations
+            for (ShapeId opId : service.getOperations()) {
+                OperationShape operation = model.expectShape(opId, OperationShape.class);
+                operation.getOutput().ifPresent(outputId -> {
+                    collectOutputStructures(outputId, outputStructures, visited);
+                });
+            }
+            
+            // Collect from resource operations
+            for (ShapeId resourceId : service.getResources()) {
+                ResourceShape resource = model.expectShape(resourceId, ResourceShape.class);
+                collectOutputStructuresFromResource(resource, outputStructures, visited);
+            }
         }
         
         writer.writeComment("=== JSON Deserializers ===");
         writer.writeBlankLine();
         
         // Generate list deserializers first (they may be referenced by maps and structures)
-        Set<software.amazon.smithy.model.shapes.ListShape> lists = jsonGen.collectListsNeedingDeserializers(service, model);
+        // Collect lists only from the filtered structures
+        Set<software.amazon.smithy.model.shapes.ListShape> lists = jsonGen.collectListsFromStructures(structures, model);
         for (software.amazon.smithy.model.shapes.ListShape listShape : lists) {
             jsonGen.generateListDeserializer(listShape, writer, context);
         }
         
         // Generate map deserializers (they may be referenced by structures)
-        Set<software.amazon.smithy.model.shapes.MapShape> maps = jsonGen.collectMapsNeedingDeserializers(service, model);
+        // Collect maps only from the filtered structures
+        Set<software.amazon.smithy.model.shapes.MapShape> maps = jsonGen.collectMapsFromStructures(structures, model);
         for (software.amazon.smithy.model.shapes.MapShape mapShape : maps) {
             jsonGen.generateMapDeserializer(mapShape, writer, context);
         }
