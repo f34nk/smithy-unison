@@ -25,7 +25,18 @@
       "service": "com.amazonaws.s3#AmazonS3",
       "name": "s3",
       "namespace": "aws.s3",
-      "outputDir": "generated"
+      "outputDir": "generated",
+      "operations": [
+        "ListBuckets",
+        "CreateBucket",
+        "DeleteBucket",
+        "PutObject",
+        "GetObject",
+        "DeleteObject",
+        "ListObjects",
+        "ListObjectsV2"
+      ],
+      "generateAllOperations": false
     }
   }
 }

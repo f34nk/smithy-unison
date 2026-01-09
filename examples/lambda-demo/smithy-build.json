@@ -25,7 +25,15 @@
       "service": "com.amazonaws.lambda#AWSGirApiService",
       "name": "lambda",
       "namespace": "aws.lambda",
-      "outputDir": "generated"
+      "outputDir": "generated",
+      "operations": [
+        "CreateFunction",
+        "GetFunction",
+        "ListFunctions",
+        "DeleteFunction",
+        "Invoke"
+      ],
+      "generateAllOperations": false
     }
   }
 }

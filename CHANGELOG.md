@@ -4,6 +4,17 @@
 
 ### Added
 
+#### Selective Operation Generation
+- Configuration support for specifying operations to generate via smithy-build.json
+- OperationSelector for filtering operations by name or shape ID
+- TransitiveDependencyCollector for recursive dependency collection from selected operations
+- Automatic inclusion of all transitive dependencies (nested structures, errors, enums, unions)
+- Integration across all code generation phases (types, serializers, deserializers, pagination helpers)
+- Operation filtering for REST-JSON list and map deserializers
+- Operation filtering for pagination helper generation
+- Support for all AWS protocols (AWS JSON, REST-JSON, REST-XML, AWS Query, EC2 Query)
+- Validation across DynamoDB, Lambda, S3, and SNS demos
+
 #### REST-JSON Response Deserializer Generation
 - Complete JSON deserializer generation for REST-JSON protocol responses
 - Structure deserializers with field-by-field parsing and exception handling

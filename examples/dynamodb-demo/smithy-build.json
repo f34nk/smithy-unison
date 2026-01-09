@@ -25,7 +25,19 @@
       "service": "com.amazonaws.dynamodb#DynamoDB_20120810",
       "name": "dynamodb",
       "namespace": "aws.dynamodb",
-      "outputDir": "generated"
+      "outputDir": "generated",
+      "operations": [
+        "CreateTable",
+        "DeleteTable",
+        "DescribeTable",
+        "ListTables",
+        "PutItem",
+        "GetItem",
+        "DeleteItem",
+        "Query",
+        "Scan"
+      ],
+      "generateAllOperations": false
     }
   }
 }

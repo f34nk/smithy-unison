@@ -1272,6 +1272,27 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     }
     
     /**
+     * Collects all map shapes from a set of structures.
+     * 
+     * <p>This is used for selective operation generation where we only want
+     * to generate deserializers for maps referenced by selected operations.
+     * 
+     * @param structures The structures to collect from
+     * @param model The Smithy model
+     * @return Set of map shapes (one per unique key+value type combination)
+     */
+    public Set<MapShape> collectMapsFromStructures(Set<StructureShape> structures, Model model) {
+        Map<String, MapShape> mapsByKeyAndValueType = new HashMap<>();
+        
+        // Collect maps from all structures
+        for (StructureShape structure : structures) {
+            collectMapsRecursively(structure, model, mapsByKeyAndValueType);
+        }
+        
+        return new HashSet<>(mapsByKeyAndValueType.values());
+    }
+    
+    /**
      * Collects all map shapes that need FromJson deserializers.
      * 
      * <p>Returns one representative map shape for each unique key+value type combination.
@@ -1321,6 +1342,27 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             software.amazon.smithy.model.shapes.ResourceShape childResource = model.expectShape(childResourceId, software.amazon.smithy.model.shapes.ResourceShape.class);
             collectMapsFromResource(childResource, model, collected);
         }
+    }
+    
+    /**
+     * Collects all list shapes from a set of structures.
+     * 
+     * <p>This is used for selective operation generation where we only want
+     * to generate deserializers for lists referenced by selected operations.
+     * 
+     * @param structures The structures to collect from
+     * @param model The Smithy model
+     * @return Set of list shapes (one per unique element type)
+     */
+    public Set<ListShape> collectListsFromStructures(Set<StructureShape> structures, Model model) {
+        Map<String, ListShape> listsByElementType = new HashMap<>();
+        
+        // Collect lists from all structures
+        for (StructureShape structure : structures) {
+            collectListsRecursively(structure, model, listsByElementType);
+        }
+        
+        return new HashSet<>(listsByElementType.values());
     }
     
     /**

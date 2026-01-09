@@ -148,11 +148,36 @@ Create [smithy-build.json](https://smithy.io/2.0/guides/smithy-build-json.html):
 }
 ```
 
-Build model:
+Generate only the operations you need, dramatically reducing code size and compilation time:
+
+```json
+{
+  "plugins": {
+    "unison-codegen": {
+      "service": "com.amazonaws.dynamodb#DynamoDB_20120810",
+      "namespace": "aws.dynamodb",
+      "operations": [
+        "CreateTable",
+        "PutItem",
+        "GetItem",
+        "Query",
+        "DeleteItem"
+      ],
+      "generateAllOperations": false
+    }
+  }
+}
+```
+
+For example: DynamoDB 9 operations → 3,418 lines (vs ~40K for full model)
+
+**Build model:**
 
 ```bash
 smithy build
 ```
+
+The generator automatically includes all transitive dependencies (nested types, errors, enums) ensuring type safety and completeness.
 
 Generated files in `generated/`:
 - `{namespace}_client.u` - Client module with types, records, and operations

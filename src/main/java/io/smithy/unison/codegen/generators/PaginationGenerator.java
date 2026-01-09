@@ -122,6 +122,33 @@ public class PaginationGenerator {
     }
     
     /**
+     * Generates pagination helpers only for the provided set of operations.
+     * 
+     * @param operations Set of operations to generate pagination for
+     * @param model The Smithy model
+     * @param writer The Unison code writer
+     */
+    public void generate(java.util.Set<OperationShape> operations, Model model, UnisonWriter writer) {
+        List<OperationShape> paginatedOps = operations.stream()
+            .filter(op -> op.hasTrait(PaginatedTrait.class))
+            .toList();
+        
+        if (paginatedOps.isEmpty()) {
+            LOGGER.fine("No paginated operations found in filtered set");
+            return;
+        }
+        
+        LOGGER.fine("Found " + paginatedOps.size() + " paginated operations in filtered set");
+        
+        writer.writeComment("=== Pagination Helpers ===");
+        writer.writeBlankLine();
+        
+        for (OperationShape operation : paginatedOps) {
+            generatePaginationHelper(operation, model, writer);
+        }
+    }
+    
+    /**
      * Generates a pagination helper for a single operation.
      * 
      * @param operation The paginated operation
