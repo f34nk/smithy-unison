@@ -64,7 +64,7 @@ examples/%: $(EXAMPLES)
 	#
 	# Build $@
 	#
-	cd $@ && make clean && make test
+	cd $@ && make clean && time -v make test
 
 # Usage: make examples/clean
 examples/clean:

@@ -29,6 +29,8 @@
       "operations": [
         "CreateTopic",
         "DeleteTopic",
+        "GetTopicAttributes",
+        "ListSubscriptionsByTopic",
         "Publish",
         "Subscribe",
         "Unsubscribe",
