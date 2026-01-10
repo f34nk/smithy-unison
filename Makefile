@@ -53,8 +53,8 @@ examples: examples/clean
 		example=`echo $$x|sed 's/\/$$//g'` ; \
 		make $$example ; \
 		if [ $$? -ne 0 ]; then \
-			echo "Error building $$example" ; \
-			exit 1 ; \
+			echo "The example $$example failed" ; \
+			return 1 ; \
 		fi ; \
 	done
 
@@ -64,7 +64,12 @@ examples/%: $(EXAMPLES)
 	#
 	# Build $@
 	#
-	cd $@ && make clean && time make test && make docker/stop
+	cd $@ && make clean && time make test; \
+	make docker/stop ; \
+	if grep -q "The transcript failed" demo.output.md; then \
+		echo "The transcript failed: $@" ; \
+		exit 1 ; \
+	fi; \
 
 # Usage: make examples/clean
 examples/clean:
