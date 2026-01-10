@@ -10,7 +10,12 @@ use Nat >= <
 -- Helper to trim whitespace (avoids ambiguity with multiple base versions)
 trimWhitespace : Text -> Text
 trimWhitespace t = 
-  isWs = c -> (Universal.==) c ?\s || (Universal.==) c ?\t || (Universal.==) c ?\n || (Universal.==) c ?\r
+  isWs = c -> match c with
+    ?\s -> true
+    ?\t -> true
+    ?\n -> true
+    ?\r -> true
+    _ -> false
   t
     |> Text.dropWhile isWs
     |> Text.reverse

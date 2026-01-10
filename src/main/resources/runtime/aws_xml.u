@@ -9,7 +9,12 @@
 -- Helper to trim whitespace (avoids ambiguity with multiple base versions)
 trimWhitespace : Text -> Text
 trimWhitespace t = 
-  isWs = c -> (Universal.==) c ?\s || (Universal.==) c ?\t || (Universal.==) c ?\n || (Universal.==) c ?\r
+  isWs = c -> match c with
+    ?\s -> true
+    ?\t -> true
+    ?\n -> true
+    ?\r -> true
+    _ -> false
   t
     |> Text.dropWhile isWs
     |> Text.reverse
@@ -215,13 +220,13 @@ aws.xml.extractElement tagName xml =
     None -> ""
     Some startTagIdx ->
       -- Find the end of the opening tag (the '>' character after the tag name)
-      afterTag = Text.drop (startTagIdx + Text.size openTagPrefix) xml
+      afterTag = Text.drop (startTagIdx Nat.+ Text.size openTagPrefix) xml
       openTagEndOpt = Text.indexOf ">" afterTag
       match openTagEndOpt with
         None -> ""
         Some relativeEndIdx ->
           -- Find the closing tag
-          contentStart = startTagIdx + Text.size openTagPrefix + relativeEndIdx + 1
+          contentStart = startTagIdx Nat.+ Text.size openTagPrefix Nat.+ relativeEndIdx Nat.+ 1
           endIdxOpt = Text.indexOf closeTag xml
           match endIdxOpt with
             Some endIdx ->
@@ -281,7 +286,7 @@ aws.xml.extractAttribute attrName xml =
     match startIdx with
       Some start ->
         let
-          valueStart = start + Text.size pattern
+          valueStart = start Nat.+ Text.size pattern
           rest = Text.drop valueStart xml
           endIdx = Text.indexOf "\"" rest
           match endIdx with
@@ -317,15 +322,15 @@ aws.xml.extractAll tagName xml =
           None -> acc
           Some start ->
             let
-              afterOpen = Text.drop (start + Text.size openTag) remaining
+              afterOpen = Text.drop (start Nat.+ Text.size openTag) remaining
               endIdx = Text.indexOf closeTag afterOpen
               match endIdx with
                 None -> acc
                 Some end ->
                   let
                     content = Text.take end afterOpen |> aws.xml.unescape
-                    rest = Text.drop (end + Text.size closeTag) afterOpen
-                    go rest (acc ++ [content])
+                    rest = Text.drop (end Nat.+ Text.size closeTag) afterOpen
+                    go rest (acc List.++ [content])
     go xml []
 
 {{
@@ -344,18 +349,77 @@ aws.xml.extractBlock tagName xml =
     endIdx = Text.indexOf closeTag xml
     match (startIdx, endIdx) with
       (Some start, Some end) ->
-        Text.slice start (end + Text.size closeTag) xml
+        Text.slice start (end Nat.+ Text.size closeTag) xml
       _ -> ""
+
+-- Helper to check if a character is a valid tag delimiter (>, space, or /)
+isTagDelimiter : Text -> Boolean
+isTagDelimiter char =
+  if Text.eq char ">" then true
+  else if Text.eq char " " then true
+  else if Text.eq char "/" then true
+  else false
 
 {{
 Extract all blocks of an element as a list.
-
+Handles nested elements with the same tag name correctly.
 }}
 aws.xml.extractAllBlocks : Text -> Text -> [Text]
 aws.xml.extractAllBlocks tagName xml =
   let
     openTag = "<" ++ tagName
     closeTag = "</" ++ tagName ++ ">"
+    openTagLen = Text.size openTag
+    closeTagLen = Text.size closeTag
+    
+    -- Find the matching close tag, accounting for nesting
+    -- searchText should start with the opening tag (e.g., "<item>...")
+    -- Returns the position AFTER the matching close tag (relative to start of search text)
+    findMatchingClose : Text -> Optional Nat
+    findMatchingClose searchText =
+      let
+        -- Find where the opening tag ends (the first >)
+        openTagEnd = Text.indexOf ">" searchText
+        startPos = match openTagEnd with
+          None -> 1  -- Fallback, skip at least one character
+          Some pos -> pos Nat.+ 1  -- Start after the >
+        
+        -- Recursive search with nesting depth, starting after the initial open tag
+        search : Nat -> Nat -> Optional Nat
+        search pos depth =
+          let
+            remaining = Text.drop pos searchText
+            nextOpen = Text.indexOf openTag remaining
+            nextClose = Text.indexOf closeTag remaining
+            match (nextOpen, nextClose) with
+              (_, None) -> None  -- No more close tags found
+              (None, Some closePos) ->
+                -- No more open tags, this close tag is ours
+                if Nat.eq depth 0 then
+                  Some (pos Nat.+ closePos Nat.+ closeTagLen)
+                else
+                  search (pos Nat.+ closePos Nat.+ closeTagLen) (Nat.decrement depth)
+              (Some openPos, Some closePos) ->
+                if Nat.lt closePos openPos then
+                  -- Close tag comes first
+                  if Nat.eq depth 0 then
+                    Some (pos Nat.+ closePos Nat.+ closeTagLen)
+                  else
+                    search (pos Nat.+ closePos Nat.+ closeTagLen) (Nat.decrement depth)
+                else
+                  -- Open tag comes first - need to check if it's actually our tag (not just prefix)
+                  -- Look for > or space after the tag name to confirm it's the full tag
+                  afterOpen = Text.drop (openPos Nat.+ openTagLen) remaining
+                  firstChar = Text.take 1 afterOpen
+                  isValidTagChar = isTagDelimiter firstChar
+                  if isValidTagChar then
+                    -- This is actually our open tag (nested), increase depth
+                    search (pos Nat.+ openPos Nat.+ openTagLen) (depth Nat.+ 1)
+                  else
+                    -- False match (e.g., <itemFoo when looking for <item), skip past it
+                    search (pos Nat.+ openPos Nat.+ openTagLen) depth
+        -- Start searching after the initial opening tag
+        search startPos 0
     
     go : Text -> [Text] -> [Text]
     go remaining acc =
@@ -366,14 +430,22 @@ aws.xml.extractAllBlocks tagName xml =
           Some start ->
             let
               afterStart = Text.drop start remaining
-              endIdx = Text.indexOf closeTag afterStart
-              match endIdx with
-                None -> acc
-                Some end ->
-                  let
-                    block = Text.take (end + Text.size closeTag) afterStart
-                    rest = Text.drop (end + Text.size closeTag) afterStart
-                    go rest (acc ++ [block])
+              -- Check this is actually our tag (not a prefix like <itemFoo)
+              afterTagName = Text.drop openTagLen afterStart
+              firstChar = Text.take 1 afterTagName
+              isValidTag = isTagDelimiter firstChar
+              if isValidTag then
+                -- Valid tag, find matching close
+                match findMatchingClose afterStart with
+                  None -> acc
+                  Some endPos ->
+                    let
+                      block = Text.take endPos afterStart
+                      rest = Text.drop endPos afterStart
+                      go rest (acc List.++ [block])
+              else
+                -- False match, skip past it and continue
+                go (Text.drop (start Nat.+ openTagLen) remaining) acc
     go xml []
 
 -- =============================================================================
@@ -403,7 +475,7 @@ aws.xml.extractCdata xml =
     endIdx = Text.indexOf endMarker xml
     match (startIdx, endIdx) with
       (Some start, Some end) ->
-        Text.slice (start + Text.size startMarker) end xml
+        Text.slice (start Nat.+ Text.size startMarker) end xml
       _ -> ""
 
 -- =============================================================================
@@ -474,7 +546,7 @@ aws.xml.rootElement xml =
     content = if Text.startsWith "<?xml" xml
       then
         match Text.indexOf "?>" xml with
-          Some idx -> Text.drop (idx + 2) xml |> trimWhitespace
+          Some idx -> Text.drop (idx Nat.+ 2) xml |> trimWhitespace
           None -> xml
       else xml
     -- Find first tag
@@ -483,7 +555,7 @@ aws.xml.rootElement xml =
       None -> ""
       Some start ->
         let
-          afterOpen = Text.drop (start + 1) content
+          afterOpen = Text.drop (start Nat.+ 1) content
           -- Find end of tag name (space or >)
           endSpace = Text.indexOf " " afterOpen
           endClose = Text.indexOf ">" afterOpen
@@ -504,7 +576,7 @@ aws.xml.stripDeclaration xml =
     if Text.startsWith "<?xml" trimmed
     then
       match Text.indexOf "?>" trimmed with
-        Some idx -> Text.drop (idx + 2) trimmed |> trimWhitespace
+        Some idx -> Text.drop (idx Nat.+ 2) trimmed |> trimWhitespace
         None -> trimmed
     else trimmed
 
@@ -654,9 +726,9 @@ aws.xml.prettyPrint xml =
                     None -> acc ++ remaining
                     Some end ->
                       let
-                        tag = Text.take (end + 1) afterOpen
-                        rest = Text.drop (end + 1) afterOpen
-                        newLevel = if Nat.eq level 0 then 0 else level - 1
+                        tag = Text.take (end Nat.+ 1) afterOpen
+                        rest = Text.drop (end Nat.+ 1) afterOpen
+                        newLevel = if Nat.eq level 0 then 0 else Nat.decrement level
                         go newLevel rest (acc ++ before ++ "\n" ++ indent newLevel ++ tag)
               else
                 -- Opening tag first
@@ -668,10 +740,10 @@ aws.xml.prettyPrint xml =
                     None -> acc ++ remaining
                     Some end ->
                       let
-                        tag = Text.take (end + 1) afterOpen
-                        rest = Text.drop (end + 1) afterOpen
+                        tag = Text.take (end Nat.+ 1) afterOpen
+                        rest = Text.drop (end Nat.+ 1) afterOpen
                         isSelfClosing = Text.endsWith "/>" tag
-                        newLevel = if isSelfClosing then level else level + 1
+                        newLevel = if isSelfClosing then level else level Nat.+ 1
                         go newLevel rest (acc ++ before ++ "\n" ++ indent level ++ tag)
     go 0 (aws.xml.stripDeclaration xml) "" |> trimWhitespace
 

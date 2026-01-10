@@ -11,7 +11,13 @@
 --
 -- Load this module AFTER loading aws_xml.u and installing @unison/xml
 
-use base.abilities.Throw
+-- Helper to convert Throw to Optional without ambiguity
+-- Uses Throw.toEither which is unambiguous, then converts to Optional
+throwToOptional : '{g, Throw e} a ->{g} Optional a
+throwToOptional thunk = 
+  match Throw.toEither thunk with
+    Left _ -> None
+    Right result -> Some result
 
 -- =============================================================================
 -- XML Parsing
@@ -90,7 +96,7 @@ Find an element, returning Optional instead of throwing.
 }}
 aws.xml.findOpt : Text -> Soup -> Optional Soup
 aws.xml.findOpt tagName soup =
-  base.abilities.Throw.toOptional do Soup.findFirst tagName soup
+  throwToOptional do Soup.findFirst tagName soup
 
 {{
 Iterate over child elements (tags only, skips text nodes).
@@ -159,7 +165,7 @@ Get an attribute value as Optional.
 }}
 aws.xml.attrOpt : Text -> Soup -> Optional Text
 aws.xml.attrOpt name soup =
-  base.abilities.Throw.toOptional do Soup.getAttribute name soup
+  throwToOptional do Soup.getAttribute name soup
 
 {{
 Check if the current element has an attribute.
@@ -178,7 +184,7 @@ Returns Optional - None if element not found.
 }}
 aws.xml.findText : Text -> Soup -> Optional Text
 aws.xml.findText tagName soup =
-  base.abilities.Throw.toOptional do
+  throwToOptional do
     elem = Soup.findFirst tagName soup
     Soup.text elem
 
@@ -225,7 +231,7 @@ Returns Optional - None if element or attribute not found.
 }}
 aws.xml.findAttr : Text -> Text -> Soup -> Optional Text
 aws.xml.findAttr tagName attrName soup =
-  base.abilities.Throw.toOptional do
+  throwToOptional do
     elem = Soup.findFirst tagName soup
     Soup.getAttribute attrName elem
 
@@ -285,7 +291,7 @@ aws.xml.runXml thunk =
 Run an XML operation returning Optional instead of throwing.
 }}
 aws.xml.tryXml : '{Throw XMLError} a -> Optional a
-aws.xml.tryXml = base.abilities.Throw.toOptional
+aws.xml.tryXml = throwToOptional
 
 -- =============================================================================
 -- XMLNode Helpers

@@ -138,9 +138,9 @@ aws.http.mergeHeaders : [(Text, Text)] -> [(Text, Text)] -> [(Text, Text)]
 aws.http.mergeHeaders base override =
   let
     overrideNames = List.map (cases (k, _) -> Text.toLowercase k) override
-    containsName = name -> List.any (n -> (Universal.==) n name) overrideNames
+    containsName = name -> List.any (n -> Text.eq n name) overrideNames
     filtered = List.filter (cases (k, _) -> not (containsName (Text.toLowercase k))) base
-    filtered ++ override
+    filtered List.++ override
 
 -- =============================================================================
 -- Query String Helpers
@@ -937,7 +937,7 @@ aws.http.withRetry config action =
   retryLoop attempt totalDelay =
     match Exception.catch action with
       Right result -> 
-        aws.http.RetryResult.RetryResult (Right result) (attempt + 1) totalDelay
+        aws.http.RetryResult.RetryResult (Right result) (attempt Nat.+ 1) totalDelay
       Left failure ->
         -- Try to extract aws.http.Error from failure
         err = match Any.unsafeExtract (Failure.payload failure) with
@@ -951,10 +951,10 @@ aws.http.withRetry config action =
           delayMs = aws.http.calculateBackoff config attempt
           -- Sleep then retry
           _ = !(aws.http.sleepMs delayMs)
-          retryLoop (attempt + 1) (totalDelay + delayMs)
+          retryLoop (attempt Nat.+ 1) (totalDelay Nat.+ delayMs)
         else
           -- Return error result
-          aws.http.RetryResult.RetryResult (Left err) (attempt + 1) totalDelay
+          aws.http.RetryResult.RetryResult (Left err) (attempt Nat.+ 1) totalDelay
   do retryLoop 0 0
 
 {{
