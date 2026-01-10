@@ -52,6 +52,10 @@ examples: examples/clean
 	@for x in $(EXAMPLES); do \
 		example=`echo $$x|sed 's/\/$$//g'` ; \
 		make $$example ; \
+		if [ $$? -ne 0 ]; then \
+			echo "The example $$example failed" ; \
+			return 1 ; \
+		fi ; \
 	done
 
 # Usage: make examples/simple-service
@@ -61,11 +65,11 @@ examples/%: $(EXAMPLES)
 	# Build $@
 	#
 	cd $@ && make clean && time make test; \
-	if [ $$? -ne 0 ]; then \
-		echo "Error building $@" ; \
+	make docker/stop ; \
+	if grep -q "The transcript failed" demo.output.md; then \
+		echo "The transcript failed: $@" ; \
 		exit 1 ; \
 	fi; \
-	make docker/stop
 
 # Usage: make examples/clean
 examples/clean:
