@@ -1556,7 +1556,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 structure.getId().getName() + "FromJson");
         
         writer.writeComment("Deserialize " + structure.getId().getName() + " from JSON");
-        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + structType);
+        writer.writeSignature(functionName, "core.Json -> '{Exception} " + structType);
         
         List<MemberShape> members = structure.getAllMembers().values().stream().toList();
         String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
@@ -1586,15 +1586,8 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
                 boolean isNonOptional = (member.isRequired() || hasDefault) && !isHttpBound;
                 
-                if (isNonOptional) {
-                    // Non-optional field (required or has default)
-                    writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)",
-                            memberName, jsonName, deserializer);
-                } else {
-                    // Optional field
-                    writer.write("$L = aws.json.bridge.extractOptionalField \"$L\" json $L",
-                            memberName, jsonName, deserializer);
-                }
+                // Generate field extraction using core.Json helpers
+                generateCoreJsonFieldExtraction(memberName, jsonName, targetShape, member, model, clientNamespace, writer, isNonOptional);
             }
             
             // Build structure using positional constructor
@@ -1634,15 +1627,21 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 enumId.getName() + "FromText");
         
         writer.writeComment("Deserialize " + enumId.getName() + " from JSON");
-        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + enumType);
+        writer.writeSignature(functionName, "core.Json -> '{Exception} " + enumType);
         writer.write("$L json = do", functionName);
         writer.indent();
         
-        writer.write("value = !(aws.json.bridge.parseString json)");
+        writer.write("match json with");
+        writer.indent();
+        writer.write("core.Json.Text value ->");
+        writer.indent();
         writer.write("match $L value with", fromTextFunc);
         writer.indent();
         writer.write("Some e -> e");
         writer.write("None -> Exception.raise (Generic.failure \"Invalid enum value\" value)");
+        writer.dedent();
+        writer.dedent();
+        writer.write("_ -> Exception.raise (Generic.failure \"Expected string for enum\" json)");
         writer.dedent();
         
         writer.dedent();
@@ -1667,7 +1666,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 unionShape.getId().getName() + "FromJson");
         
         writer.writeComment("Deserialize " + unionShape.getId().getName() + " from JSON (union type)");
-        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} " + unionType);
+        writer.writeSignature(functionName, "core.Json -> '{Exception} " + unionType);
         writer.write("$L json = do", functionName);
         writer.indent();
         
@@ -1746,13 +1745,17 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String valueType = getUnisonTypeForShape(valueShape, model, clientNamespace);
         
         writer.writeComment("Deserialize map from " + keyTypeName + " to " + valueTypeName + " from JSON");
-        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} Map " + keyType + " " + valueType);
+        writer.writeSignature(functionName, "core.Json -> '{Exception} Map " + keyType + " " + valueType);
         writer.write("$L json =", functionName);
         writer.indent();
         writer.write("do");
         writer.indent();
-        writer.write("fields = !(aws.json.bridge.parseObject json)");
-        writer.write("valuePairs = !(aws.json.bridge.mapPairsWithException fields $L)", valueDeserializer);
+        writer.write("fields = match json with");
+        writer.indent();
+        writer.write("core.Json.Object f -> f");
+        writer.write("_ -> Exception.raise (Generic.failure \"Expected JSON object for map\" json)");
+        writer.dedent();
+        writer.write("valuePairs = List.map (cases (k, v) -> (k, !($L v))) fields", valueDeserializer);
         
         // If key is an enum, convert Text keys to enum keys
         if (keyShape.isEnumShape() || (keyShape.isStringShape() && keyShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
@@ -1797,14 +1800,18 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String elementDeserializer = getDeserializerForType(elementShape, model, clientNamespace);
         
         writer.writeComment("Deserialize list of " + elementTypeName + " from JSON");
-        writer.writeSignature(functionName, "aws.json.JsonValue -> '{Exception} [" + 
+        writer.writeSignature(functionName, "core.Json -> '{Exception} [" + 
                              getUnisonTypeForShape(elementShape, model, clientNamespace) + "]");
         writer.write("$L json =", functionName);
         writer.indent();
         writer.write("do");
         writer.indent();
-        writer.write("items = !(aws.json.bridge.parseArray json)");
-        writer.write("!(aws.json.bridge.mapWithException items $L)", elementDeserializer);
+        writer.write("items = match json with");
+        writer.indent();
+        writer.write("core.Json.Array arr -> arr");
+        writer.write("_ -> Exception.raise (Generic.failure \"Expected JSON array for list\" json)");
+        writer.dedent();
+        writer.write("List.map (elem -> !($L elem)) items", elementDeserializer);
         writer.dedent();
         writer.dedent();
         writer.writeBlankLine();
@@ -1898,10 +1905,9 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         boolean hasBodyMembers = !bodyMembers.isEmpty();
         
         if (hasBodyMembers) {
-            // Parse JSON from response body
+            // Parse JSON from response body using core.Json
             writer.write("-- Parse JSON response body");
-            writer.write("bodyText = aws.http.bytesToText (Http.Response.body response)");
-            writer.write("json = !(aws.json.parseJson bodyText)");
+            writer.write("json = !(aws.json.bridge.deserializeCoreJsonResponse (Http.Response.body response))");
             writer.write("");
         }
         
@@ -1921,23 +1927,16 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 // Extract raw payload
                 generateResponsePayloadExtraction(member, model, writer, context);
             } else {
-                // Extract from JSON body
+                // Extract from JSON body using core.Json helpers
                 String jsonName = getJsonName(member);
-                String deserializer = getJsonDeserializer(member, model, clientNamespace);
+                Shape targetShape = model.expectShape(member.getTarget());
                 
                 // Check if field is non-optional (required or has default value)
                 boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
                 boolean isNonOptional = member.isRequired() || hasDefault;
                 
-                if (isNonOptional) {
-                    // Required field - use extractField (raises exception if missing)
-                    writer.write("$L = !(aws.json.bridge.extractField \"$L\" json $L)",
-                            memberName, jsonName, deserializer);
-                } else {
-                    // Optional field - use extractOptionalField (returns None if missing)
-                    writer.write("$L = aws.json.bridge.extractOptionalField \"$L\" json $L",
-                            memberName, jsonName, deserializer);
-                }
+                // Generate field extraction using core.Json helpers
+                generateCoreJsonFieldExtraction(memberName, jsonName, targetShape, member, model, clientNamespace, writer, isNonOptional);
             }
         }
         
@@ -2048,6 +2047,171 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 writer.write("$L = if Bytes.size body Nat.== 0 then None else Some (aws.http.bytesToText body)", memberName);
             } else {
                 writer.write("$L = aws.http.bytesToText (Http.Response.body response)", memberName);
+            }
+        }
+    }
+    
+    /**
+     * Generates field extraction code using core.Json helper functions.
+     * 
+     * <p>This method generates the appropriate extraction code based on the target shape type,
+     * using the new core.Json helper functions in aws_json_bridge.u.
+     * 
+     * @param varName The variable name for the extracted field
+     * @param jsonName The JSON field name
+     * @param targetShape The target shape of the member
+     * @param member The member shape
+     * @param model The Smithy model
+     * @param clientNamespace The client namespace
+     * @param writer The Unison code writer
+     * @param isNonOptional Whether the field is non-optional (required or has default)
+     */
+    private void generateCoreJsonFieldExtraction(String varName, String jsonName, Shape targetShape,
+            MemberShape member, Model model, String clientNamespace, UnisonWriter writer, boolean isNonOptional) {
+        
+        if (targetShape.isEnumShape() || (targetShape.isStringShape() && targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            // Enum - find text then convert via FromText function
+            String fromTextFunc = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    targetShape.getId().getName() + "FromText");
+            writer.write("$L = aws.json.bridge.coreJsonFindText \"$L\" json |> Optional.flatMap $L", 
+                    varName, jsonName, fromTextFunc);
+            if (isNonOptional) {
+                writer.write("$L = match $L with", varName, varName);
+                writer.indent();
+                writer.write("Some v -> v");
+                writer.write("None -> Exception.raise (Generic.failure \"Missing required field: $L\" \"$L\")", jsonName, jsonName);
+                writer.dedent();
+            }
+        } else if (targetShape.isStringShape()) {
+            writer.write("$L = aws.json.bridge.coreJsonFindText \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse \"\" $L", varName, varName);
+            }
+        } else if (targetShape.isIntegerShape() || targetShape.isLongShape() || targetShape.isShortShape() || targetShape.isByteShape()) {
+            writer.write("$L = aws.json.bridge.coreJsonFindInt \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse +0 $L", varName, varName);
+            }
+        } else if (targetShape.isFloatShape() || targetShape.isDoubleShape()) {
+            writer.write("$L = aws.json.bridge.coreJsonFindFloat \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse 0.0 $L", varName, varName);
+            }
+        } else if (targetShape.isBooleanShape()) {
+            writer.write("$L = aws.json.bridge.coreJsonFindBool \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse false $L", varName, varName);
+            }
+        } else if (targetShape.isBlobShape()) {
+            // Blob - find text then base64 decode
+            writer.write("$L = aws.json.bridge.coreJsonFindText \"$L\" json |> Optional.flatMap (t -> match builtin.Bytes.fromBase64 (toUtf8 t) with", varName, jsonName);
+            writer.indent();
+            writer.write("Right bytes -> Some bytes");
+            writer.write("Left _ -> None)");
+            writer.dedent();
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse (Bytes.empty) $L", varName, varName);
+            }
+        } else if (targetShape.isTimestampShape()) {
+            // Timestamp - stored as Text
+            writer.write("$L = aws.json.bridge.coreJsonFindText \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse \"\" $L", varName, varName);
+            }
+        } else if (targetShape.isListShape()) {
+            ListShape listShape = targetShape.asListShape().get();
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            
+            if (memberTarget.isStringShape()) {
+                // List of strings - use findAllText which returns []
+                writer.write("$L = aws.json.bridge.coreJsonFindAllText \"$L\" json", varName, jsonName);
+                if (!isNonOptional) {
+                    // Make it Optional for optional fields
+                    writer.write("$L = if List.isEmpty $L then None else Some $L", varName, varName, varName);
+                }
+            } else if (memberTarget.isIntegerShape() || memberTarget.isLongShape()) {
+                // List of integers
+                writer.write("$L = aws.json.bridge.coreJsonFindAllInt \"$L\" json", varName, jsonName);
+                if (!isNonOptional) {
+                    writer.write("$L = if List.isEmpty $L then None else Some $L", varName, varName, varName);
+                }
+            } else if (memberTarget.isStructureShape()) {
+                // List of structures - use parseList with structure parser
+                String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                        memberTarget.getId().getName() + "FromCoreJson");
+                if (isNonOptional) {
+                    writer.write("$L = aws.json.bridge.coreJsonParseList \"$L\" $L json", varName, jsonName, parserName);
+                } else {
+                    writer.write("$L = aws.json.bridge.coreJsonParseOptionalList \"$L\" $L json", varName, jsonName, parserName);
+                }
+            } else {
+                // Fallback for other list types
+                writer.write("$L = aws.json.bridge.coreJsonFindArray \"$L\" json", varName, jsonName);
+                if (isNonOptional) {
+                    writer.write("$L = Optional.getOrElse [] $L", varName, varName);
+                }
+            }
+        } else if (targetShape.isMapShape()) {
+            MapShape mapShape = targetShape.asMapShape().get();
+            Shape valueTarget = model.expectShape(mapShape.getValue().getTarget());
+            
+            if (valueTarget.isStringShape()) {
+                // Map with string values
+                writer.write("$L = aws.json.bridge.coreJsonParseMap \"$L\" (json -> match json with", varName, jsonName);
+                writer.indent();
+                writer.write("core.Json.Text t -> t");
+                writer.write("_ -> \"\") json");
+                writer.dedent();
+                if (!isNonOptional) {
+                    writer.write("$L = if List.isEmpty $L then None else Some $L", varName, varName, varName);
+                }
+            } else if (valueTarget.isStructureShape()) {
+                // Map with structure values
+                String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                        valueTarget.getId().getName() + "FromCoreJson");
+                writer.write("$L = aws.json.bridge.coreJsonParseMap \"$L\" $L json", varName, jsonName, parserName);
+                if (!isNonOptional) {
+                    writer.write("$L = if List.isEmpty $L then None else Some $L", varName, varName, varName);
+                }
+            } else {
+                // Fallback
+                writer.write("$L = aws.json.bridge.coreJsonFindObject \"$L\" json", varName, jsonName);
+                if (isNonOptional) {
+                    writer.write("$L = Optional.getOrElse (core.Json.Object []) $L", varName, varName);
+                }
+            }
+        } else if (targetShape.isStructureShape()) {
+            // Nested structure - use parseNested with structure parser
+            String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    targetShape.getId().getName() + "FromCoreJson");
+            if (isNonOptional) {
+                writer.write("$L = !(aws.json.bridge.coreJsonRequireNested \"$L\" $L json)", varName, jsonName, parserName);
+            } else {
+                writer.write("$L = aws.json.bridge.coreJsonParseNested \"$L\" $L json", varName, jsonName, parserName);
+            }
+        } else if (targetShape.isUnionShape()) {
+            // Union - use generated FromCoreJson deserializer
+            String deserializer = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
+                    targetShape.getId().getName() + "FromCoreJson");
+            writer.write("$L = aws.json.bridge.coreJsonParseNested \"$L\" $L json", varName, jsonName, deserializer);
+            if (isNonOptional) {
+                writer.write("$L = match $L with", varName, varName);
+                writer.indent();
+                writer.write("Some v -> v");
+                writer.write("None -> Exception.raise (Generic.failure \"Missing required field: $L\" \"$L\")", jsonName, jsonName);
+                writer.dedent();
+            }
+        } else if (targetShape.isDocumentShape()) {
+            // Document - keep as Json
+            writer.write("$L = aws.json.bridge.coreJsonFindObject \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse (core.Json.Object []) $L", varName, varName);
+            }
+        } else {
+            // Fallback - treat as text
+            writer.write("$L = aws.json.bridge.coreJsonFindText \"$L\" json", varName, jsonName);
+            if (isNonOptional) {
+                writer.write("$L = Optional.getOrElse \"\" $L", varName, varName);
             }
         }
     }
@@ -2167,24 +2331,24 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("$L.parseError response =", clientNamespace);
         writer.indent();
         
-        // Parse error body
+        // Parse error body using core.Json
         writer.write("errorBody = aws.http.bytesToText (Http.Response.body response)");
-        writer.write("json = match catch do !(aws.json.parseJson errorBody) with");
+        writer.write("json = match core.Json.tryFromText errorBody with");
         writer.indent();
         writer.write("Right j -> j");
-        writer.write("Left _ -> aws.json.jsonObject []");
+        writer.write("Left _ -> core.Json.Object []");
         writer.dedent();
         writer.write("");
         
-        // Extract error code from multiple possible locations
+        // Extract error code from multiple possible locations using core.Json helpers
         writer.write("-- Extract error code (try multiple locations)");
         writer.write("-- Format 1: __type field");
-        writer.write("errorType1 = aws.json.bridge.extractOptionalField \"__type\" json aws.json.bridge.parseString");
+        writer.write("errorType1 = aws.json.bridge.coreJsonFindText \"__type\" json");
         writer.write("-- Format 2: Type field");
-        writer.write("errorType2 = aws.json.bridge.extractOptionalField \"Type\" json aws.json.bridge.parseString");
+        writer.write("errorType2 = aws.json.bridge.coreJsonFindText \"Type\" json");
         writer.write("-- Format 3: code/Code field");
-        writer.write("errorType3 = aws.json.bridge.extractOptionalField \"code\" json aws.json.bridge.parseString");
-        writer.write("errorType4 = aws.json.bridge.extractOptionalField \"Code\" json aws.json.bridge.parseString");
+        writer.write("errorType3 = aws.json.bridge.coreJsonFindText \"code\" json");
+        writer.write("errorType4 = aws.json.bridge.coreJsonFindText \"Code\" json");
         writer.write("");
         writer.write("-- Use first non-None error type");
         writer.write("errorType = match errorType1 with");
@@ -2196,10 +2360,10 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("      None -> Optional.getOrElse \"UnknownError\" errorType4");
         writer.write("");
         
-        // Extract error message
+        // Extract error message using core.Json helpers
         writer.write("-- Extract error message (try both cases)");
-        writer.write("errorMsg1 = aws.json.bridge.extractOptionalField \"message\" json aws.json.bridge.parseString");
-        writer.write("errorMsg2 = aws.json.bridge.extractOptionalField \"Message\" json aws.json.bridge.parseString");
+        writer.write("errorMsg1 = aws.json.bridge.coreJsonFindText \"message\" json");
+        writer.write("errorMsg2 = aws.json.bridge.coreJsonFindText \"Message\" json");
         writer.write("errorMessage = match errorMsg1 with");
         writer.write("  Some m -> m");
         writer.write("  None -> Optional.getOrElse \"\" errorMsg2");
