@@ -37,6 +37,7 @@ import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.shapes.UnionShape;
 import software.amazon.smithy.model.traits.ErrorTrait;
+import software.amazon.smithy.model.traits.XmlNameTrait;
 
 /**
  * Core client module code generation logic for Unison.
@@ -1239,9 +1240,8 @@ public final class ClientModuleWriter {
         writer.indent();
         
         for (MemberShape member : structure.getAllMembers().values()) {
-            String fieldName = member.getMemberName();
-            // Get XML element name (capitalize first letter by convention)
-            String xmlElementName = Character.toUpperCase(fieldName.charAt(0)) + fieldName.substring(1);
+            // Get XML element name using @xmlName trait if present
+            String xmlElementName = getXmlElementName(member);
             
             Shape targetShape = model.expectShape(member.getTarget());
             String extraction = generateFieldExtraction(member, targetShape, xmlElementName);
@@ -1250,6 +1250,21 @@ public final class ClientModuleWriter {
         
         writer.dedent();
         writer.dedent();
+    }
+    
+    /**
+     * Gets the XML element name for a member.
+     * Uses @xmlName trait if present, otherwise uses the member name with first letter capitalized.
+     */
+    private String getXmlElementName(MemberShape member) {
+        // Check for @xmlName trait first
+        Optional<XmlNameTrait> xmlNameTrait = member.getTrait(XmlNameTrait.class);
+        if (xmlNameTrait.isPresent()) {
+            return xmlNameTrait.get().getValue();
+        }
+        // Fallback: capitalize first letter (AWS XML convention for non-EC2 protocols)
+        String name = member.getMemberName();
+        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
     }
     
     /**
@@ -1279,13 +1294,13 @@ public final class ClientModuleWriter {
             ListShape listShape = (ListShape) targetShape;
             Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
             
+            // Get item element name from list member using @xmlName trait
+            String itemElementName = getXmlElementName(listShape.getMember());
+            
             if (memberTarget instanceof StructureShape) {
                 // List of structures
                 String baseItemTypeName = UnisonSymbolProvider.toUnisonTypeName(memberTarget.getId().getName());
                 String parserName = getNamespacedFunctionName("parse" + baseItemTypeName + "FromXml");
-                // Get item element name from list member
-                String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
-                        + listShape.getMember().getMemberName().substring(1);
                 if (isOptional) {
                     return "(aws.xml.parseOptionalWrappedListFromXml \"" + xmlElementName + "\" \"" + itemElementName + "\" " + parserName + " xml)";
                 } else {
@@ -1294,8 +1309,6 @@ public final class ClientModuleWriter {
             } else if (memberTarget instanceof EnumShape || 
                     memberTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
                 // List of enums - extract text and convert
-                String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
-                        + listShape.getMember().getMemberName().substring(1);
                 String enumFromText = getNamespacedFunctionName(memberTarget.getId().getName() + "FromText");
                 if (isOptional) {
                     return "(Some (List.filterMap " + enumFromText + " (aws.xml.extractAll \"" + itemElementName + "\" xml)))";
@@ -1304,8 +1317,6 @@ public final class ClientModuleWriter {
                 }
             } else if (memberTarget.isStringShape()) {
                 // List of strings (plain, not enums)
-                String itemElementName = Character.toUpperCase(listShape.getMember().getMemberName().charAt(0)) 
-                        + listShape.getMember().getMemberName().substring(1);
                 if (isOptional) {
                     // Use Optional.some with list - if empty we still return Some []
                     return "(Some (aws.xml.extractAll \"" + itemElementName + "\" xml))";
