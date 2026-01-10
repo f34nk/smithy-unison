@@ -20,6 +20,13 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed Optional value is None (indicates parsing failure)
+requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome fieldName opt = do
+  match opt with
+    Some value -> value
+    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -132,14 +139,8 @@ getQueueUrlDemo config = do
   
   -- Extract queue URL
   printLine "  ✓ SUCCESS: GetQueueUrl returned"
-  queueUrl = match aws.sqs.GetQueueUrlResult.queueUrl result with
-    Some url -> 
-      printLine ("  → Queue URL: " ++ url)
-      url
-    None -> 
-      printLine "  ✗ ERROR: No queue URL in response"
-      ""
-  
+  queueUrl = !(requireSome "queueUrl" (aws.sqs.GetQueueUrlResult.queueUrl result))
+  printLine ("  → Queue URL: " ++ queueUrl)
   queueUrl
 
 {{
@@ -161,10 +162,9 @@ sendMessageDemo config queueUrl = do
   
   printLine "  ✓ SUCCESS: SendMessage completed"
   
-  -- Display message ID if available
-  match aws.sqs.SendMessageResult.messageId result with
-    Some msgId -> printLine ("  → MessageId: " ++ msgId)
-    None -> ()
+  -- Display message ID (require it to be present)
+  msgId = !(requireSome "messageId" (aws.sqs.SendMessageResult.messageId result))
+  printLine ("  → MessageId: " ++ msgId)
 
 {{
 Receive messages from the queue.
