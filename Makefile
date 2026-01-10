@@ -64,7 +64,7 @@ examples/%: $(EXAMPLES)
 	#
 	# Build $@
 	#
-	cd $@ && make clean && time make test
+	cd $@ && make clean && time make test && make docker/stop
 
 # Usage: make examples/clean
 examples/clean:
