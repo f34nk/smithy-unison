@@ -26,6 +26,13 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed Optional value is None (indicates parsing failure)
+requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome fieldName opt = do
+  match opt with
+    Some value -> value
+    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -133,31 +140,23 @@ listTopicsDemo config = do
   printLine "  ✓ SUCCESS: ListTopics returned"
   
   -- Extract and display topics
-  match aws.sns.ListTopicsResponse.topics result with
-    Some topics ->
-      count = List.size topics
-      printLine ("  → Found " ++ Nat.toText count ++ " topic(s)")
-      
-      -- Print each topic ARN
-      go i = cases
-        [] -> "arn:aws:sns:us-east-1:000000000000:sns-demo-topic"
-        topic +: rest ->
-          match aws.sns.Topic.topicArn topic with
-            Some arn ->
-              printLine ("    [" ++ Nat.toText i ++ "] " ++ arn)
-              if Text.contains testTopicName arn then
-                printLine "        ✓ Test topic found!"
-                arn
-              else
-                go (i + 1) rest
-            None ->
-              printLine ("    [" ++ Nat.toText i ++ "] (no ARN)")
-              go (i + 1) rest
-      
-      go 0 topics
-    None ->
-      printLine "  → No topics found"
-      "arn:aws:sns:us-east-1:000000000000:sns-demo-topic"
+  topics = !(requireSome "topics" (aws.sns.ListTopicsResponse.topics result))
+  count = List.size topics
+  printLine ("  → Found " ++ Nat.toText count ++ " topic(s)")
+  
+  -- Print each topic ARN and find our test topic
+  go i = cases
+    [] -> Exception.raise (Failure (typeLink Text) ("Test topic '" ++ testTopicName ++ "' not found in topic list") (Any ()))
+    topic +: rest ->
+      arn = !(requireSome "topicArn" (aws.sns.Topic.topicArn topic))
+      printLine ("    [" ++ Nat.toText i ++ "] " ++ arn)
+      if Text.contains testTopicName arn then
+        printLine "        ✓ Test topic found!"
+        arn
+      else
+        go (i + 1) rest
+  
+  go 0 topics
 
 {{
 Get attributes for the test topic.
@@ -178,21 +177,18 @@ getTopicAttributesDemo config topicArn = do
   printLine "  ✓ SUCCESS: GetTopicAttributes returned"
   
   -- Extract and display attributes
-  match aws.sns.GetTopicAttributesResponse.attributes result with
-    Some attrs ->
-      attrList = Map.toList attrs
-      printLine ("  → Topic has " ++ Nat.toText (List.size attrList) ++ " attribute(s)")
-      
-      -- Display some key attributes
-      go = cases
-        [] -> ()
-        (key, value) +: rest ->
-          printLine ("    " ++ key ++ ": " ++ value)
-          go rest
-      
-      go attrList
-    None ->
-      printLine "  → No attributes returned"
+  attrs = !(requireSome "attributes" (aws.sns.GetTopicAttributesResponse.attributes result))
+  attrList = Map.toList attrs
+  printLine ("  → Topic has " ++ Nat.toText (List.size attrList) ++ " attribute(s)")
+  
+  -- Display some key attributes
+  go = cases
+    [] -> ()
+    (key, value) +: rest ->
+      printLine ("    " ++ key ++ ": " ++ value)
+      go rest
+  
+  go attrList
 
 {{
 List all subscriptions for the test topic.
@@ -213,30 +209,27 @@ listSubscriptionsDemo config topicArn = do
   printLine "  ✓ SUCCESS: ListSubscriptionsByTopic returned"
   
   -- Extract and display subscriptions
-  match aws.sns.ListSubscriptionsByTopicResponse.subscriptions result with
-    Some subs ->
-      count = List.size subs
-      printLine ("  → Found " ++ Nat.toText count ++ " subscription(s)")
-      
-      -- Display each subscription
-      go i = cases
-        [] -> ()
-        sub +: rest ->
-          printLine ("    [" ++ Nat.toText i ++ "]")
-          match aws.sns.Subscription.protocol sub with
-            Some protocol -> printLine ("        Protocol: " ++ protocol)
-            None -> ()
-          match aws.sns.Subscription.endpoint sub with
-            Some endpoint -> printLine ("        Endpoint: " ++ endpoint)
-            None -> ()
-          match aws.sns.Subscription.subscriptionArn sub with
-            Some arn -> printLine ("        SubscriptionArn: " ++ arn)
-            None -> ()
-          go (i + 1) rest
-      
-      go 0 subs
-    None ->
-      printLine "  → No subscriptions found"
+  subs = !(requireSome "subscriptions" (aws.sns.ListSubscriptionsByTopicResponse.subscriptions result))
+  count = List.size subs
+  printLine ("  → Found " ++ Nat.toText count ++ " subscription(s)")
+  
+  -- Display each subscription
+  go i = cases
+    [] -> ()
+    sub +: rest ->
+      printLine ("    [" ++ Nat.toText i ++ "]")
+      match aws.sns.Subscription.protocol sub with
+        Some protocol -> printLine ("        Protocol: " ++ protocol)
+        None -> ()
+      match aws.sns.Subscription.endpoint sub with
+        Some endpoint -> printLine ("        Endpoint: " ++ endpoint)
+        None -> ()
+      match aws.sns.Subscription.subscriptionArn sub with
+        Some arn -> printLine ("        SubscriptionArn: " ++ arn)
+        None -> ()
+      go (i + 1) rest
+  
+  go 0 subs
 
 {{
 Publish a message to the test topic.
@@ -260,10 +253,7 @@ publishMessageDemo config topicArn = do
   printLine "  ✓ SUCCESS: Publish completed"
   
   -- Display message ID
-  match aws.sns.PublishResponse.messageId result with
-    Some messageId ->
-      printLine ("  → Message ID: " ++ messageId)
-      printLine "  ✓ Message published successfully!"
-      printLine "  ✓ Message will be delivered to subscribed SQS queue"
-    None ->
-      printLine "  → No message ID returned"
+  messageId = !(requireSome "messageId" (aws.sns.PublishResponse.messageId result))
+  printLine ("  → Message ID: " ++ messageId)
+  printLine "  ✓ Message published successfully!"
+  printLine "  ✓ Message will be delivered to subscribed SQS queue"
