@@ -1,0 +1,153 @@
+-- EC2 XML Parsing Tests
+-- Tests the XML parsing functions against sample LocalStack XML responses
+
+-- Sample XML responses from LocalStack (based on actual responses)
+
+namespace aws.xml.parse.test2
+
+-- DescribeVpcs response sample
+sampleDescribeVpcsResponse : Text
+sampleDescribeVpcsResponse = "<?xml version='1.0' encoding='utf-8'?><DescribeVpcsResponse xmlns=\"http://ec2.amazonaws.com/doc/2016-11-15/\"><vpcSet><item><vpcId>vpc-12345678</vpcId><ownerId>000000000000</ownerId><state>available</state><cidrBlock>10.0.0.0/16</cidrBlock><cidrBlockAssociationSet><item><cidrBlock>10.0.0.0/16</cidrBlock><associationId>vpc-cidr-assoc-12345</associationId><cidrBlockState><state>associated</state></cidrBlockState></item></cidrBlockAssociationSet><isDefault>false</isDefault><tagSet/><instanceTenancy>default</instanceTenancy></item></vpcSet><requestId>test-request-id</requestId></DescribeVpcsResponse>"
+
+-- Extract just the VPC item XML for isolated testing
+sampleVpcItemXml : Text
+sampleVpcItemXml = "<item><vpcId>vpc-12345678</vpcId><ownerId>000000000000</ownerId><state>available</state><cidrBlock>10.0.0.0/16</cidrBlock><isDefault>false</isDefault><instanceTenancy>default</instanceTenancy></item>"
+
+-- Helper to print blocks without ambiguous List.foreach
+printBlocks : [Text] ->{IO, Exception} ()
+printBlocks blocks =
+  go idx items = match items with
+    [] -> ()
+    head +: tail ->
+      printLine ("  Block " ++ Nat.toText idx ++ ": " ++ head)
+      go (idx Nat.+ 1) tail
+  go 0 blocks
+
+-- Test parsing a single VPC element
+-- This test is using generated aws_ec2_client.u - commented out for now
+-- testParseVpcFromXml : '{IO, Exception} ()
+-- testParseVpcFromXml = do
+--   printLine "=== Testing parseVpcFromXml ==="
+--   printLine ""
+--   printLine "Input XML:"
+--   printLine sampleVpcItemXml
+--   printLine ""
+  
+--   -- Parse using the generated parser
+--   vpc = aws.ec2.parseVpcFromXml sampleVpcItemXml
+  
+--   printLine "Parsed VPC:"
+--   vpcId = Optional.getOrElse "MISSING" (aws.ec2.Vpc.vpcId vpc)
+--   ownerId = Optional.getOrElse "MISSING" (aws.ec2.Vpc.ownerId vpc)
+--   state = Optional.getOrElse "MISSING" (Optional.map aws.ec2.vpcStateToText (aws.ec2.Vpc.state vpc))
+--   cidrBlock = Optional.getOrElse "MISSING" (aws.ec2.Vpc.cidrBlock vpc)
+--   isDefault = Optional.getOrElse false (aws.ec2.Vpc.isDefault vpc)
+  
+--   printLine ("  vpcId: " ++ vpcId)
+--   printLine ("  ownerId: " ++ ownerId)
+--   printLine ("  state: " ++ state)
+--   printLine ("  cidrBlock: " ++ cidrBlock)
+--   printLine ("  isDefault: " ++ Boolean.toText isDefault)
+--   printLine ""
+
+-- Test extracting individual elements
+testExtractElement : '{IO, Exception} ()
+testExtractElement = do
+  printLine "=== Testing aws.xml.extractElement ==="
+  printLine ""
+  
+  -- Test extracting vpcId (lowercase)
+  vpcIdLower = aws.xml.extractElementOpt "vpcId" sampleVpcItemXml
+  printLine ("extractElementOpt \"vpcId\": " ++ Optional.getOrElse "NONE" vpcIdLower)
+  
+  -- Test extracting VpcId (PascalCase) - should NOT work with LocalStack XML
+  vpcIdUpper = aws.xml.extractElementOpt "VpcId" sampleVpcItemXml
+  printLine ("extractElementOpt \"VpcId\": " ++ Optional.getOrElse "NONE" vpcIdUpper)
+  
+  -- Test other fields
+  ownerId = aws.xml.extractElementOpt "ownerId" sampleVpcItemXml
+  printLine ("extractElementOpt \"ownerId\": " ++ Optional.getOrElse "NONE" ownerId)
+  
+  cidrBlock = aws.xml.extractElementOpt "cidrBlock" sampleVpcItemXml
+  printLine ("extractElementOpt \"cidrBlock\": " ++ Optional.getOrElse "NONE" cidrBlock)
+  
+  state = aws.xml.extractElementOpt "state" sampleVpcItemXml
+  printLine ("extractElementOpt \"state\": " ++ Optional.getOrElse "NONE" state)
+  
+  isDefault = aws.xml.extractElementOpt "isDefault" sampleVpcItemXml
+  printLine ("extractElementOpt \"isDefault\": " ++ Optional.getOrElse "NONE" isDefault)
+  printLine ""
+
+-- Test extractAll for list items
+testExtractAllBlocks : '{IO, Exception} ()
+testExtractAllBlocks = do
+  printLine "=== Testing aws.xml.extractAllBlocks ==="
+  printLine ""
+  
+  -- Extract all <item> blocks from vpcSet (single line for simplicity)
+  vpcSetXml = "<vpcSet><item><vpcId>vpc-1</vpcId></item><item><vpcId>vpc-2</vpcId></item></vpcSet>"
+  
+  printLine ("Input XML: " ++ vpcSetXml)
+  printLine ""
+  
+  blocks = aws.xml.extractAllBlocks "item" vpcSetXml
+  printLine ("Found " ++ Nat.toText (List.size blocks) ++ " <item> blocks")
+  printBlocks blocks
+  printLine ""
+
+-- Security Group sample XML
+sampleSecurityGroupXml : Text
+sampleSecurityGroupXml = """<item>
+  <groupId>sg-12345678</groupId>
+  <groupName>default</groupName>
+  <groupDescription>default VPC security group</groupDescription>
+  <vpcId>vpc-12345678</vpcId>
+  <ownerId>000000000000</ownerId>
+  <ipPermissions/>
+  <ipPermissionsEgress/>
+</item>"""
+
+-- Test parsing security group
+testParseSecurityGroup : '{IO, Exception} ()
+testParseSecurityGroup = do
+  printLine "=== Testing SecurityGroup parsing ==="
+  printLine ""
+  printLine "Input XML:"
+  printLine sampleSecurityGroupXml
+  printLine ""
+  
+  -- Test extracting fields directly
+  groupId = aws.xml.extractElementOpt "groupId" sampleSecurityGroupXml
+  groupName = aws.xml.extractElementOpt "groupName" sampleSecurityGroupXml
+  groupDescription = aws.xml.extractElementOpt "groupDescription" sampleSecurityGroupXml
+  vpcId = aws.xml.extractElementOpt "vpcId" sampleSecurityGroupXml
+  
+  printLine "Direct extraction results:"
+  printLine ("  groupId: " ++ Optional.getOrElse "NONE" groupId)
+  printLine ("  groupName: " ++ Optional.getOrElse "NONE" groupName)
+  printLine ("  groupDescription: " ++ Optional.getOrElse "NONE" groupDescription)
+  printLine ("  vpcId: " ++ Optional.getOrElse "NONE" vpcId)
+  printLine ""
+  
+  -- Also test PascalCase to show they don't match
+  printLine "PascalCase extraction (should fail):"
+  printLine ("  GroupId: " ++ Optional.getOrElse "NONE" (aws.xml.extractElementOpt "GroupId" sampleSecurityGroupXml))
+  printLine ("  GroupName: " ++ Optional.getOrElse "NONE" (aws.xml.extractElementOpt "GroupName" sampleSecurityGroupXml))
+  printLine ""
+
+-- Run all tests
+runParseTests : '{IO, Exception} ()
+runParseTests = do
+  printLine "╔══════════════════════════════════════════════════╗"
+  printLine "║       EC2 XML Parsing Isolation Tests            ║"
+  printLine "╚══════════════════════════════════════════════════╝"
+  printLine ""
+  
+  !testExtractElement
+  !testExtractAllBlocks
+  !testParseSecurityGroup
+  -- !testParseVpcFromXml
+  
+  printLine "╔══════════════════════════════════════════════════╗"
+  printLine "║               Tests Complete                      ║"
+  printLine "╚══════════════════════════════════════════════════╝"

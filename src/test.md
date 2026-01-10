@@ -29,6 +29,10 @@ scratch/main> load test/resources/runtime/aws_xml_parse_test.u
 scratch/main> add
 scratch/main> run aws.xml.parse.test.testXmlParsing
 
+scratch/main> load test/resources/runtime/aws_xml_parse_test2.u
+scratch/main> add
+scratch/main> run aws.xml.parse.test2.runParseTests
+
 scratch/main> load main/resources/runtime/aws_xml_bridge.u
 scratch/main> add
 scratch/main> load test/resources/runtime/aws_xml_bridge_test.u
