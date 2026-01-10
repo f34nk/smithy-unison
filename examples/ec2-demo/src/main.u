@@ -20,6 +20,13 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed value is "unknown" (indicates parsing failure)
+requireParsed : Text -> Text -> '{IO, Exception} ()
+requireParsed fieldName value = do
+  if Text.eq value "unknown" then
+    Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned 'unknown'") (Any ()))
+  else ()
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -131,6 +138,8 @@ describeVpcsDemo config = do
       vpcId = Optional.getOrElse "unknown" (aws.ec2.Vpc.vpcId vpc)
       cidr = Optional.getOrElse "unknown" (aws.ec2.Vpc.cidrBlock vpc)
       isDefault = Optional.getOrElse false (aws.ec2.Vpc.isDefault vpc)
+      !(requireParsed "vpcId" vpcId)
+      !(requireParsed "cidrBlock" cidr)
       printLine ("    - VPC ID: " ++ vpcId)
       printLine ("      CIDR: " ++ cidr)
       printLine ("      Default: " ++ Boolean.toText isDefault)
@@ -165,6 +174,10 @@ describeSubnetsDemo config = do
       vpcId = Optional.getOrElse "unknown" (aws.ec2.Subnet.vpcId subnet)
       cidr = Optional.getOrElse "unknown" (aws.ec2.Subnet.cidrBlock subnet)
       az = Optional.getOrElse "unknown" (aws.ec2.Subnet.availabilityZone subnet)
+      !(requireParsed "subnetId" subnetId)
+      !(requireParsed "vpcId" vpcId)
+      !(requireParsed "cidrBlock" cidr)
+      !(requireParsed "availabilityZone" az)
       printLine ("    - Subnet ID: " ++ subnetId)
       printLine ("      VPC ID: " ++ vpcId)
       printLine ("      CIDR: " ++ cidr)
@@ -200,6 +213,10 @@ describeSecurityGroupsDemo config = do
       groupName = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.groupName sg)
       description = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.description sg)
       vpcId = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.vpcId sg)
+      !(requireParsed "groupId" groupId)
+      !(requireParsed "groupName" groupName)
+      !(requireParsed "description" description)
+      !(requireParsed "vpcId" vpcId)
       printLine ("    - Group ID: " ++ groupId)
       printLine ("      Name: " ++ groupName)
       printLine ("      Description: " ++ description)
@@ -237,6 +254,7 @@ runInstancesDemo config = do
       
   -- Extract and display reservation info
   reservationId = Optional.getOrElse "unknown" (aws.ec2.Reservation.reservationId response)
+  !(requireParsed "reservationId" reservationId)
   printLine ("  → Reservation ID: " ++ reservationId)
           
   -- Display instances from the reservation
@@ -258,6 +276,9 @@ runInstancesDemo config = do
         None -> "unknown"
         Some s -> Optional.getOrElse "unknown" (Optional.map aws.ec2.instanceStateNameToText (aws.ec2.InstanceState.name s))
       
+      !(requireParsed "instanceId" instanceId)
+      !(requireParsed "instanceType" instanceType)
+      !(requireParsed "stateName" stateName)
       printLine ("    - Instance ID: " ++ instanceId)
       printLine ("      Instance Type: " ++ instanceType)
       printLine ("      State: " ++ stateName)
@@ -290,6 +311,7 @@ describeInstancesDemo config = do
     printLine ("  → Found " ++ Nat.toText (List.size reservations) ++ " reservation(s):")
     printReservationInfo reservation =
       reservationId = Optional.getOrElse "unknown" (aws.ec2.Reservation.reservationId reservation)
+      !(requireParsed "reservationId" reservationId)
       printLine ("    - Reservation ID: " ++ reservationId)
       
       instancesOpt = aws.ec2.Reservation.instances reservation
@@ -313,6 +335,9 @@ describeInstancesDemo config = do
           tagsOpt = aws.ec2.Instance.tags instance
           tags = Optional.getOrElse [] tagsOpt
           
+          !(requireParsed "instanceId" instanceId)
+          !(requireParsed "instanceType" instanceType)
+          !(requireParsed "stateName" stateName)
           printLine ("      - Instance ID: " ++ instanceId)
           printLine ("        Instance Type: " ++ instanceType)
           printLine ("        State: " ++ stateName)
@@ -323,6 +348,7 @@ describeInstancesDemo config = do
             printTagInfo tag =
               key = Optional.getOrElse "unknown" (aws.ec2.Tag.key tag)
               value = Optional.getOrElse "unknown" (aws.ec2.Tag.value tag)
+              !(requireParsed "tag.key" key)
               printLine ("          " ++ key ++ ": " ++ value)
             List.foreach printTagInfo tags
           else ()
