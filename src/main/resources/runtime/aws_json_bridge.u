@@ -41,29 +41,6 @@ jsonToRequestBody : JsonValue -> Text
 jsonToRequestBody value = toJson value
 
 -- =============================================================================
--- Response Deserialization
--- =============================================================================
-
-{{
-  Deserialize HTTP response body bytes to JsonValue.
-  
-  Decodes UTF-8 bytes to text and parses as JSON.
-  Raises an exception if the bytes are not valid UTF-8 or valid JSON.
-}}
-deserializeJsonResponse : Bytes -> '{Exception} JsonValue
-deserializeJsonResponse bytes = 'let
-  text = Text.fromUtf8 bytes
-  parseJson text ()
-
-{{
-  Parse HTTP response body text to JsonValue.
-  
-  Raises an exception if the text is not valid JSON.
-}}
-responseBodyToJson : Text -> '{Exception} JsonValue
-responseBodyToJson text = parseJson text
-
--- =============================================================================
 -- AWS JSON Error Parsing
 -- =============================================================================
 
@@ -124,91 +101,6 @@ extractErrorMessage json =
     None -> getFieldAsString "Message" json
 
 -- =============================================================================
--- Field Extraction Utilities
--- =============================================================================
-
-{{
-  Extract a required field from a JSON object and parse it.
-  
-  This function looks for a field by name in a JSON object, applies a parser function
-  to convert it to the desired type, and raises an exception if the field is missing.
-  
-  Use this for required fields in response parsing.
-}}
-extractField : Text -> JsonValue -> (JsonValue -> '{Exception} a) -> '{Exception} a
-extractField fieldName json parser =
-  match getField fieldName json with
-    Some fieldValue -> parser fieldValue
-    None -> Exception.raise (Generic.failure "Missing required field" fieldName)
-
-{{
-  Extract an optional field from a JSON object and parse it (with Exception-based parser).
-  
-  This function looks for a field by name in a JSON object, applies an Exception-returning
-  parser function to convert it to the desired type. Returns None if the field is missing
-  or if parsing fails (exception is caught and converted to None).
-  
-  Use this for optional fields in response parsing with Exception-based parsers.
-}}
-extractOptionalField : Text -> JsonValue -> (JsonValue -> '{Exception} a) -> Optional a
-extractOptionalField fieldName json parser =
-  match getField fieldName json with
-    Some fieldValue -> 
-      match catch do !(parser fieldValue) with
-        Right value -> Some value
-        Left _ -> None
-    None -> None
-
-{{
-  Extract an optional field from a JSON object and parse it (legacy Optional-based parser).
-  
-  This is a generic field extractor that looks for a field by name in a JSON object,
-  applies a parser function to convert it to the desired type, and returns None if the
-  field doesn't exist or parsing fails.
-  
-  NOTE: This is the legacy version using Optional-based parsers. 
-  Prefer the Exception-based version for new code.
-}}
-extractOptionalFieldLegacy : Text -> JsonValue -> (JsonValue -> Optional a) -> Optional a
-extractOptionalFieldLegacy fieldName json parser =
-  match getField fieldName json with
-    Some fieldValue -> parser fieldValue
-    None -> None
-
-{{
-  Expect a string value from a JSON value.
-  
-  Helper function for extractOptionalField that converts a JsonValue to Text.
-  Returns None if the value is not a string.
-}}
-expectString : JsonValue -> Optional Text
-expectString = cases
-  JsonString s -> Some s
-  _ -> None
-
-{{
-  Expect an integer value from a JSON value.
-  
-  Helper function for extractOptionalField that converts a JsonValue to Int.
-  Returns None if the value is not a number or cannot be converted to Int.
-}}
-expectInt : JsonValue -> Optional Int
-expectInt = cases
-  JsonNumber n -> Float.toInt n
-  _ -> None
-
-{{
-  Expect a boolean value from a JSON value.
-  
-  Helper function for extractOptionalField that converts a JsonValue to Boolean.
-  Returns None if the value is not a boolean.
-}}
-expectBoolean : JsonValue -> Optional Boolean
-expectBoolean = cases
-  JsonBoolean b -> Some b
-  _ -> None
-
--- =============================================================================
 -- Exception-Based Field Parsers (for required fields)
 -- =============================================================================
 
@@ -263,30 +155,6 @@ parseFloat json = 'let
     v -> Exception.raise (Generic.failure "Expected number" v)
 
 {{
-  Parse a JSON value as an array.
-  
-  Raises an exception if the value is not an array.
-  Use with extractField for required array fields.
-}}
-parseArray : JsonValue -> '{Exception} [JsonValue]
-parseArray json = 'let
-  match json with
-    JsonArray items -> items
-    v -> Exception.raise (Generic.failure "Expected array" v)
-
-{{
-  Parse a JSON value as an object.
-  
-  Raises an exception if the value is not an object.
-  Use with extractField for required object fields.
-}}
-parseObject : JsonValue -> '{Exception} [(Text, JsonValue)]
-parseObject json = 'let
-  match json with
-    JsonObject fields -> fields
-    v -> Exception.raise (Generic.failure "Expected object" v)
-
-{{
   Parse a JSON value as a blob (base64-encoded bytes).
   
   Raises an exception if the value is not a string or cannot be decoded from base64.
@@ -300,38 +168,6 @@ parseBlob json = 'let
         Right bytes -> bytes
         Left err -> Exception.raise (Generic.failure "Invalid base64 encoding" err)
     v -> Exception.raise (Generic.failure "Expected base64-encoded string for blob" v)
-
-{{
-  Map a list of JSON values with an exception-raising deserializer.
-  
-  This function properly sequences exception-raising deserializations for list elements.
-  Use this when deserializing lists where each element needs to be parsed with an exception-raising function.
-}}
-mapWithException : [a] -> (a -> '{Exception} b) -> '{Exception} [b]
-mapWithException items deserializer = 'let
-  go = cases
-    [] -> []
-    h +: t -> 
-      head = !(deserializer h)
-      tail = go t
-      head List.+: tail
-  go items
-
-{{
-  Map a list of key-value pairs with an exception-raising value deserializer.
-  
-  This function properly sequences exception-raising deserializations for map values.
-  Use this when deserializing maps where values need to be parsed with an exception-raising function.
-}}
-mapPairsWithException : [(Text, JsonValue)] -> (JsonValue -> '{Exception} a) -> '{Exception} [(Text, a)]
-mapPairsWithException pairs valueDeserializer = 'let
-  go = cases
-    [] -> []
-    (k, v) +: t ->
-      value = !(valueDeserializer v)
-      tail = go t
-      (k, value) List.+: tail
-  go pairs
 
 -- =============================================================================
 -- Convenience Functions

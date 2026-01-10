@@ -35,36 +35,6 @@ eitherToOptional = cases
   Left _ -> None
   Right b -> Some b
 
--- Helper functions for character comparisons
-isWhitespaceChar : Optional Char -> Boolean
-isWhitespaceChar c =
-  match c with
-    Some ?\s -> true
-    Some ?\n -> true
-    Some ?\r -> true
-    Some ?\t -> true
-    _ -> false
-
-isNumberChar : Optional Char -> Boolean
-isNumberChar c =
-  match c with
-    Some ?0 -> true
-    Some ?1 -> true
-    Some ?2 -> true
-    Some ?3 -> true
-    Some ?4 -> true
-    Some ?5 -> true
-    Some ?6 -> true
-    Some ?7 -> true
-    Some ?8 -> true
-    Some ?9 -> true
-    Some ?- -> true
-    Some ?+ -> true
-    Some ?. -> true
-    Some ?e -> true
-    Some ?E -> true
-    _ -> false
-
 -- JSON Value Type Definition
 type JsonValue
   = JsonString Text
@@ -135,6 +105,26 @@ escapeJsonString s =
 -- === Deserialization ===
 
 {{
+  Convert core.Json to JsonValue.
+  This allows using the efficient core.Json parser while maintaining
+  backward compatibility with code that uses JsonValue.
+}}
+coreJsonToJsonValue : core.Json -> JsonValue
+coreJsonToJsonValue json =
+  match json with
+    core.Json.Text t -> JsonString t
+    core.Json.Number n -> 
+      match Float.fromText n with
+        Some f -> JsonNumber f
+        None -> JsonNumber 0.0
+    core.Json.Boolean b -> JsonBoolean b
+    core.Json.Null -> JsonNull
+    core.Json.Object fields -> 
+      JsonObject (List.map (cases (k, v) -> (k, coreJsonToJsonValue v)) fields)
+    core.Json.Array items -> 
+      JsonArray (List.map coreJsonToJsonValue items)
+
+{{
   Parse JSON text into a JsonValue.
   Returns None if the input is not valid JSON.
   
@@ -143,10 +133,9 @@ escapeJsonString s =
 }}
 fromJson : Text -> Optional JsonValue
 fromJson text =
-  parseResult = parseJsonValue (trimWhitespace text) 0
-  match parseResult with
-    Some (value, _) -> Some value
-    None -> None
+  match core.Json.tryFromText (trimWhitespace text) with
+    Right json -> Some (coreJsonToJsonValue json)
+    Left _ -> None
 
 {{
   Parse JSON text into a JsonValue, raising an exception on failure.
@@ -154,140 +143,8 @@ fromJson text =
 }}
 parseJson : Text -> '{Exception} JsonValue
 parseJson text = do
-  match fromJson text with
-    Some value -> value
-    None -> Exception.raise (Failure (typeLink Exception) "Invalid JSON" (Any ()))
-
--- Minimal JSON parser implementation
--- Returns (parsed value, remaining text position)
-parseJsonValue : Text -> Nat -> Optional (JsonValue, Nat)
-parseJsonValue text pos =
-  pos' = skipWhitespace text pos
-  if pos' >= Text.size text then None
-  else
-    c = List.at pos' (Text.toCharList text)
-    match c with
-      Some ?\" -> parseString text pos'
-      Some ?{ -> parseObject text pos'
-      Some ?[ -> parseArray text pos'
-      Some ?t -> if Text.startsWith "true" (Text.drop pos' text) then Some (JsonBoolean true, pos' + 4) else None
-      Some ?f -> if Text.startsWith "false" (Text.drop pos' text) then Some (JsonBoolean false, pos' + 5) else None
-      Some ?n -> if Text.startsWith "null" (Text.drop pos' text) then Some (JsonNull, pos' + 4) else None
-      _ -> parseNumber text pos'
-
-skipWhitespace : Text -> Nat -> Nat
-skipWhitespace text pos =
-  if pos >= Text.size text then pos
-  else
-    c = List.at pos (Text.toCharList text)
-    if isWhitespaceChar c then
-      skipWhitespace text (pos + 1)
-    else pos
-
-parseString : Text -> Nat -> Optional (JsonValue, Nat)
-parseString text pos =
-  match List.at pos (Text.toCharList text) with
-    Some ?\" -> parseStringContent text (pos + 1) ""
-    _ -> None
-
-parseStringContent : Text -> Nat -> Text -> Optional (JsonValue, Nat)
-parseStringContent text pos acc =
-  if pos >= Text.size text then None
-  else
-    c = List.at pos (Text.toCharList text)
-    match c with
-      Some ?\" -> Some (JsonString acc, pos + 1)
-      Some ?\\ ->
-        if pos + 1 >= Text.size text then None
-        else
-          next = List.at (pos + 1) (Text.toCharList text)
-          escaped = match next with
-            Some ?\" -> "\""
-            Some ?\\ -> "\\"
-            Some ?n -> "\n"
-            Some ?r -> "\r"
-            Some ?t -> "\t"
-            Some ch -> fromCharList [ch]
-            _ -> ""
-          parseStringContent text (pos + 2) (acc Text.++ escaped)
-      Some ch -> parseStringContent text (pos + 1) (acc Text.++ fromCharList [ch])
-      _ -> None
-
-parseNumber : Text -> Nat -> Optional (JsonValue, Nat)
-parseNumber text pos =
-  end = findNumberEnd text pos
-  numText = Text.take (end - pos) (Text.drop pos text)
-  match Float.fromText numText with
-    Some n -> Some (JsonNumber n, end)
-    None -> None
-
-findNumberEnd : Text -> Nat -> Nat
-findNumberEnd text pos =
-  if pos >= Text.size text then pos
-  else
-    c = List.at pos (Text.toCharList text)
-    if isNumberChar c then
-      findNumberEnd text (pos + 1)
-    else pos
-
-parseObject : Text -> Nat -> Optional (JsonValue, Nat)
-parseObject text pos =
-  match List.at pos (Text.toCharList text) with
-    Some ?{ ->
-      pos' = skipWhitespace text (pos + 1)
-      match (if pos' < Text.size text then List.at pos' (Text.toCharList text) else None) with
-        Some ?} -> Some (JsonObject [], pos' + 1)
-        _ -> parseObjectFields text pos' []
-    _ -> None
-
-parseObjectFields : Text -> Nat -> [(Text, JsonValue)] -> Optional (JsonValue, Nat)
-parseObjectFields text pos acc =
-  pos' = skipWhitespace text pos
-  match parseString text pos' with
-    None -> None
-    Some (JsonString key, pos'') ->
-      pos''' = skipWhitespace text pos''
-      match (if pos''' < Text.size text then List.at pos''' (Text.toCharList text) else None) with
-        Some ?: ->
-          match parseJsonValue text (pos''' + 1) with
-            None -> None
-            Some (value, pos'''') ->
-              fields = acc List.++ [(key, value)]
-              pos''''' = skipWhitespace text pos''''
-              if pos''''' >= Text.size text then None
-              else
-                c = List.at pos''''' (Text.toCharList text)
-                match c with
-                  Some ?} -> Some (JsonObject fields, pos''''' + 1)
-                  Some ?, -> parseObjectFields text (pos''''' + 1) fields
-                  _ -> None
-        _ -> None
-    _ -> None
-
-parseArray : Text -> Nat -> Optional (JsonValue, Nat)
-parseArray text pos =
-  match List.at pos (Text.toCharList text) with
-    Some ?[ ->
-      pos' = skipWhitespace text (pos + 1)
-      match (if pos' < Text.size text then List.at pos' (Text.toCharList text) else None) with
-        Some ?] -> Some (JsonArray [], pos' + 1)
-        _ -> parseArrayItems text pos' []
-    _ -> None
-
-parseArrayItems : Text -> Nat -> [JsonValue] -> Optional (JsonValue, Nat)
-parseArrayItems text pos acc =
-  match parseJsonValue text pos with
-    None -> None
-    Some (value, pos') ->
-      items = acc List.++ [value]
-      pos'' = skipWhitespace text pos'
-      if pos'' >= Text.size text then None
-      else
-        c = List.at pos'' (Text.toCharList text)
-        match c with
-          Some ?] -> Some (JsonArray items, pos'' + 1)
-          Some ?, -> parseArrayItems text (pos'' + 1) items
-          _ -> None
+  json = core.Json.fromText (trimWhitespace text)
+  coreJsonToJsonValue json
 
 -- === Object Builders ===
 
