@@ -20,6 +20,13 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed Optional value is None (indicates parsing failure)
+requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome fieldName opt = do
+  match opt with
+    Some value -> value
+    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -249,13 +256,9 @@ getShardIteratorDemo config shardId = do
   printLine "  ✓ SUCCESS: GetShardIterator returned"
   
   -- Extract shard iterator
-  match aws.kinesis.GetShardIteratorOutput.shardIterator result with
-    Some iterator ->
-      printLine ("  → Shard Iterator: " ++ Text.take 50 iterator ++ "...")
-      iterator
-    None ->
-      printLine "  ✗ ERROR: No shard iterator in response"
-      ""
+  iterator = !(requireSome "shardIterator" (aws.kinesis.GetShardIteratorOutput.shardIterator result))
+  printLine ("  → Shard Iterator: " ++ Text.take 50 iterator ++ "...")
+  iterator
 
 {{
 Get records from the stream using the shard iterator.
