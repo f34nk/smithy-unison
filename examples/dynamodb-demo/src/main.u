@@ -33,6 +33,13 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed Optional value is None (indicates parsing failure)
+requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome fieldName opt = do
+  match opt with
+    Some value -> value
+    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -146,13 +153,13 @@ listTablesDemo config = do
   
   -- Extract and print tables
   printLine "  ✓ SUCCESS: ListTables returned"
-  match aws.dynamodb.ListTablesOutput.tableNames result with
-    Some tables -> 
-      count = List.size tables
-      printLine ("  → Found " ++ Nat.toText count ++ " table(s):")
-      List.foreach (table -> printLine ("      • " ++ table)) tables
-    None -> 
-      printLine "  → No tables found (response was empty)"
+  tables = !(requireSome "tableNames" (aws.dynamodb.ListTablesOutput.tableNames result))
+  count = List.size tables
+  if Nat.eq count 0 then
+    printLine "  → No tables found (empty list)"
+  else
+    printLine ("  → Found " ++ Nat.toText count ++ " table(s):")
+    List.foreach (table -> printLine ("      • " ++ table)) tables
 
 {{
 Put a test item into the example table.
