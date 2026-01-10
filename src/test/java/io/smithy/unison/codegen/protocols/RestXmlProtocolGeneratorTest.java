@@ -303,9 +303,10 @@ public class RestXmlProtocolGeneratorTest {
         
         String output = writer.toString();
         
-        // Should generate empty body
-        assertTrue(output.contains("empty") || output.contains("No body"),
-                "Should generate empty body code. Got: " + output);
+        // For REST-XML, request serialization is handled inline in generateOperation,
+        // so this method should generate nothing (empty output)
+        assertTrue(output.trim().isEmpty(),
+                "REST-XML generateRequestSerializer should be empty (handled inline). Got: " + output);
     }
     
     @Test
@@ -369,9 +370,10 @@ public class RestXmlProtocolGeneratorTest {
         
         String output = writer.toString();
         
-        // Should extract payload member
-        assertTrue(output.contains("body") || output.contains("Body") || output.contains("Http.Response"),
-                "Should extract payload from response. Got: " + output);
+        // For REST-XML, response deserialization is handled inline in generateOperation,
+        // so this method should generate nothing (empty output)
+        assertTrue(output.trim().isEmpty(),
+                "REST-XML generateResponseDeserializer should be empty (handled inline). Got: " + output);
     }
     
     @Test

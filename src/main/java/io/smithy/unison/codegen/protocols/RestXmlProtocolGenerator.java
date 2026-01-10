@@ -768,95 +768,14 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     
     @Override
     public void generateRequestSerializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        Model model = context.model();
-        Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
-        
-        if (!inputShape.isPresent()) {
-            writer.writeComment("No input - empty request body");
-            writer.write("body = Bytes.empty");
-            return;
-        }
-        
-        Optional<MemberShape> payloadMember = ProtocolUtils.getPayloadMember(inputShape.get());
-        
-        if (payloadMember.isPresent()) {
-            MemberShape payload = payloadMember.get();
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(payload.getMemberName());
-            Shape targetShape = model.expectShape(payload.getTarget());
-            
-            writer.writeComment("@httpPayload - serialize payload member");
-            if (targetShape.isBlobShape()) {
-                writer.write("body = input.$L", memberName);
-            } else if (targetShape.isStringShape()) {
-                writer.write("body = Text.toUtf8 input.$L", memberName);
-            } else {
-                writer.write("body = aws.xml.encode input.$L", memberName);
-            }
-        } else {
-            List<MemberShape> bodyMembers = ProtocolUtils.getBodyMembers(inputShape.get());
-            
-            if (bodyMembers.isEmpty()) {
-                writer.writeComment("No body members - empty request body");
-                writer.write("body = Bytes.empty");
-            } else {
-                writer.writeComment("Encode body members as XML");
-                writer.write("body = aws.xml.encode input");
-            }
-        }
+        // For REST-XML, request serialization is handled inline in generateOperation.
+        // This method is intentionally empty to avoid duplicate/orphaned code.
     }
     
     @Override
     public void generateResponseDeserializer(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        Model model = context.model();
-        String clientNamespace = context.settings().getClientNamespace();
-        Optional<StructureShape> outputShape = ProtocolUtils.getOutputShape(operation, model);
-        
-        if (!outputShape.isPresent()) {
-            writer.writeComment("No output - return unit");
-            writer.write("()");
-            return;
-        }
-        
-        Optional<MemberShape> payloadMember = ProtocolUtils.getPayloadMember(outputShape.get());
-        
-        if (payloadMember.isPresent()) {
-            MemberShape payload = payloadMember.get();
-            Shape targetShape = model.expectShape(payload.getTarget());
-            String memberName = UnisonSymbolProvider.toUnisonFunctionName(payload.getMemberName());
-            
-            writer.writeComment("@httpPayload - extract payload member");
-            if (targetShape.isBlobShape()) {
-                writer.write("{ $L = Response.body response }", memberName);
-            } else if (targetShape.isStringShape()) {
-                writer.write("{ $L = aws.http.bytesToText (Response.body response) }", memberName);
-            } else {
-                // Structure payload - generate inline XML parsing
-                writer.writeComment("Structure payload - parse XML");
-                generateXmlResponseParsing(outputShape.get(), ProtocolUtils.getBodyMembers(outputShape.get()), model, clientNamespace, writer);
-            }
-        } else {
-            List<MemberShape> bodyMembers = ProtocolUtils.getBodyMembers(outputShape.get());
-            
-            if (bodyMembers.isEmpty()) {
-                writer.writeComment("No body members - construct output with None values");
-                String outputTypeName = UnisonSymbolProvider.toUnisonTypeName(
-                        outputShape.get().getId().getName());
-                
-                // Get all members in order
-                List<MemberShape> allMembers = new ArrayList<>(outputShape.get().getAllMembers().values());
-                
-                // Construct output with all fields as None
-                writer.write("$L", outputTypeName);
-                writer.indent();
-                for (MemberShape member : allMembers) {
-                    writer.write("None");
-                }
-                writer.dedent();
-            } else {
-                writer.writeComment("Decode XML response body");
-                generateXmlResponseParsing(outputShape.get(), bodyMembers, model, clientNamespace, writer);
-            }
-        }
+        // For REST-XML, response deserialization is handled inline in generateOperation.
+        // This method is intentionally empty to avoid duplicate/orphaned code.
     }
     
     @Override

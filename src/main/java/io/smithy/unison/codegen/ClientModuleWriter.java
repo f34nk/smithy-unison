@@ -203,10 +203,10 @@ public final class ClientModuleWriter {
             OperationShape firstOp = model.expectShape(firstOpId, OperationShape.class);
             gen.generateErrorParser(firstOp, writer, context);
             
-            // For AWS JSON and AWS Query protocols, generate standalone serializer/deserializer functions
-            // For REST-JSON, generate response parsers and request serializers separately
+            // For AWS JSON, AWS Query, and REST protocols, generate standalone serializer/deserializer functions
             if (protocol == AwsProtocol.AWS_JSON_1_0 || protocol == AwsProtocol.AWS_JSON_1_1 ||
-                protocol == AwsProtocol.AWS_QUERY || protocol == AwsProtocol.REST_JSON_1) {
+                protocol == AwsProtocol.AWS_QUERY || protocol == AwsProtocol.EC2_QUERY || 
+                protocol == AwsProtocol.REST_JSON_1 || protocol == AwsProtocol.REST_XML) {
                 writer.writeComment("=== Request/Response Serializers ===");
                 writer.writeBlankLine();
                 

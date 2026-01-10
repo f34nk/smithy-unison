@@ -1,7 +1,12 @@
 package io.smithy.unison.codegen.protocols;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
 import io.smithy.unison.codegen.UnisonContext;
 import io.smithy.unison.codegen.UnisonWriter;
+import io.smithy.unison.codegen.symbol.UnisonReservedWords;
 import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.ListShape;
@@ -17,10 +22,6 @@ import software.amazon.smithy.model.traits.DefaultTrait;
 import software.amazon.smithy.model.traits.EnumTrait;
 import software.amazon.smithy.model.traits.XmlFlattenedTrait;
 import software.amazon.smithy.model.traits.XmlNameTrait;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Protocol generator for AWS Query protocol (aws.protocols#awsQuery).
@@ -362,6 +363,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         
         switch (target.getType()) {
             case STRING:
+            case ENUM:
+            case INT_ENUM:
             case BOOLEAN:
             case BYTE:
             case SHORT:
@@ -372,7 +375,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             case BIG_INTEGER:
             case BIG_DECIMAL:
             case TIMESTAMP:
-                generateScalarSerialization(member, paramName, varName, memberName, inputTypeName, target, writer);
+                generateScalarSerialization(member, paramName, varName, memberName, inputTypeName, target, clientNamespace, writer);
                 break;
             case LIST:
                 generateListSerialization(member, (ListShape) target, paramName, varName, memberName, 
@@ -380,7 +383,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 break;
             case MAP:
                 generateMapSerialization(member, (MapShape) target, paramName, varName, memberName, 
-                        inputTypeName, model, writer);
+                        inputTypeName, model, clientNamespace, writer);
                 break;
             case STRUCTURE:
                 generateNestedStructureSerialization(member, (StructureShape) target, paramName, varName, 
@@ -407,9 +410,9 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
      */
     private void generateScalarSerialization(MemberShape member, String paramName, String varName, 
                                              String memberName, String inputTypeName, Shape target,
-                                             UnisonWriter writer) {
+                                             String clientNamespace, UnisonWriter writer) {
         String accessor = inputTypeName + "." + memberName + " input";
-        String toTextFunc = getToTextFunction(target);
+        String toTextFunc = getToTextFunction(target, clientNamespace);
         boolean isTextType = isTextType(target);
         
         // Check if field is non-optional (required or has default)
@@ -451,7 +454,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             return;
         }
         
-        String toTextFunc = getToTextFunction(elementShape);
+        String toTextFunc = getToTextFunction(elementShape, clientNamespace);
         boolean isTextType = isTextType(elementShape);
         
         // Get the Unison type name for the element
@@ -534,7 +537,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             
             boolean isRequired = structMember.isRequired();
             boolean isFieldText = isTextType(fieldShape);
-            String toTextFunc = getToTextFunction(fieldShape);
+            String toTextFunc = getToTextFunction(fieldShape, clientNamespace);
             
             if (isRequired) {
                 // Required fields go directly in the list
@@ -610,7 +613,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
      */
     private void generateMapSerialization(MemberShape member, MapShape mapShape, String paramName, 
                                           String varName, String memberName, String inputTypeName,
-                                          Model model, UnisonWriter writer) {
+                                          Model model, String clientNamespace, UnisonWriter writer) {
         String accessor = inputTypeName + "." + memberName + " input";
         Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
         Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
@@ -625,8 +628,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         
         boolean isKeyText = isTextType(keyShape);
         boolean isValueText = isTextType(valueShape);
-        String keyToText = getToTextFunction(keyShape);
-        String valueToText = getToTextFunction(valueShape);
+        String keyToText = getToTextFunction(keyShape, clientNamespace);
+        String valueToText = getToTextFunction(valueShape, clientNamespace);
         
         // Check if field is non-optional (required or has default)
         boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
@@ -698,7 +701,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             String nestedAccessor = nestedTypeName + "." + nestedMemberName + " " + varName;
             
             Shape nestedTarget = model.expectShape(nestedMember.getTarget());
-            String toTextFunc = getToTextFunction(nestedTarget);
+            String toTextFunc = getToTextFunction(nestedTarget, clientNamespace);
             
             // For simplicity, only handle scalar fields in nested structures
             if (isScalarShape(nestedTarget)) {
@@ -723,6 +726,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     private boolean isScalarShape(Shape shape) {
         switch (shape.getType()) {
             case STRING:
+            case ENUM:
+            case INT_ENUM:
             case BOOLEAN:
             case BYTE:
             case SHORT:
@@ -743,12 +748,17 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
      * Gets the appropriate Unison function to convert a shape to Text.
      * Returns a function reference that can be applied to a value.
      */
-    private String getToTextFunction(Shape shape) {
+    private String getToTextFunction(Shape shape, String clientNamespace) {
+        // Check for enum types first (enums may be string-based)
+        if (shape.isEnumShape() || (shape.isStringShape() && shape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class))) {
+            return UnisonSymbolProvider.toNamespacedFunctionName(shape.getId().getName() + "ToText", clientNamespace);
+        }
+        
         switch (shape.getType()) {
             case STRING:
             case TIMESTAMP:
-                // For strings and timestamps, use identity - they're already text
-                return "identity";
+                // For strings and timestamps, use Function.id - they're already text
+                return "Function.id";
             case BOOLEAN:
                 return "Boolean.toText";
             case BYTE:
@@ -761,8 +771,14 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             case BIG_DECIMAL:
                 return "Float.toText";
             default:
-                return "Any.toText"; // Fallback
+                // For unknown types, generate a descriptive error
+                return "(x -> bug (\"Cannot convert \" ++ Any.typeLinkToText (Any.typeLink x) ++ \" to Text\"))";
         }
+    }
+    
+    // Overload for backward compatibility - defaults to no namespace
+    private String getToTextFunction(Shape shape) {
+        return getToTextFunction(shape, "");
     }
     
     /**
@@ -935,6 +951,30 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     }
     
     /**
+     * Generates extraction code for a nested structure from XML.
+     * 
+     * <p>Uses aws.xml.parseNested with a text-based parser function.
+     */
+    private void generateNestedStructureExtraction(MemberShape member, StructureShape structShape, 
+                                                   String xmlName, String varName, boolean isNonOptional, 
+                                                   Model model, String clientNamespace, UnisonWriter writer) {
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
+        String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
+                "parse" + baseTypeName + "FromXml", clientNamespace);
+        
+        if (isNonOptional) {
+            // Required nested structure - parse and extract, bug if missing
+            String optVarName = varName + "Opt";
+            writer.write("$L = aws.xml.parseNested \"$L\" $L resultSoup", optVarName, xmlName, parserName);
+            writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
+                    varName, xmlName, optVarName);
+        } else {
+            // Optional nested structure
+            writer.write("$L = aws.xml.parseNested \"$L\" $L resultSoup", varName, xmlName, parserName);
+        }
+    }
+    
+    /**
      * Generates extraction code for a list of structures from XML.
      */
     private void generateStructureListExtraction(MemberShape member, StructureShape elementStructure, 
@@ -959,7 +999,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         List<MemberShape> structMembers = new ArrayList<>(elementStructure.getAllMembers().values());
         for (MemberShape structMember : structMembers) {
             String fieldName = UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName());
-            String fieldVarName = fieldName + "Val";
+            String fieldVarName = UnisonReservedWords.appendSuffix(fieldName, "Val");
             String fieldXmlName = getXmlFieldName(structMember);
             Shape fieldTarget = model.expectShape(structMember.getTarget());
             boolean isFieldNonOptional = structMember.isRequired() || structMember.hasTrait(DefaultTrait.class);
@@ -1010,10 +1050,42 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                             writer.dedent();
                             writer.dedent();
                         }
+                    } else if (fieldListElementShape.isStructureShape()) {
+                        // List of structures - need to parse each element
+                        String elemStructTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                                fieldListElementShape.getId().getName(), clientNamespace);
+                        String elemParserName = UnisonSymbolProvider.toNamespacedFunctionName(
+                                "parse" + fieldListElementShape.getId().getName() + "FromXml", clientNamespace);
+                        
+                        // Get the member tag name for the list elements
+                        String memberTag = getListElementTag(structMember, fieldListShape);
+                        
+                        if (isFieldNonOptional) {
+                            writer.write("$L = aws.xml.parseList \"$L\" $L elemSoup", 
+                                    fieldVarName, memberTag, elemParserName);
+                        } else {
+                            writer.write("$L = aws.xml.parseOptionalWrappedList \"$L\" \"$L\" $L elemSoup",
+                                    fieldVarName, fieldXmlName, memberTag, elemParserName);
+                        }
                     } else {
-                        // Other list types (strings, structures, etc.)
+                        // List of scalars (strings, integers, etc.)
                         String fieldExtractor = getXmlExtractor(fieldTarget, structMember.isRequired());
                         writer.write("$L = $L \"$L\" elemSoup", fieldVarName, fieldExtractor, fieldXmlName);
+                    }
+                    break;
+                case STRUCTURE:
+                    // Nested structure field - use parseNested with Soup-based parser
+                    String nestedTypeName = UnisonSymbolProvider.toUnisonTypeName(fieldTarget.getId().getName());
+                    String nestedParserName = UnisonSymbolProvider.toNamespacedFunctionName(
+                            "parse" + nestedTypeName + "FromXml", clientNamespace);
+                    
+                    if (isFieldNonOptional) {
+                        String optVarName = fieldVarName + "Opt";
+                        writer.write("$L = aws.xml.parseNested \"$L\" $L elemSoup", optVarName, fieldXmlName, nestedParserName);
+                        writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
+                                fieldVarName, fieldXmlName, optVarName);
+                    } else {
+                        writer.write("$L = aws.xml.parseNested \"$L\" $L elemSoup", fieldVarName, fieldXmlName, nestedParserName);
                     }
                     break;
                 default:
@@ -1033,18 +1105,9 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                             writer.write("None -> bug (\"Invalid enum value: \" ++ $LText)", fieldVarName);
                             writer.dedent();
                         } else {
-                            writer.write("$L = match aws.xml.extractElementOpt \"$L\" elemXml with", fieldVarName, fieldXmlName);
-                            writer.indent();
-                            writer.write("None -> None");
-                            writer.write("Some textVal ->");
-                            writer.indent();
-                            writer.write("match $L.$L textVal with", enumTypeNamespace, fromTextFunc);
-                            writer.indent();
-                            writer.write("Some v -> Some v");
-                            writer.write("None -> bug (\"Invalid enum value: \" ++ textVal)");
-                            writer.dedent();
-                            writer.dedent();
-                            writer.dedent();
+                            // For optional enum fields, return None for unrecognized values
+                            writer.write("$L = Optional.flatMap $L.$L (aws.xml.extractElementOpt \"$L\" elemXml)", 
+                                    fieldVarName, enumTypeNamespace, fromTextFunc, fieldXmlName);
                         }
                     } else {
                         // Other scalar types (text, int, boolean, etc.)
@@ -1082,7 +1145,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("$L", structTypeName + "." + UnisonSymbolProvider.toUnisonTypeName(elementStructure.getId().getName()));
         for (MemberShape structMember : structMembers) {
             String fieldName = UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName());
-            writer.write("  $LVal", fieldName);
+            writer.write("  $L", UnisonReservedWords.appendSuffix(fieldName, "Val"));
         }
         
         writer.dedent();
@@ -1215,11 +1278,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("-- AWS Query response structure:");
         writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
         writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
-        writer.write("resultSoup = handle !(aws.xml.findAndDrill soup [\"$LResponse\", \"$LResult\"]) with cases", operationName, operationName);
-        writer.indent();
-        writer.write("{ x } -> x");
-        writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
-        writer.dedent();
+        writer.write("resultSoup = aws.xml.runXml (aws.xml.findAndDrill soup [\"$LResponse\", \"$LResult\"])", operationName, operationName);
     }
     
     /**
@@ -1246,7 +1305,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         // Extract each field
         for (MemberShape member : members) {
             String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-            String varName = memberName + "Val";
+            String varName = UnisonReservedWords.appendSuffix(memberName, "Val");
             String xmlName = getXmlFieldName(member);
             Shape target = model.expectShape(member.getTarget());
             
@@ -1293,6 +1352,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                     // Lists need special handling for structured element types
                     generateListExtraction(member, (ListShape) target, xmlName, varName, isNonOptional, model, clientNamespace, writer);
                     break;
+                case STRUCTURE:
+                    // Nested structure - use parseNested with Soup-based parser
+                    generateNestedStructureExtraction(member, (StructureShape) target, xmlName, varName, isNonOptional, model, clientNamespace, writer);
+                    break;
                 default:
                     // String, timestamp, and other types
                     if (isNonOptional) {
@@ -1312,7 +1375,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         List<String> args = new ArrayList<>();
         for (MemberShape member : members) {
             String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-            args.add(memberName + "Val");
+            args.add(UnisonReservedWords.appendSuffix(memberName, "Val"));
         }
         
         // Generate constructor call with positional arguments
@@ -1442,11 +1505,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         // Parse AWS Query error XML structure using Soup
         writer.write("-- Parse AWS Query error response using Soup");
         writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
-        writer.write("errorSoup = handle !(aws.xml.findAndDrill soup [\"ErrorResponse\", \"Error\"]) with cases");
-        writer.indent();
-        writer.write("{ x } -> x");
-        writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
-        writer.dedent();
+        writer.write("errorSoup = aws.xml.runXml (aws.xml.findAndDrill soup [\"ErrorResponse\", \"Error\"])");
         writer.write("code = aws.xml.findText \"Code\" errorSoup |> Optional.getOrElse \"UnknownError\"");
         writer.write("message = aws.xml.findText \"Message\" errorSoup |> Optional.getOrElse \"\"");
         writer.write("");
