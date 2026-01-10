@@ -20,6 +20,20 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed value is "unnamed" or "unknown" (indicates parsing failure)
+requireParsed : Text -> Text -> '{IO, Exception} ()
+requireParsed fieldName value = do
+  if Text.eq value "unnamed" || Text.eq value "unknown" then
+    Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned '" ++ value ++ "'") (Any ()))
+  else ()
+
+-- Fail if a parsed Optional value is None (indicates parsing failure)
+requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome fieldName opt = do
+  match opt with
+    Some value -> value
+    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -126,6 +140,9 @@ listFunctionsDemo config = do
       name = Optional.getOrElse "unnamed" (aws.lambda.FunctionConfiguration.functionName fn)
       runtime = Optional.getOrElse "unknown" (Optional.map aws.lambda.runtimeToText (aws.lambda.FunctionConfiguration.runtime fn))
       handler = Optional.getOrElse "unknown" (aws.lambda.FunctionConfiguration.handler fn)
+      !(requireParsed "functionName" name)
+      !(requireParsed "runtime" runtime)
+      !(requireParsed "handler" handler)
       printLine ("    - " ++ name)
       printLine ("      Runtime: " ++ runtime)
       printLine ("      Handler: " ++ handler)
@@ -148,23 +165,26 @@ getFunctionDemo config = do
   printLine "  ✓ SUCCESS: GetFunction returned"
   
   -- Extract and display function details
-  configOpt = aws.lambda.GetFunctionResponse.configuration response
-  match configOpt with
-    None -> printLine "  → No configuration found"
-    Some fnConfig ->
-      name = Optional.getOrElse "unnamed" (aws.lambda.FunctionConfiguration.functionName fnConfig)
-      runtime = Optional.getOrElse "unknown" (Optional.map aws.lambda.runtimeToText (aws.lambda.FunctionConfiguration.runtime fnConfig))
-      handler = Optional.getOrElse "unknown" (aws.lambda.FunctionConfiguration.handler fnConfig)
-      memSize = Optional.getOrElse +0 (aws.lambda.FunctionConfiguration.memorySize fnConfig)
-      timeout = Optional.getOrElse +0 (aws.lambda.FunctionConfiguration.timeout fnConfig)
-      state = Optional.getOrElse "unknown" (Optional.map aws.lambda.stateToText (aws.lambda.FunctionConfiguration.state fnConfig))
-      
-      printLine ("  → Function Name: " ++ name)
-      printLine ("  → Runtime: " ++ runtime)
-      printLine ("  → Handler: " ++ handler)
-      printLine ("  → Memory Size: " ++ Int.toText memSize ++ " MB")
-      printLine ("  → Timeout: " ++ Int.toText timeout ++ " seconds")
-      printLine ("  → State: " ++ state)
+  fnConfig = !(requireSome "configuration" (aws.lambda.GetFunctionResponse.configuration response))
+  
+  name = Optional.getOrElse "unnamed" (aws.lambda.FunctionConfiguration.functionName fnConfig)
+  runtime = Optional.getOrElse "unknown" (Optional.map aws.lambda.runtimeToText (aws.lambda.FunctionConfiguration.runtime fnConfig))
+  handler = Optional.getOrElse "unknown" (aws.lambda.FunctionConfiguration.handler fnConfig)
+  memSize = Optional.getOrElse +0 (aws.lambda.FunctionConfiguration.memorySize fnConfig)
+  timeout = Optional.getOrElse +0 (aws.lambda.FunctionConfiguration.timeout fnConfig)
+  state = Optional.getOrElse "unknown" (Optional.map aws.lambda.stateToText (aws.lambda.FunctionConfiguration.state fnConfig))
+  
+  !(requireParsed "functionName" name)
+  !(requireParsed "runtime" runtime)
+  !(requireParsed "handler" handler)
+  !(requireParsed "state" state)
+  
+  printLine ("  → Function Name: " ++ name)
+  printLine ("  → Runtime: " ++ runtime)
+  printLine ("  → Handler: " ++ handler)
+  printLine ("  → Memory Size: " ++ Int.toText memSize ++ " MB")
+  printLine ("  → Timeout: " ++ Int.toText timeout ++ " seconds")
+  printLine ("  → State: " ++ state)
 
 {{
 Invoke the Lambda function with test payload.
