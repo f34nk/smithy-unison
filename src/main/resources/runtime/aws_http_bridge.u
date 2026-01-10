@@ -15,6 +15,66 @@
 -- IMPORTANT: This module overrides the placeholder executeRequest function
 -- from aws_http.u to enable real HTTP requests in generated client code.
 
+-- Helper function to parse URI - implementation that avoids ambiguity
+-- Uses basic URI construction from parts
+parseUri : Text ->{Exception} URI
+parseUri url =
+  -- Extract scheme, authority, path from URL
+  -- Format: scheme://authority/path?query#fragment
+  match Text.indexOf "://" url with
+    None -> 
+      -- No scheme, assume https
+      parseUri ("https://" Text.++ url)
+    Some schemeEnd ->
+      scheme = Scheme (Text.take schemeEnd url)
+      afterScheme = Text.drop (schemeEnd Nat.+ 3) url
+      -- Find path start
+      pathStart = Text.indexOf "/" afterScheme
+      (hostPortStr, pathQueryFragment) = match pathStart with
+        None -> (afterScheme, "")
+        Some idx -> (Text.take idx afterScheme, Text.drop idx afterScheme)
+      -- Parse authority (host:port) - split host and port
+      portSepIdx = Text.indexOf ":" hostPortStr
+      (hostStr, portOpt) = match portSepIdx with
+        None -> (hostPortStr, None)
+        Some idx -> 
+          host = Text.take idx hostPortStr
+          portStr = Text.drop (idx Nat.+ 1) hostPortStr
+          -- Port constructor takes Text, not Nat
+          port = if Text.isEmpty portStr then None else Some (Port portStr)
+          (host, port)
+      authority = Authority None (HostName hostStr) portOpt
+      -- Parse path, query, fragment
+      queryStart = Text.indexOf "?" pathQueryFragment
+      (pathStr, queryFragment) = match queryStart with
+        None -> (pathQueryFragment, "")
+        Some idx -> (Text.take idx pathQueryFragment, Text.drop idx pathQueryFragment)
+      fragmentStart = Text.indexOf "#" queryFragment
+      (queryStr, fragmentStr) = match fragmentStart with
+        None -> (queryFragment, "")
+        Some idx -> (Text.take idx queryFragment, Text.drop (idx Nat.+ 1) queryFragment)
+      -- Remove leading ? from query
+      rawQuery = if Text.startsWith "?" queryStr then Text.drop 1 queryStr else queryStr
+      -- Build path - split by / character manually
+      pathParts = splitByChar ?/ pathStr |> List.filter (p -> not (Text.isEmpty p))
+      path = Path pathParts
+      URI scheme (Some authority) path (RawQuery rawQuery) (Fragment fragmentStr)
+
+-- Helper to split text by a character (avoids ambiguous Text.split)
+splitByChar : Char -> Text -> [Text]
+splitByChar sep txt =
+  go remaining acc current =
+    match Text.uncons remaining with
+      None -> 
+        if Text.isEmpty current then acc
+        else acc List.++ [current]
+      Some (c, rest) ->
+        if Char.eq c sep then
+          go rest (acc List.++ [current]) ""
+        else
+          go rest acc (current Text.++ fromCharList [c])
+  go txt [] ""
+
 -- =============================================================================
 -- executeRequest Override (Main Entry Point for Generated Code)
 -- =============================================================================
@@ -128,7 +188,7 @@ Requires Exception ability since URI.parse can fail on invalid URLs.
 }}
 aws.http.toHttpRequest : Http.Request -> '{Exception} HttpRequest
 aws.http.toHttpRequest req = do
-  uri = lib.unison_base_3_18_0.IO.net.URI.parse (Http.Request.url req)
+  uri = parseUri (Http.Request.url req)
   method = aws.http.toMethod (Http.Request.method req)
   headers = aws.http.toHeaders (Http.Request.headers req)
   body = aws.http.toBody (Http.Request.body req)
