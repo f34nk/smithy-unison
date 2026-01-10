@@ -1,6 +1,7 @@
 ```ucm
 scratch/main> builtins.merge
 scratch/main> lib.install @unison/base/releases/3.18.0
+scratch/main> lib.install @unison/json/releases/latest
 scratch/main> lib.install @unison/xml/releases/1.2.0
 
 scratch/main> load main/resources/runtime/aws_json.u

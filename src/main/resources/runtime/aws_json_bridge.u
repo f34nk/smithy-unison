@@ -432,12 +432,6 @@ parseItemsFromJson json =
 {{
   Find a text field in a JSON object.
   Returns None if field doesn't exist or isn't a string.
-  
-  Example:
-  @typechecked ```
-  json = Json.Object [("name", Json.Text "Alice")]
-  aws.json.bridge.coreJsonFindText "name" json == Some "Alice"
-  ```
 }}
 coreJsonFindText : Text -> core.Json -> Optional Text
 coreJsonFindText key json =
@@ -585,7 +579,7 @@ coreJsonParseList key parser json =
 
 {{
   Parse optional list from JSON array field.
-  Returns None if field doesn't exist, Some [a] otherwise.
+  Returns None if field doesn't exist, Some list otherwise.
 }}
 coreJsonParseOptionalList : Text -> (core.Json -> a) -> core.Json -> Optional [a]
 coreJsonParseOptionalList key parser json =
@@ -687,7 +681,7 @@ deserializeCoreJsonResponse bytes = do
   Raises an Exception if the text is not valid JSON.
 }}
 responseBodyToCoreJson : Text -> '{Exception} core.Json
-responseBodyToCoreJson text = core.Json.fromText text
+responseBodyToCoreJson text = do core.Json.fromText text
 
 -- =============================================================================
 -- core.Json Error Parsing
