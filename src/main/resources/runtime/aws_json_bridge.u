@@ -421,3 +421,321 @@ parseItemsFromJson json =
         Some (List.map (i -> Optional.getOrElse [] i) parsedItems)
       else None
     _ -> None
+
+-- =============================================================================
+-- core.Json Helper Functions
+-- =============================================================================
+-- These functions provide extraction and parsing utilities for core.Json,
+-- mirroring the pattern used by aws_xml_bridge.u for XML/Soup.
+-- They will be used by updated code generators that emit core.Json-based code.
+
+{{
+  Find a text field in a JSON object.
+  Returns None if field doesn't exist or isn't a string.
+  
+  Example:
+  @typechecked ```
+  json = Json.Object [("name", Json.Text "Alice")]
+  aws.json.bridge.coreJsonFindText "name" json == Some "Alice"
+  ```
+}}
+coreJsonFindText : Text -> core.Json -> Optional Text
+coreJsonFindText key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Text t) -> Some t
+        _ -> None
+    _ -> None
+
+{{
+  Find an integer field in a JSON object.
+  Returns None if field doesn't exist or isn't a number.
+}}
+coreJsonFindInt : Text -> core.Json -> Optional Int
+coreJsonFindInt key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Number numText) -> Int.fromText numText
+        _ -> None
+    _ -> None
+
+{{
+  Find a Nat field in a JSON object.
+  Returns None if field doesn't exist or isn't a number.
+}}
+coreJsonFindNat : Text -> core.Json -> Optional Nat
+coreJsonFindNat key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Number numText) -> Nat.fromText numText
+        _ -> None
+    _ -> None
+
+{{
+  Find a Float field in a JSON object.
+  Returns None if field doesn't exist or isn't a number.
+}}
+coreJsonFindFloat : Text -> core.Json -> Optional Float
+coreJsonFindFloat key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Number numText) -> Float.fromText numText
+        _ -> None
+    _ -> None
+
+{{
+  Find a boolean field in a JSON object.
+  Returns None if field doesn't exist or isn't a boolean.
+}}
+coreJsonFindBool : Text -> core.Json -> Optional Boolean
+coreJsonFindBool key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Boolean b) -> Some b
+        _ -> None
+    _ -> None
+
+{{
+  Find a nested JSON object field.
+  Returns None if field doesn't exist.
+}}
+coreJsonFindObject : Text -> core.Json -> Optional core.Json
+coreJsonFindObject key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, obj@(core.Json.Object _)) -> Some obj
+        _ -> None
+    _ -> None
+
+{{
+  Find a JSON array field.
+  Returns None if field doesn't exist.
+}}
+coreJsonFindArray : Text -> core.Json -> Optional [core.Json]
+coreJsonFindArray key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Array items) -> Some items
+        _ -> None
+    _ -> None
+
+{{
+  Find an array field and extract all text elements.
+  Returns empty list if field doesn't exist or contains non-text elements.
+}}
+coreJsonFindAllText : Text -> core.Json -> [Text]
+coreJsonFindAllText key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Array items) ->
+          List.filterMap (cases
+            core.Json.Text t -> Some t
+            _ -> None) items
+        _ -> []
+    _ -> []
+
+{{
+  Find an array field and extract all integer elements.
+}}
+coreJsonFindAllInt : Text -> core.Json -> [Int]
+coreJsonFindAllInt key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Array items) ->
+          List.filterMap (cases
+            core.Json.Number n -> Int.fromText n
+            _ -> None) items
+        _ -> []
+    _ -> []
+
+{{
+  Parse a nested structure from JSON.
+  Returns None if the field doesn't exist.
+}}
+coreJsonParseNested : Text -> (core.Json -> a) -> core.Json -> Optional a
+coreJsonParseNested key parser json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, nested) -> Some (parser nested)
+        _ -> None
+    _ -> None
+
+{{
+  Parse a list of structures from JSON array field.
+  Returns empty list if field doesn't exist.
+}}
+coreJsonParseList : Text -> (core.Json -> a) -> core.Json -> [a]
+coreJsonParseList key parser json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Array items) -> List.map parser items
+        _ -> []
+    _ -> []
+
+{{
+  Parse optional list from JSON array field.
+  Returns None if field doesn't exist, Some [a] otherwise.
+}}
+coreJsonParseOptionalList : Text -> (core.Json -> a) -> core.Json -> Optional [a]
+coreJsonParseOptionalList key parser json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Array items) -> Some (List.map parser items)
+        _ -> None
+    _ -> None
+
+{{
+  Parse a map from JSON object field.
+  Returns empty list of pairs if field doesn't exist.
+}}
+coreJsonParseMap : Text -> (core.Json -> a) -> core.Json -> [(Text, a)]
+coreJsonParseMap key valueParser json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, core.Json.Object mapFields) ->
+          List.map (cases (k, v) -> (k, valueParser v)) mapFields
+        _ -> []
+    _ -> []
+
+{{
+  Require a text field, raising Exception if missing.
+}}
+coreJsonRequireText : Text -> core.Json -> '{Exception} Text
+coreJsonRequireText key json = do
+  match coreJsonFindText key json with
+    Some t -> t
+    None -> Exception.raise (Generic.failure ("Required JSON field not found: " Text.++ key) json)
+
+{{
+  Require an int field, raising Exception if missing.
+}}
+coreJsonRequireInt : Text -> core.Json -> '{Exception} Int
+coreJsonRequireInt key json = do
+  match coreJsonFindInt key json with
+    Some i -> i
+    None -> Exception.raise (Generic.failure ("Required JSON field not found: " Text.++ key) json)
+
+{{
+  Require a Nat field, raising Exception if missing.
+}}
+coreJsonRequireNat : Text -> core.Json -> '{Exception} Nat
+coreJsonRequireNat key json = do
+  match coreJsonFindNat key json with
+    Some n -> n
+    None -> Exception.raise (Generic.failure ("Required JSON field not found: " Text.++ key) json)
+
+{{
+  Require a boolean field, raising Exception if missing.
+}}
+coreJsonRequireBool : Text -> core.Json -> '{Exception} Boolean
+coreJsonRequireBool key json = do
+  match coreJsonFindBool key json with
+    Some b -> b
+    None -> Exception.raise (Generic.failure ("Required JSON field not found: " Text.++ key) json)
+
+{{
+  Require a nested structure, raising Exception if missing.
+}}
+coreJsonRequireNested : Text -> (core.Json -> a) -> core.Json -> '{Exception} a
+coreJsonRequireNested key parser json = do
+  match coreJsonParseNested key parser json with
+    Some a -> a
+    None -> Exception.raise (Generic.failure ("Required JSON field not found: " Text.++ key) json)
+
+-- =============================================================================
+-- core.Json HTTP Bridge Functions
+-- =============================================================================
+
+{{
+  Serialize a core.Json value to bytes for HTTP request body.
+}}
+serializeCoreJsonRequest : core.Json -> Bytes
+serializeCoreJsonRequest value =
+  text = core.Json.toText value
+  toUtf8 text
+
+{{
+  Serialize a core.Json value to text for HTTP request body.
+}}
+coreJsonToRequestBody : core.Json -> Text
+coreJsonToRequestBody value = core.Json.toText value
+
+{{
+  Deserialize HTTP response body bytes to core.Json.
+  Raises an Exception if the bytes are not valid UTF-8 or valid JSON.
+}}
+deserializeCoreJsonResponse : Bytes -> '{Exception} core.Json
+deserializeCoreJsonResponse bytes = do
+  text = Text.fromUtf8 bytes
+  core.Json.fromText text
+
+{{
+  Parse HTTP response body text to core.Json.
+  Raises an Exception if the text is not valid JSON.
+}}
+responseBodyToCoreJson : Text -> '{Exception} core.Json
+responseBodyToCoreJson text = core.Json.fromText text
+
+-- =============================================================================
+-- core.Json Error Parsing
+-- =============================================================================
+
+{{
+  Extract the error type from an AWS JSON error response (core.Json version).
+  
+  Looks for the `__type` field and extracts the error name.
+  Handles both full format ("com.amazon.coral.validate#ValidationException")
+  and short format ("ValidationException").
+}}
+extractCoreJsonErrorType : core.Json -> Optional Text
+extractCoreJsonErrorType json =
+  match coreJsonFindText "__type" json with
+    Some fullType ->
+      if Text.contains "#" fullType then
+        parts = Text.split ?# fullType
+        match List.last parts with
+          Some errorName -> Some errorName
+          None -> Some fullType
+      else
+        Some fullType
+    None -> None
+
+{{
+  Extract the error message from an AWS JSON error response (core.Json version).
+  
+  Looks for the `message` or `Message` field (AWS services use both conventions).
+}}
+extractCoreJsonErrorMessage : core.Json -> Optional Text
+extractCoreJsonErrorMessage json =
+  match coreJsonFindText "message" json with
+    Some msg -> Some msg
+    None -> coreJsonFindText "Message" json
+
+{{
+  Parse AWS JSON error response from core.Json.
+  
+  Returns a JsonError record with errorType and errorMessage fields.
+  Returns None if the JSON doesn't match the expected error format.
+}}
+parseCoreJsonError : core.Json -> Optional JsonError
+parseCoreJsonError json =
+  errorType = extractCoreJsonErrorType json
+  errorMessage = extractCoreJsonErrorMessage json
+  match (errorType, errorMessage) with
+    (Some et, Some em) -> Some (JsonError.JsonError et em)
+    (Some et, None) -> Some (JsonError.JsonError et "")
+    (None, Some em) -> Some (JsonError.JsonError "UnknownError" em)
+    (None, None) -> None
