@@ -2,6 +2,7 @@
 scratch/main> builtins.merge
 scratch/main> lib.install @unison/base/releases/3.18.0
 scratch/main> lib.install @unison/http/releases/8.0.0
+scratch/main> lib.install @unison/json/releases/1.3.5
 scratch/main> lib.install @systemfw/concurrent/releases/7.3.0
 
 scratch/main> load generated/aws_http.u
