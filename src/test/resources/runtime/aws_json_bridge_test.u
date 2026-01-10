@@ -210,6 +210,199 @@ testParseItemsFromJsonEmpty = 'let
     Some items -> List.isEmpty items
     None -> false
 
+-- === Core.Json Primitive Parsing Tests ===
+
+testCoreJsonParseString : '{Exception} Boolean
+testCoreJsonParseString = do
+  json = core.Json.Text "hello"
+  result = !(coreJsonParseString json)
+  result === "hello"
+
+testCoreJsonParseStringInvalid : '{Exception} Boolean
+testCoreJsonParseStringInvalid = 'let
+  json = core.Json.Number "42"
+  -- Should raise exception for non-text input
+  match Exception.catch '(coreJsonParseString json ()) with
+    Left _ -> true
+    Right _ -> false
+
+testCoreJsonParseInt : '{Exception} Boolean
+testCoreJsonParseInt = do
+  json = core.Json.Number "42"
+  result = !(coreJsonParseInt json)
+  result === +42
+
+testCoreJsonParseIntInvalid : '{Exception} Boolean
+testCoreJsonParseIntInvalid = 'let
+  json = core.Json.Text "not a number"
+  match Exception.catch '(coreJsonParseInt json ()) with
+    Left _ -> true
+    Right _ -> false
+
+testCoreJsonParseFloat : '{Exception} Boolean
+testCoreJsonParseFloat = do
+  json = core.Json.Number "3.14"
+  result = !(coreJsonParseFloat json)
+  -- Check approximate equality for floats (result should be close to 3.14)
+  diff = Float.abs (result Float.- 3.14)
+  diff Float.< 0.01
+
+testCoreJsonParseBoolean : '{Exception} Boolean
+testCoreJsonParseBoolean = do
+  jsonTrue = core.Json.Boolean true
+  jsonFalse = core.Json.Boolean false
+  resultTrue = !(coreJsonParseBoolean jsonTrue)
+  resultFalse = !(coreJsonParseBoolean jsonFalse)
+  resultTrue && not resultFalse
+
+testCoreJsonParseBooleanInvalid : '{Exception} Boolean
+testCoreJsonParseBooleanInvalid = 'let
+  json = core.Json.Text "true"
+  match Exception.catch '(coreJsonParseBoolean json ()) with
+    Left _ -> true
+    Right _ -> false
+
+testCoreJsonParseBlob : '{Exception} Boolean
+testCoreJsonParseBlob = do
+  -- "hello" in base64 is "aGVsbG8="
+  json = core.Json.Text "aGVsbG8="
+  result = !(coreJsonParseBlob json)
+  Bytes.size result === 5
+
+testCoreJsonParseBlobInvalid : '{Exception} Boolean
+testCoreJsonParseBlobInvalid = 'let
+  json = core.Json.Text "not valid base64!!!"
+  match Exception.catch '(coreJsonParseBlob json ()) with
+    Left _ -> true
+    Right _ -> false
+
+-- === Effectful Nested Parsing Tests ===
+
+-- Simulate a structure parser that uses Exception
+testStructureParser : core.Json -> '{Exception} Text
+testStructureParser json = do
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === "name") fields with
+        Some (_, core.Json.Text name) -> name
+        _ -> Exception.raise (Generic.failure "Missing name field" json)
+    _ -> Exception.raise (Generic.failure "Expected object" json)
+
+testCoreJsonParseNestedEffectful : '{Exception} Boolean
+testCoreJsonParseNestedEffectful = do
+  json = core.Json.Object [
+    ("person", core.Json.Object [("name", core.Json.Text "Alice")])
+  ]
+  result = !(coreJsonParseNestedEffectful "person" testStructureParser json)
+  match result with
+    Some "Alice" -> true
+    _ -> false
+
+testCoreJsonParseNestedEffectfulMissing : '{Exception} Boolean
+testCoreJsonParseNestedEffectfulMissing = do
+  json = core.Json.Object [("other", core.Json.Text "value")]
+  result = !(coreJsonParseNestedEffectful "person" testStructureParser json)
+  match result with
+    None -> true
+    _ -> false
+
+testCoreJsonParseListEffectful : '{Exception} Boolean
+testCoreJsonParseListEffectful = do
+  json = core.Json.Object [
+    ("people", core.Json.Array [
+      core.Json.Object [("name", core.Json.Text "Alice")],
+      core.Json.Object [("name", core.Json.Text "Bob")]
+    ])
+  ]
+  result = !(coreJsonParseListEffectful "people" testStructureParser json)
+  List.size result === 2
+
+testCoreJsonParseListEffectfulEmpty : '{Exception} Boolean
+testCoreJsonParseListEffectfulEmpty = do
+  json = core.Json.Object [("people", core.Json.Array [])]
+  result = !(coreJsonParseListEffectful "people" testStructureParser json)
+  List.isEmpty result
+
+testCoreJsonParseListEffectfulMissing : '{Exception} Boolean
+testCoreJsonParseListEffectfulMissing = do
+  json = core.Json.Object [("other", core.Json.Text "value")]
+  result = !(coreJsonParseListEffectful "people" testStructureParser json)
+  List.isEmpty result
+
+testCoreJsonParseOptionalListEffectful : '{Exception} Boolean
+testCoreJsonParseOptionalListEffectful = do
+  json = core.Json.Object [
+    ("items", core.Json.Array [
+      core.Json.Object [("name", core.Json.Text "Item1")]
+    ])
+  ]
+  result = !(coreJsonParseOptionalListEffectful "items" testStructureParser json)
+  match result with
+    Some items -> List.size items === 1
+    None -> false
+
+testCoreJsonParseOptionalListEffectfulMissing : '{Exception} Boolean
+testCoreJsonParseOptionalListEffectfulMissing = do
+  json = core.Json.Object [("other", core.Json.Text "value")]
+  result = !(coreJsonParseOptionalListEffectful "items" testStructureParser json)
+  match result with
+    None -> true
+    _ -> false
+
+-- === Enum-Keyed Map Parsing Tests ===
+
+-- Simulate an enum FromText function
+testEnumFromText : Text -> Optional Text
+testEnumFromText t =
+  match t with
+    "KEY_A" -> Some "EnumA"
+    "KEY_B" -> Some "EnumB"
+    _ -> None
+
+testCoreJsonParseEnumKeyedStringMap : '{Exception} Boolean
+testCoreJsonParseEnumKeyedStringMap = 'let
+  json = core.Json.Object [
+    ("attributes", core.Json.Object [
+      ("KEY_A", core.Json.Text "value_a"),
+      ("KEY_B", core.Json.Text "value_b")
+    ])
+  ]
+  result = coreJsonParseEnumKeyedStringMap "attributes" testEnumFromText json
+  match result with
+    Some pairs -> List.size pairs === 2
+    None -> false
+
+testCoreJsonParseEnumKeyedStringMapWithInvalidKey : '{Exception} Boolean
+testCoreJsonParseEnumKeyedStringMapWithInvalidKey = 'let
+  json = core.Json.Object [
+    ("attributes", core.Json.Object [
+      ("KEY_A", core.Json.Text "value_a"),
+      ("INVALID_KEY", core.Json.Text "value_invalid"),
+      ("KEY_B", core.Json.Text "value_b")
+    ])
+  ]
+  result = coreJsonParseEnumKeyedStringMap "attributes" testEnumFromText json
+  match result with
+    -- Invalid key should be filtered out
+    Some pairs -> List.size pairs === 2
+    None -> false
+
+testCoreJsonParseEnumKeyedStringMapMissing : '{Exception} Boolean
+testCoreJsonParseEnumKeyedStringMapMissing = 'let
+  json = core.Json.Object [("other", core.Json.Text "value")]
+  result = coreJsonParseEnumKeyedStringMap "attributes" testEnumFromText json
+  match result with
+    None -> true
+    _ -> false
+
+testCoreJsonParseEnumKeyedStringMapEmpty : '{Exception} Boolean
+testCoreJsonParseEnumKeyedStringMapEmpty = 'let
+  json = core.Json.Object [("attributes", core.Json.Object [])]
+  result = coreJsonParseEnumKeyedStringMap "attributes" testEnumFromText json
+  match result with
+    Some pairs -> List.isEmpty pairs
+    None -> false
+
 -- === Integration Tests ===
 
 testRoundtripSimpleItem : '{Exception} Boolean
@@ -290,6 +483,32 @@ runAllTests = do
   !(runTest "serializeKeyToJson" testSerializeKeyToJson)
   !(runTest "parseItemsFromJson" testParseItemsFromJson)
   !(runTest "parseItemsFromJson Empty" testParseItemsFromJsonEmpty)
+  
+  -- Core.Json primitive parsing tests
+  !(runTest "coreJsonParseString" testCoreJsonParseString)
+  !(runTest "coreJsonParseString Invalid" testCoreJsonParseStringInvalid)
+  !(runTest "coreJsonParseInt" testCoreJsonParseInt)
+  !(runTest "coreJsonParseInt Invalid" testCoreJsonParseIntInvalid)
+  !(runTest "coreJsonParseFloat" testCoreJsonParseFloat)
+  !(runTest "coreJsonParseBoolean" testCoreJsonParseBoolean)
+  !(runTest "coreJsonParseBoolean Invalid" testCoreJsonParseBooleanInvalid)
+  !(runTest "coreJsonParseBlob" testCoreJsonParseBlob)
+  !(runTest "coreJsonParseBlob Invalid" testCoreJsonParseBlobInvalid)
+  
+  -- Effectful nested parsing tests
+  !(runTest "coreJsonParseNestedEffectful" testCoreJsonParseNestedEffectful)
+  !(runTest "coreJsonParseNestedEffectful Missing" testCoreJsonParseNestedEffectfulMissing)
+  !(runTest "coreJsonParseListEffectful" testCoreJsonParseListEffectful)
+  !(runTest "coreJsonParseListEffectful Empty" testCoreJsonParseListEffectfulEmpty)
+  !(runTest "coreJsonParseListEffectful Missing" testCoreJsonParseListEffectfulMissing)
+  !(runTest "coreJsonParseOptionalListEffectful" testCoreJsonParseOptionalListEffectful)
+  !(runTest "coreJsonParseOptionalListEffectful Missing" testCoreJsonParseOptionalListEffectfulMissing)
+  
+  -- Enum-keyed map parsing tests
+  !(runTest "coreJsonParseEnumKeyedStringMap" testCoreJsonParseEnumKeyedStringMap)
+  !(runTest "coreJsonParseEnumKeyedStringMap InvalidKey" testCoreJsonParseEnumKeyedStringMapWithInvalidKey)
+  !(runTest "coreJsonParseEnumKeyedStringMap Missing" testCoreJsonParseEnumKeyedStringMapMissing)
+  !(runTest "coreJsonParseEnumKeyedStringMap Empty" testCoreJsonParseEnumKeyedStringMapEmpty)
   
   -- Integration tests
   !(runTest "Roundtrip Simple Item" testRoundtripSimpleItem)
