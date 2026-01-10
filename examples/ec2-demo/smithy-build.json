@@ -30,7 +30,8 @@
         "DescribeVpcs",
         "DescribeSubnets",
         "DescribeSecurityGroups",
-        "DescribeInstances"
+        "DescribeInstances",
+        "RunInstances"
       ],
       "generateAllOperations": false
     }

@@ -80,10 +80,17 @@ runDemo = do
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   !(describeSecurityGroupsDemo config)
   
-  -- Demo 4: Describe Instances
+  -- Demo 4: Run Instances
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 4: Describe Instances"
+  printLine "Step 4: Run Instances"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(runInstancesDemo config)
+  
+  -- Demo 5: Describe Instances (should now show the instance we just launched)
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 5: Describe Instances"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   !(describeInstancesDemo config)
   
@@ -198,6 +205,64 @@ describeSecurityGroupsDemo config = do
       printLine ("      Description: " ++ description)
       printLine ("      VPC ID: " ++ vpcId)
     List.foreach printSgInfo sgs
+
+{{
+Run an EC2 instance using the LocalStack backend.
+Uses a dummy AMI ID that LocalStack accepts.
+}}
+runInstancesDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+runInstancesDemo config = do
+  printLine "  → Calling RunInstances..."
+  
+  -- Create a minimal RunInstances request
+  -- LocalStack accepts dummy AMI IDs like "ami-12345678"
+  -- Required fields: minCount, maxCount
+  -- RunInstancesRequest fields (in order):
+  -- additionalInfo, blockDeviceMappings, capacityReservationSpecification, clientToken,
+  -- cpuOptions, creditSpecification, disableApiStop, disableApiTermination, dryRun,
+  -- ebsOptimized, elasticGpuSpecification, elasticInferenceAccelerators, enablePrimaryIpv6,
+  -- enclaveOptions, hibernationOptions, iamInstanceProfile, imageId,
+  -- instanceInitiatedShutdownBehavior, instanceMarketOptions, instanceType,
+  -- ipv6AddressCount, ipv6Addresses, kernelId, keyName, launchTemplate,
+  -- licenseSpecifications, maintenanceOptions, maxCount, metadataOptions, minCount,
+  -- monitoring, networkInterfaces, networkPerformanceOptions, operator, placement,
+  -- privateDnsNameOptions, privateIpAddress, ramdiskId, securityGroupIds, securityGroups,
+  -- subnetId, tagSpecifications, userData
+  request = aws.ec2.RunInstancesRequest.RunInstancesRequest None None None None None None None None None None None None None None None None (Some "ami-12345678") None None (Some aws.ec2.InstanceType't2_micro) None None None None None None None +1 None +1 None None None None None None None None None None None None None
+  
+  -- Call the API
+  response = !(aws.ec2.runInstances config request)
+  
+  printLine "  ✓ SUCCESS: RunInstances returned"
+      
+  -- Extract and display reservation info
+  reservationId = Optional.getOrElse "unknown" (aws.ec2.Reservation.reservationId response)
+  printLine ("  → Reservation ID: " ++ reservationId)
+          
+  -- Display instances from the reservation
+  instancesOpt = aws.ec2.Reservation.instances response
+  instances = Optional.getOrElse [] instancesOpt
+      
+  if List.isEmpty instances then
+    printLine "  → No instances in reservation"
+  else
+    printLine ("  → Launched " ++ Nat.toText (List.size instances) ++ " instance(s):")
+    printInstanceInfo instance =
+      instanceId = Optional.getOrElse "unknown" (aws.ec2.Instance.instanceId instance)
+      instanceType = Optional.getOrElse "unknown" (Optional.map aws.ec2.instanceTypeToText (aws.ec2.Instance.instanceType instance))
+      privateIp = Optional.getOrElse "none" (aws.ec2.Instance.privateIpAddress instance)
+      
+      -- Get instance state
+      stateOpt = aws.ec2.Instance.state instance
+      stateName = match stateOpt with
+        None -> "unknown"
+        Some s -> Optional.getOrElse "unknown" (Optional.map aws.ec2.instanceStateNameToText (aws.ec2.InstanceState.name s))
+      
+      printLine ("    - Instance ID: " ++ instanceId)
+      printLine ("      Instance Type: " ++ instanceType)
+      printLine ("      State: " ++ stateName)
+      printLine ("      Private IP: " ++ privateIp)
+    List.foreach printInstanceInfo instances
 
 {{
 Describe EC2 instances (if any are running).
