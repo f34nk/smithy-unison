@@ -20,6 +20,13 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Fail if a parsed value is "<unnamed>" (indicates parsing failure)
+requireParsed : Text -> Text -> '{IO, Exception} ()
+requireParsed fieldName value = do
+  if Text.eq value "<unnamed>" then
+    Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned '<unnamed>'") (Any ()))
+  else ()
+
 -- =============================================================================
 -- Configuration
 -- =============================================================================
@@ -144,7 +151,11 @@ listBucketsDemo config = do
     Some buckets -> 
       count = List.size buckets
       printLine ("  → Found " ++ Nat.toText count ++ " bucket(s):")
-      List.foreach (bucket -> printLine ("      • " ++ Optional.getOrElse "<unnamed>" (Bucket.name bucket))) buckets
+      printBucketInfo bucket =
+        bucketName = Optional.getOrElse "<unnamed>" (Bucket.name bucket)
+        !(requireParsed "bucket.name" bucketName)
+        printLine ("      • " ++ bucketName)
+      List.foreach printBucketInfo buckets
     None -> 
       printLine "  → No buckets found (response was empty)"
 
@@ -197,7 +208,11 @@ listObjectsV2Demo config = do
     Some objects ->
       count = List.size objects
       printLine ("  → Found " ++ Nat.toText count ++ " object(s):")
-      List.foreach (obj -> printLine ("      • " ++ Optional.getOrElse "<unnamed>" (Object.key obj) ++ " (" ++ Int.toText (Optional.getOrElse +0 (Object.size obj)) ++ " bytes)")) objects
+      printObjectInfo obj =
+        objectKey = Optional.getOrElse "<unnamed>" (Object.key obj)
+        !(requireParsed "object.key" objectKey)
+        printLine ("      • " ++ objectKey ++ " (" ++ Int.toText (Optional.getOrElse +0 (Object.size obj)) ++ " bytes)")
+      List.foreach printObjectInfo objects
     None -> 
       printLine "  → No objects found"
 
