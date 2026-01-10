@@ -1,0 +1,265 @@
+-- EC2 Demo Application
+-- Tests the generated EC2 client against LocalStack mock server
+--
+-- REQUIREMENTS:
+-- To run actual HTTP requests, install @unison/http:
+--   lib.install @unison/http/releases/8.0.0
+-- Then load the bridge module after aws_http.u:
+--   load aws_http_bridge.u
+--   add
+
+-- =============================================================================
+-- Helpers
+-- =============================================================================
+
+-- Get environment variable with default value
+envOrDefault : Text -> Text -> '{IO, Exception} Text
+envOrDefault name default = do
+  result = catch do getEnv name
+  match result with
+    Either.Left _ -> default
+    Either.Right value -> if Text.isEmpty value then default else value
+
+-- =============================================================================
+-- Configuration
+-- =============================================================================
+
+-- Create EC2 client configuration for LocalStack
+defaultConfig : '{IO, Exception} aws.ec2.Config
+defaultConfig = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  creds = aws.ec2.Credentials.Credentials key secret None
+  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
+  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  Config.Config endpoint region creds false
+
+-- =============================================================================
+-- Main Demo
+-- =============================================================================
+
+-- Entry point for UCM compile - must have '{IO, Exception} signature
+-- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
+main : '{IO, Exception} ()
+main = do
+  -- Threads.run requires Random ability, use Random.run to provide it
+  Random.run do
+    systemfw_concurrent_7_3_0.Threads.run do
+      !runDemo
+
+-- Actual demo implementation with Threads ability
+runDemo : '{IO, Exception, Threads} ()
+runDemo = do
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║     EC2 Client Demo (LocalStack Backend)    ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  
+  config = !defaultConfig
+  printLine ("Endpoint: " ++ aws.ec2.Config.endpoint config)
+  printLine ("Region: " ++ aws.ec2.Config.region config)
+  printLine ""
+  
+  -- Demo 1: Describe VPCs
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 1: Describe VPCs"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(describeVpcsDemo config)
+  
+  -- Demo 2: Describe Subnets
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 2: Describe Subnets"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(describeSubnetsDemo config)
+  
+  -- Demo 3: Describe Security Groups
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 3: Describe Security Groups"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(describeSecurityGroupsDemo config)
+  
+  -- Demo 4: Describe Instances
+  printLine ""
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printLine "Step 4: Describe Instances"
+  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  !(describeInstancesDemo config)
+  
+  printLine ""
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║           EC2 Demo Complete!                 ║"
+  printLine "╚══════════════════════════════════════════════╝"
+
+-- =============================================================================
+-- Demo Functions
+-- =============================================================================
+
+{{
+Describe VPCs created by Terraform.
+}}
+describeVpcsDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeVpcsDemo config = do
+  printLine "  → Calling DescribeVpcs..."
+  
+  -- Create request with empty options (will list all VPCs)
+  -- Fields: dryRun, filters, maxResults, nextToken, vpcIds
+  request = aws.ec2.DescribeVpcsRequest.DescribeVpcsRequest None None None None None
+  
+  -- Call the API
+  response = !(aws.ec2.describeVpcs config request)
+  
+  printLine "  ✓ SUCCESS: DescribeVpcs returned"
+  
+  -- Extract and display VPCs
+  vpcsOpt = aws.ec2.DescribeVpcsResult.vpcs response
+  vpcs = Optional.getOrElse [] vpcsOpt
+  
+  if List.isEmpty vpcs then
+    printLine "  → No VPCs found"
+  else
+    printLine ("  → Found " ++ Nat.toText (List.size vpcs) ++ " VPC(s):")
+    printVpcInfo vpc =
+      vpcId = Optional.getOrElse "unknown" (aws.ec2.Vpc.vpcId vpc)
+      cidr = Optional.getOrElse "unknown" (aws.ec2.Vpc.cidrBlock vpc)
+      isDefault = Optional.getOrElse false (aws.ec2.Vpc.isDefault vpc)
+      printLine ("    - VPC ID: " ++ vpcId)
+      printLine ("      CIDR: " ++ cidr)
+      printLine ("      Default: " ++ Boolean.toText isDefault)
+    List.foreach printVpcInfo vpcs
+
+{{
+Describe Subnets created by Terraform.
+}}
+describeSubnetsDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeSubnetsDemo config = do
+  printLine "  → Calling DescribeSubnets..."
+  
+  -- Create request with empty options (will list all subnets)
+  -- Fields: dryRun, filters, maxResults, nextToken, subnetIds
+  request = aws.ec2.DescribeSubnetsRequest.DescribeSubnetsRequest None None None None None
+  
+  -- Call the API
+  response = !(aws.ec2.describeSubnets config request)
+  
+  printLine "  ✓ SUCCESS: DescribeSubnets returned"
+  
+  -- Extract and display subnets
+  subnetsOpt = aws.ec2.DescribeSubnetsResult.subnets response
+  subnets = Optional.getOrElse [] subnetsOpt
+  
+  if List.isEmpty subnets then
+    printLine "  → No subnets found"
+  else
+    printLine ("  → Found " ++ Nat.toText (List.size subnets) ++ " subnet(s):")
+    printSubnetInfo subnet =
+      subnetId = Optional.getOrElse "unknown" (aws.ec2.Subnet.subnetId subnet)
+      vpcId = Optional.getOrElse "unknown" (aws.ec2.Subnet.vpcId subnet)
+      cidr = Optional.getOrElse "unknown" (aws.ec2.Subnet.cidrBlock subnet)
+      az = Optional.getOrElse "unknown" (aws.ec2.Subnet.availabilityZone subnet)
+      printLine ("    - Subnet ID: " ++ subnetId)
+      printLine ("      VPC ID: " ++ vpcId)
+      printLine ("      CIDR: " ++ cidr)
+      printLine ("      AZ: " ++ az)
+    List.foreach printSubnetInfo subnets
+
+{{
+Describe Security Groups created by Terraform.
+}}
+describeSecurityGroupsDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeSecurityGroupsDemo config = do
+  printLine "  → Calling DescribeSecurityGroups..."
+  
+  -- Create request with empty options (will list all security groups)
+  -- Fields: dryRun, filters, groupIds, groupNames, maxResults, nextToken
+  request = aws.ec2.DescribeSecurityGroupsRequest.DescribeSecurityGroupsRequest None None None None None None
+  
+  -- Call the API
+  response = !(aws.ec2.describeSecurityGroups config request)
+  
+  printLine "  ✓ SUCCESS: DescribeSecurityGroups returned"
+  
+  -- Extract and display security groups
+  sgsOpt = aws.ec2.DescribeSecurityGroupsResult.securityGroups response
+  sgs = Optional.getOrElse [] sgsOpt
+  
+  if List.isEmpty sgs then
+    printLine "  → No security groups found"
+  else
+    printLine ("  → Found " ++ Nat.toText (List.size sgs) ++ " security group(s):")
+    printSgInfo sg =
+      groupId = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.groupId sg)
+      groupName = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.groupName sg)
+      description = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.description sg)
+      vpcId = Optional.getOrElse "unknown" (aws.ec2.SecurityGroup.vpcId sg)
+      printLine ("    - Group ID: " ++ groupId)
+      printLine ("      Name: " ++ groupName)
+      printLine ("      Description: " ++ description)
+      printLine ("      VPC ID: " ++ vpcId)
+    List.foreach printSgInfo sgs
+
+{{
+Describe EC2 instances (if any are running).
+}}
+describeInstancesDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeInstancesDemo config = do
+  printLine "  → Calling DescribeInstances..."
+  
+  -- Create request with empty options (will list all instances)
+  -- Fields: dryRun, filters, instanceIds, maxResults, nextToken
+  request = aws.ec2.DescribeInstancesRequest.DescribeInstancesRequest None None None None None
+  
+  -- Call the API
+  response = !(aws.ec2.describeInstances config request)
+  
+  printLine "  ✓ SUCCESS: DescribeInstances returned"
+  
+  -- Extract and display instances
+  reservationsOpt = aws.ec2.DescribeInstancesResult.reservations response
+  reservations = Optional.getOrElse [] reservationsOpt
+  
+  if List.isEmpty reservations then
+    printLine "  → No reservations found (no instances running)"
+  else
+    printLine ("  → Found " ++ Nat.toText (List.size reservations) ++ " reservation(s):")
+    printReservationInfo reservation =
+      reservationId = Optional.getOrElse "unknown" (aws.ec2.Reservation.reservationId reservation)
+      printLine ("    - Reservation ID: " ++ reservationId)
+      
+      instancesOpt = aws.ec2.Reservation.instances reservation
+      instances = Optional.getOrElse [] instancesOpt
+      
+      if List.isEmpty instances then
+        printLine "      No instances in this reservation"
+      else
+        printInstanceInfo instance =
+          instanceId = Optional.getOrElse "unknown" (aws.ec2.Instance.instanceId instance)
+          instanceType = Optional.getOrElse "unknown" (Optional.map aws.ec2.instanceTypeToText (aws.ec2.Instance.instanceType instance))
+          privateIp = Optional.getOrElse "none" (aws.ec2.Instance.privateIpAddress instance)
+          
+          -- Get instance state
+          stateOpt = aws.ec2.Instance.state instance
+          stateName = match stateOpt with
+            None -> "unknown"
+            Some s -> Optional.getOrElse "unknown" (Optional.map aws.ec2.instanceStateNameToText (aws.ec2.InstanceState.name s))
+          
+          -- Get instance tags
+          tagsOpt = aws.ec2.Instance.tags instance
+          tags = Optional.getOrElse [] tagsOpt
+          
+          printLine ("      - Instance ID: " ++ instanceId)
+          printLine ("        Instance Type: " ++ instanceType)
+          printLine ("        State: " ++ stateName)
+          printLine ("        Private IP: " ++ privateIp)
+          
+          if not (List.isEmpty tags) then
+            printLine "        Tags:"
+            printTagInfo tag =
+              key = Optional.getOrElse "unknown" (aws.ec2.Tag.key tag)
+              value = Optional.getOrElse "unknown" (aws.ec2.Tag.value tag)
+              printLine ("          " ++ key ++ ": " ++ value)
+            List.foreach printTagInfo tags
+          else ()
+        List.foreach printInstanceInfo instances
+    List.foreach printReservationInfo reservations
