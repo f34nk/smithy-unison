@@ -52,10 +52,6 @@ examples: examples/clean
 	@for x in $(EXAMPLES); do \
 		example=`echo $$x|sed 's/\/$$//g'` ; \
 		make $$example ; \
-		if [ $$? -ne 0 ]; then \
-			echo "Error building $$example" ; \
-			exit 1 ; \
-		fi ; \
 	done
 
 # Usage: make examples/simple-service
@@ -64,7 +60,12 @@ examples/%: $(EXAMPLES)
 	#
 	# Build $@
 	#
-	cd $@ && make clean && time make test && make docker/stop
+	cd $@ && make clean && time make test; \
+	if [ $$? -ne 0 ]; then \
+		echo "Error building $@" ; \
+		exit 1 ; \
+	fi; \
+	make docker/stop
 
 # Usage: make examples/clean
 examples/clean:
