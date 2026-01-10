@@ -1,7 +1,7 @@
 -- Isolated test for AWS XML Response Parsing Issues
 -- This test demonstrates the problem with parsing required boolean fields from XML responses
 
-namespace aws.xml.response.test
+namespace aws.xml.parse.test3
 
 use aws.xml
 use Text ++

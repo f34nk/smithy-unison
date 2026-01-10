@@ -21,10 +21,6 @@ scratch/main> load test/resources/runtime/aws_xml_test.u
 scratch/main> add
 scratch/main> run aws.xml.test.runAllTests
 
-scratch/main> load test/resources/runtime/aws_xml_response_parsing_test.u
-scratch/main> add
-scratch/main> run aws.xml.response.test.runAllTests
-
 scratch/main> load test/resources/runtime/aws_xml_parse_test.u
 scratch/main> add
 scratch/main> run aws.xml.parse.test.testXmlParsing
@@ -32,6 +28,10 @@ scratch/main> run aws.xml.parse.test.testXmlParsing
 scratch/main> load test/resources/runtime/aws_xml_parse_test2.u
 scratch/main> add
 scratch/main> run aws.xml.parse.test2.runParseTests
+
+scratch/main> load test/resources/runtime/aws_xml_parse_test3.u
+scratch/main> add
+scratch/main> run aws.xml.parse.test3.runAllTests
 
 scratch/main> load main/resources/runtime/aws_xml_bridge.u
 scratch/main> add
