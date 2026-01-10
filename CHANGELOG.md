@@ -6,10 +6,26 @@
 
 #### EC2 Demo Example
 - Integration test against LocalStack with EC2 Query protocol
-- DescribeSecurityGroups, DescribeSubnets, DescribeVpcs, and DescribeInstances operations
+- DescribeSecurityGroups, DescribeSubnets, DescribeVpcs, DescribeInstances, and RunInstances operations
 - Terraform configuration for LocalStack EC2 setup
 
+#### EC2 XML Parsing Isolation Tests
+- Runtime validation tests for extractElement and extractAllBlocks functions
+- Sample LocalStack XML responses for VPC and SecurityGroup parsing
+
 ### Fixed
+
+#### XML Element Name Resolution
+- XML parsers now respect @xmlName trait when extracting fields from EC2 Query responses
+- Fallback to capitalized member name for non-EC2 protocols
+
+#### HTTP Bridge URI Parsing
+- Fixed host:port separation in parseUri to correctly construct Authority type
+- Resolves connection failures to LocalStack endpoints with custom ports
+
+#### Runtime Module Operator Ambiguity
+- Replaced Universal.== with Text.eq, Char.eq, and Nat.eq in aws_xml.u, aws_http.u, aws_sigv4.u, and aws_json.u
+- Fixed hardcoded library references in aws_json_bridge.u and aws_s3.u
 
 #### Protocol Generator XML Parsing and Enum Handling
 - Fixed aws.xml.runXml invocation in EC2 and AWS Query protocols
