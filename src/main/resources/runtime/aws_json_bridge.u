@@ -41,6 +41,31 @@ jsonToRequestBody : JsonValue -> Text
 jsonToRequestBody value = toJson value
 
 -- =============================================================================
+-- Response Deserialization (JsonValue API)
+-- =============================================================================
+
+{{
+  Deserialize HTTP response body bytes to JsonValue.
+  
+  Decodes UTF-8 bytes to text and parses as JSON.
+  Raises an exception if the bytes are not valid UTF-8 or valid JSON.
+  Uses core.Json parser internally for better performance.
+}}
+deserializeJsonResponse : Bytes -> '{Exception} JsonValue
+deserializeJsonResponse bytes = do
+  text = Text.fromUtf8 bytes
+  parseJson text ()
+
+{{
+  Parse HTTP response body text to JsonValue.
+  
+  Raises an exception if the text is not valid JSON.
+  Uses core.Json parser internally for better performance.
+}}
+responseBodyToJson : Text -> '{Exception} JsonValue
+responseBodyToJson text = parseJson text
+
+-- =============================================================================
 -- AWS JSON Error Parsing
 -- =============================================================================
 
