@@ -103,6 +103,7 @@ The ***-demo** examples generate client code from the official [AWS SDK smithy m
 | make [examples/kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
 | make [examples/sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
 | make [examples/lambda-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/lambda-demo/src/main.u)  |
+| make [examples/ec2-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/ec2-demo/src/main.u)  |
 
 Run integration-test:
 

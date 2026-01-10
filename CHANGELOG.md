@@ -4,6 +4,21 @@
 
 ### Added
 
+#### EC2 Demo Example
+- Integration test against LocalStack with EC2 Query protocol
+- DescribeSecurityGroups, DescribeSubnets, DescribeVpcs, and DescribeInstances operations
+- Terraform configuration for LocalStack EC2 setup
+
+### Fixed
+
+#### Protocol Generator XML Parsing and Enum Handling
+- Fixed aws.xml.runXml invocation in EC2 and AWS Query protocols
+- Added enum type support to request serialization with proper toText function generation
+- Fixed reserved word handling in generated variable names using UnisonReservedWords.appendSuffix
+- Prevented orphaned code generation in REST-XML by handling serialization inline
+
+### Added
+
 #### Selective Operation Generation
 - Configuration support for specifying operations to generate via smithy-build.json
 - OperationSelector for filtering operations by name or shape ID

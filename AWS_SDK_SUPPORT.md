@@ -52,8 +52,8 @@ XML serialization traits for REST-XML and other XML-based protocols.
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| [`@xmlName`](https://smithy.io/2.0/spec/protocol-traits.html#xmlname-trait) | ❌ | XML element name override not implemented |
-| [`@xmlFlattened`](https://smithy.io/2.0/spec/protocol-traits.html#xmlflattened-trait) | ❌ | List/map flattening not implemented |
+| [`@xmlName`](https://smithy.io/2.0/spec/protocol-traits.html#xmlname-trait) | ✅ | XML element name override implemented in AWS Query and REST-XML protocols |
+| [`@xmlFlattened`](https://smithy.io/2.0/spec/protocol-traits.html#xmlflattened-trait) | ✅ | List/map flattening implemented in AWS Query protocol |
 | [`@xmlNamespace`](https://smithy.io/2.0/spec/protocol-traits.html#xmlnamespace-trait) | ❌ | XML namespace declarations not implemented |
 | [`@xmlAttribute`](https://smithy.io/2.0/spec/protocol-traits.html#xmlattribute-trait) | ❌ | XML attributes not implemented |
 
