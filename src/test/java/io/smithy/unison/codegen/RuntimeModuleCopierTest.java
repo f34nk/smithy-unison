@@ -537,8 +537,6 @@ class RuntimeModuleCopierTest {
             "Module should have accelerateEndpoint constant");
         assertTrue(content.contains("aws.s3.dualStackEndpoint"),
             "Module should have dualStackEndpoint function");
-        assertTrue(content.contains("aws.s3.localStackEndpoint"),
-            "Module should have localStackEndpoint function");
     }
     
     @Test
@@ -614,13 +612,13 @@ class RuntimeModuleCopierTest {
         assertNotNull(content, "Module content should not be null");
         assertFalse(content.isEmpty(), "Module content should not be empty");
         
-        // Verify expected content
+        // Verify expected content - new shared config types
         assertTrue(content.contains("aws.config.Credentials"),
             "Module should define aws.config.Credentials type");
-        assertTrue(content.contains("aws.config.S3Config"),
-            "Module should define aws.config.S3Config type");
-        assertTrue(content.contains("aws.config.ServiceConfig"),
-            "Module should define aws.config.ServiceConfig type");
+        assertTrue(content.contains("aws.config.Config"),
+            "Module should define aws.config.Config type");
+        assertTrue(content.contains("aws.config.Region"),
+            "Module should define aws.config.Region type");
     }
     
     @Test
@@ -638,19 +636,17 @@ class RuntimeModuleCopierTest {
     }
     
     @Test
-    void testConfigModuleHasS3Config() {
+    void testConfigModuleHasConfigType() {
         String content = copier.getModuleContent(RuntimeModule.AWS_CONFIG);
         
-        assertTrue(content.contains("aws.config.S3Config"),
-            "Module should have S3Config type");
-        assertTrue(content.contains("aws.config.s3Config"),
-            "Module should have s3Config function");
-        assertTrue(content.contains("aws.config.s3ConfigPathStyle"),
-            "Module should have s3ConfigPathStyle function");
-        assertTrue(content.contains("aws.config.s3ConfigCustom"),
-            "Module should have s3ConfigCustom function");
-        assertTrue(content.contains("aws.config.s3ConfigLocalStack"),
-            "Module should have s3ConfigLocalStack function");
+        assertTrue(content.contains("aws.config.Config"),
+            "Module should have Config type");
+        assertTrue(content.contains("aws.config.Config.default"),
+            "Module should have Config.default constructor");
+        assertTrue(content.contains("aws.config.Config.withEndpoint"),
+            "Module should have Config.withEndpoint constructor");
+        assertTrue(content.contains("aws.config.Config.makeUri"),
+            "Module should have Config.makeUri function");
     }
     
     @Test
@@ -683,10 +679,8 @@ class RuntimeModuleCopierTest {
         
         assertTrue(content.contains("{{"),
             "Module should have doc comments");
-        assertTrue(content.contains("AWS credentials for authenticating requests"),
-            "Module should document Credentials type");
-        assertTrue(content.contains("Configuration for Amazon S3"),
-            "Module should document S3Config type");
+        assertTrue(content.contains("AWS Configuration Runtime Module"),
+            "Module should have module documentation");
     }
     
     @Test
@@ -719,7 +713,7 @@ class RuntimeModuleCopierTest {
         RuntimeModule config = RuntimeModule.AWS_CONFIG;
         
         assertEquals("aws_config.u", config.getFilename());
-        assertEquals("Configuration types", config.getDescription());
+        assertEquals("Shared AWS configuration and credential types", config.getDescription());
         assertEquals("runtime/aws_config.u", config.getResourcePath());
     }
     
