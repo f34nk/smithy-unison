@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
  *   <li>{@code aws_http.u} - HTTP request helpers</li>
  *   <li>{@code aws_http_bridge.u} - HTTP bridge for @unison/http</li>
  *   <li>{@code aws_s3.u} - S3-specific utilities</li>
- *   <li>{@code aws_config.u} - Configuration types</li>
+ *   <li>{@code aws_config.u} - Shared configuration types (Region, Service, Config, Credentials newtypes)</li>
  *   <li>{@code aws_credentials.u} - Credential loading</li>
  * </ul>
  * 
@@ -106,9 +106,17 @@ public final class RuntimeModuleCopier {
         AWS_S3("aws_s3.u", "S3-specific utilities"),
         
         /**
-         * Configuration types.
+         * Shared AWS configuration types with newtypes (Region, Service, HostName, Port).
+         * 
+         * <p>Provides:
+         * <ul>
+         *   <li>Newtype wrappers for type safety (Region, Service, HostName, Port)</li>
+         *   <li>Shared Credentials type</li>
+         *   <li>Shared Config type with URI builders</li>
+         *   <li>Config.default, Config.withEndpoint constructors</li>
+         * </ul>
          */
-        AWS_CONFIG("aws_config.u", "Configuration types"),
+        AWS_CONFIG("aws_config.u", "Shared AWS configuration and credential types"),
         
         /**
          * Credential loading.
@@ -228,7 +236,7 @@ public final class RuntimeModuleCopier {
      *   <li>{@code aws_http.u} - HTTP utilities for all services</li>
      *   <li>{@code aws_http_bridge.u} - HTTP bridge for @unison/http</li>
      *   <li>{@code aws_s3.u} - S3-specific utilities</li>
-     *   <li>{@code aws_config.u} - Configuration types</li>
+     *   <li>{@code aws_config.u} - Shared configuration types (Region, Service, Config, Credentials newtypes)</li>
      *   <li>{@code aws_credentials.u} - Credential provider chain</li>
      * </ul>
      * 

@@ -32,14 +32,15 @@ requireSome fieldName opt = do
 -- =============================================================================
 
 -- Create Kinesis client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.kinesis.Config
+defaultConfig : '{IO, Exception} aws.config.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = Credentials.Credentials key secret None
+  creds = aws.config.basicCredentials key secret
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  aws.kinesis.Config.Config endpoint region creds false
+  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  region = aws.config.Region.fromText regionText
+  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "kinesis") creds
 
 -- Test stream name - created by terraform provisioner
 testStreamName : Text
@@ -75,8 +76,8 @@ runDemo = do
   printLine ""
   
   config = !defaultConfig
-  printLine ("Endpoint: " ++ Config.endpoint config)
-  printLine ("Region: " ++ Config.region config)
+  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
+  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
   printLine ("Stream: " ++ testStreamName)
   printLine ""
   
@@ -127,7 +128,7 @@ runDemo = do
 List all Kinesis streams.
 Verifies that our test stream exists.
 }}
-listStreamsDemo : aws.kinesis.Config -> '{IO, Exception, Threads} ()
+listStreamsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 listStreamsDemo config = do
   printLine "  → Creating ListStreamsInput..."
   printLine "    Limit: 10"
@@ -169,7 +170,7 @@ listStreamsDemo config = do
 Describe the test stream to get shard information.
 Returns the first shard ID for use in subsequent operations.
 }}
-describeStreamDemo : aws.kinesis.Config -> '{IO, Exception, Threads} Text
+describeStreamDemo : aws.config.Config -> '{IO, Exception, Threads} Text
 describeStreamDemo config = do
   printLine "  → Creating DescribeStreamInput..."
   printLine ("    StreamName: " ++ testStreamName)
@@ -207,7 +208,7 @@ describeStreamDemo config = do
 Put a test record into the stream.
 Returns the sequence number of the record.
 }}
-putRecordDemo : aws.kinesis.Config -> '{IO, Exception, Threads} Text
+putRecordDemo : aws.config.Config -> '{IO, Exception, Threads} Text
 putRecordDemo config = do
   printLine "  → Creating PutRecordInput..."
   printLine ("    StreamName: " ++ testStreamName)
@@ -239,7 +240,7 @@ putRecordDemo config = do
 Get a shard iterator for reading records from the stream.
 Uses TRIM_HORIZON to start from the beginning of the shard.
 }}
-getShardIteratorDemo : aws.kinesis.Config -> Text -> '{IO, Exception, Threads} Text
+getShardIteratorDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} Text
 getShardIteratorDemo config shardId = do
   printLine "  → Creating GetShardIteratorInput..."
   printLine ("    StreamName: " ++ testStreamName)
@@ -264,7 +265,7 @@ getShardIteratorDemo config shardId = do
 Get records from the stream using the shard iterator.
 Reads and verifies the data we put into the stream.
 }}
-getRecordsDemo : aws.kinesis.Config -> Text -> '{IO, Exception, Threads} ()
+getRecordsDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
 getRecordsDemo config shardIterator = do
   printLine "  → Creating GetRecordsInput..."
   printLine "    Limit: 10"

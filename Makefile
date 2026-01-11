@@ -54,7 +54,7 @@ examples: examples/clean
 		make $$example ; \
 		if [ $$? -ne 0 ]; then \
 			echo "The example $$example failed" ; \
-			return 1 ; \
+			break ; \
 		fi ; \
 	done
 

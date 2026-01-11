@@ -187,6 +187,7 @@ public final class ClientModuleWriter {
         // Write Config type (conditional based on service type)
         if (isAws) {
             generateAwsConfigTypes(writer);
+            generateDefaultConfigFunctions(writer);
         } else {
             generateGenericConfigType(writer);
         }
@@ -297,33 +298,49 @@ public final class ClientModuleWriter {
     }
     
     /**
-     * Generates AWS-specific Config and Credentials types.
+     * Generates a reference comment for AWS-specific Config and Credentials types.
      * 
-     * <p>Used for AWS services that require authentication and S3-style configuration.
+     * <p>Config and Credentials types are now provided by the shared aws_config.u
+     * runtime module, which includes type-safe newtypes (Region, Service, HostName, Port)
+     * and convenience constructors (Config.default, Config.withEndpoint).
      */
     private void generateAwsConfigTypes(UnisonWriter writer) {
-        String configType = getNamespacedTypeName("Config");
-        String credentialsType = getNamespacedTypeName("Credentials");
-        
-        writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
-        writer.write("type $L = {", configType);
-        writer.indent();
-        writer.write("endpoint : Text,");
-        writer.write("region : Text,");
-        writer.write("credentials : $L,", credentialsType);
-        writer.write("usePathStyle : Boolean");
-        writer.dedent();
-        writer.write("}");
+        // Config and Credentials types are now in the shared aws_config.u runtime module
+        // No per-service types needed - use aws.config.Config and aws.config.Credentials
+        writer.writeComment("Uses shared aws.config.Config and aws.config.Credentials types from aws_config.u");
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates service-specific defaultConfig function.
+     * 
+     * <p>This convenience function creates a Config pre-configured for the specific
+     * AWS service, reducing boilerplate in user code.
+     */
+    private void generateDefaultConfigFunctions(UnisonWriter writer) {
+        String serviceName = extractServiceName(service.getId().getName());
+        String defaultFn = UnisonSymbolProvider.toNamespacedFunctionName("defaultConfig", namespace);
         
-        writer.write("type $L = {", credentialsType);
+        // Generate defaultConfig function
+        writer.writeDocComment("Create a default Config for " + serviceName + " with production AWS endpoints");
+        writer.writeSignature(defaultFn, "aws.config.Region -> aws.config.Credentials -> aws.config.Config");
+        writer.write("$L region creds =", defaultFn);
         writer.indent();
-        writer.write("accessKeyId : Text,");
-        writer.write("secretAccessKey : Text,");
-        writer.write("sessionToken : Optional Text");
+        writer.write("aws.config.Config.default region (aws.config.Service.fromText \"$L\") creds", serviceName);
         writer.dedent();
-        writer.write("}");
         writer.writeBlankLine();
+    }
+    
+    /**
+     * Extracts the service name for use in Config functions.
+     * 
+     * <p>Handles versioned service names (e.g., "Kinesis_20131202" -> "kinesis").
+     */
+    private String extractServiceName(String fullServiceName) {
+        // Remove version suffix (e.g., "_20131202")
+        String baseName = fullServiceName.replaceAll("_\\d+$", "");
+        // Convert to lowercase for service identifier
+        return baseName.toLowerCase();
     }
     
     /**

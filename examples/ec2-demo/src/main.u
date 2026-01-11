@@ -32,14 +32,15 @@ requireParsed fieldName value = do
 -- =============================================================================
 
 -- Create EC2 client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.ec2.Config
+defaultConfig : '{IO, Exception} aws.config.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.ec2.Credentials.Credentials key secret None
+  creds = aws.config.basicCredentials key secret
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  Config.Config endpoint region creds false
+  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  region = aws.config.Region.fromText regionText
+  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "ec2") creds
 
 -- =============================================================================
 -- Main Demo
@@ -63,8 +64,8 @@ runDemo = do
   printLine ""
   
   config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.ec2.Config.endpoint config)
-  printLine ("Region: " ++ aws.ec2.Config.region config)
+  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
+  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
   printLine ""
   
   -- Demo 1: Describe VPCs
@@ -113,7 +114,7 @@ runDemo = do
 {{
 Describe VPCs created by Terraform.
 }}
-describeVpcsDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeVpcsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 describeVpcsDemo config = do
   printLine "  → Calling DescribeVpcs..."
   
@@ -148,7 +149,7 @@ describeVpcsDemo config = do
 {{
 Describe Subnets created by Terraform.
 }}
-describeSubnetsDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeSubnetsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 describeSubnetsDemo config = do
   printLine "  → Calling DescribeSubnets..."
   
@@ -187,7 +188,7 @@ describeSubnetsDemo config = do
 {{
 Describe Security Groups created by Terraform.
 }}
-describeSecurityGroupsDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeSecurityGroupsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 describeSecurityGroupsDemo config = do
   printLine "  → Calling DescribeSecurityGroups..."
   
@@ -227,7 +228,7 @@ describeSecurityGroupsDemo config = do
 Run an EC2 instance using the LocalStack backend.
 Uses a dummy AMI ID that LocalStack accepts.
 }}
-runInstancesDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+runInstancesDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 runInstancesDemo config = do
   printLine "  → Calling RunInstances..."
   
@@ -288,7 +289,7 @@ runInstancesDemo config = do
 {{
 Describe EC2 instances (if any are running).
 }}
-describeInstancesDemo : aws.ec2.Config -> '{IO, Exception, Threads} ()
+describeInstancesDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 describeInstancesDemo config = do
   printLine "  → Calling DescribeInstances..."
   
