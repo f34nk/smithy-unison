@@ -166,7 +166,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String outputType = operation.getOutput()
                 .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        // Use shared aws.config.Config type
+        String configType = "aws.config.Config";
         
         // Write signature
         String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", configType, inputType, outputType);
@@ -184,7 +185,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 operation.getId().getName(), clientNamespace);
         String operationName = operation.getId().getName();
         String serviceVersion = getServiceVersion(service);
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        // Use shared aws.config.Config type
+        String configType = "aws.config.Config";
         
         // Write documentation
         writer.writeDocComment(operationName + " operation\n\n" +
@@ -204,7 +206,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         // HTTP method and URI (always POST /)
         writer.write("method = \"POST\"");
         writer.write("uri = \"/\"");
-        writer.write("url = ($L.endpoint config) ++ uri", configType);
+        writer.write("url = (aws.config.Config.makeUri config) ++ uri");
         
         // Serialize request to form parameters
         Model model = context.model();
@@ -238,11 +240,9 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         // Sign request with SigV4
         writer.write("");
         writer.write("-- Sign request with AWS Signature Version 4");
-        writer.write("region = $L.region config", configType);
-        writer.write("creds = $L.credentials config", configType);
-        String credsType = UnisonSymbolProvider.toNamespacedTypeName("Credentials", clientNamespace);
-        writer.write("awsCreds = aws.sigv4.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
-                credsType, credsType, credsType);
+        writer.write("region = aws.config.Region.name (aws.config.Config.region config)");
+        writer.write("creds = aws.config.Config.credentials config");
+        writer.write("awsCreds = aws.sigv4.Credentials.Credentials (aws.config.Credentials.accessKeyId creds) (aws.config.Credentials.secretAccessKey creds) (aws.config.Credentials.sessionToken creds)");
         
         // Extract signing service name (lowercase, without version suffix)
         String signingServiceName = extractSigningServiceName(service.getId().getName());

@@ -316,7 +316,8 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String clientNamespace = context.settings().getClientNamespace();
         
         String opName = getOperationName(operation, context);
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        // Use shared aws.config.Config type
+        String configType = "aws.config.Config";
         String inputType = getInputTypeName(operation, context);
         String outputType = getOutputTypeName(operation, context);
         
@@ -354,7 +355,8 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String method = getHttpMethod(operation);
         String uri = getHttpUri(operation);
         String opName = getOperationName(operation, context);
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        // Use shared aws.config.Config type
+        String configType = "aws.config.Config";
         
         // Write documentation
         writer.writeDocComment(operation.getId().getName() + " operation\n\n" +
@@ -413,13 +415,14 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     private void generateUrlBuilding(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        // Use shared aws.config.Config type
+        String configType = "aws.config.Config";
         String inputType = getInputTypeName(operation, context);
         
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
         if (inputShape.isEmpty()) {
             // No input - just use URI as-is
-            writer.write("url = ($L.endpoint config) ++ uri", configType);
+            writer.write("url = (aws.config.Config.makeUri config) ++ uri");
             return;
         }
         
@@ -427,7 +430,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         
         if (pathParams.isEmpty()) {
             // No path parameters - just use URI as-is
-            writer.write("url = ($L.endpoint config) ++ uri", configType);
+            writer.write("url = (aws.config.Config.makeUri config) ++ uri");
         } else {
             // Has path parameters - need substitution
             writer.write("");
@@ -461,7 +464,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 currentUri = nextUri;
             }
             
-            writer.write("url = ($L.endpoint config) ++ $L", configType, currentUri);
+            writer.write("url = (aws.config.Config.makeUri config) ++ $L", currentUri);
         }
     }
     
@@ -809,18 +812,14 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      * @param context The code generation context
      */
     private void generateHttpCall(OperationShape operation, UnisonWriter writer, UnisonContext context) {
-        String clientNamespace = context.settings().getClientNamespace();
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
-        String credsType = UnisonSymbolProvider.toNamespacedTypeName("Credentials", clientNamespace);
         String method = getHttpMethod(operation);
         String serviceName = extractSigningServiceName(context.serviceShape().getId().getName());
         
         writer.write("");
         writer.write("-- Sign request with AWS Signature Version 4");
-        writer.write("region = $L.region config", configType);
-        writer.write("creds = $L.credentials config", configType);
-        writer.write("awsCreds = aws.sigv4.Credentials.Credentials ($L.accessKeyId creds) ($L.secretAccessKey creds) ($L.sessionToken creds)", 
-                credsType, credsType, credsType);
+        writer.write("region = aws.config.Region.name (aws.config.Config.region config)");
+        writer.write("creds = aws.config.Config.credentials config");
+        writer.write("awsCreds = aws.sigv4.Credentials.Credentials (aws.config.Credentials.accessKeyId creds) (aws.config.Credentials.secretAccessKey creds) (aws.config.Credentials.sessionToken creds)");
         writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", serviceName);
         writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
         

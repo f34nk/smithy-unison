@@ -297,32 +297,16 @@ public final class ClientModuleWriter {
     }
     
     /**
-     * Generates AWS-specific Config and Credentials types.
+     * Generates a reference comment for AWS-specific Config and Credentials types.
      * 
-     * <p>Used for AWS services that require authentication and S3-style configuration.
+     * <p>Config and Credentials types are now provided by the shared aws_config.u
+     * runtime module, which includes type-safe newtypes (Region, Service, HostName, Port)
+     * and convenience constructors (Config.default, Config.localStack, Config.withEndpoint).
      */
     private void generateAwsConfigTypes(UnisonWriter writer) {
-        String configType = getNamespacedTypeName("Config");
-        String credentialsType = getNamespacedTypeName("Credentials");
-        
-        writer.writeDocComment("Configuration for the " + service.getId().getName() + " client");
-        writer.write("type $L = {", configType);
-        writer.indent();
-        writer.write("endpoint : Text,");
-        writer.write("region : Text,");
-        writer.write("credentials : $L,", credentialsType);
-        writer.write("usePathStyle : Boolean");
-        writer.dedent();
-        writer.write("}");
-        writer.writeBlankLine();
-        
-        writer.write("type $L = {", credentialsType);
-        writer.indent();
-        writer.write("accessKeyId : Text,");
-        writer.write("secretAccessKey : Text,");
-        writer.write("sessionToken : Optional Text");
-        writer.dedent();
-        writer.write("}");
+        // Config and Credentials types are now in the shared aws_config.u runtime module
+        // No per-service types needed - use aws.config.Config and aws.config.Credentials
+        writer.writeComment("Uses shared aws.config.Config and aws.config.Credentials types from aws_config.u");
         writer.writeBlankLine();
     }
     
