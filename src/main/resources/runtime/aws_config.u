@@ -245,28 +245,6 @@ aws.config.Config.awsServiceUri isHttps host port region service =
   scheme ++ "://" ++ fullHost ++ portSuffix ++ "/"
 
 {{
-Build a LocalStack URI for local development.
-
-Format: http://localhost:4566/
-
-Always uses the host and port directly without service/region prefixes.
-}}
-aws.config.Config.localStackUri : Boolean -> aws.config.HostName -> Optional aws.config.Port -> aws.config.Region -> aws.config.Service -> Text
-aws.config.Config.localStackUri isHttps host port region service =
-  use Text ++
-  -- Ignore region and service for LocalStack
-  _ = region
-  _ = service
-  scheme = if isHttps then "https" else "http"
-  hostText = aws.config.HostName.toText host
-  
-  portSuffix = match port with
-    Some p -> ":" ++ Nat.toText (aws.config.Port.toNat p)
-    None -> ":4566"  -- Default LocalStack port
-  
-  scheme ++ "://" ++ hostText ++ portSuffix ++ "/"
-
-{{
 Build a custom endpoint URI (ignores service/region in host).
 
 Format: {scheme}://{host}:{port}/
@@ -330,26 +308,7 @@ aws.config.Config.default region service creds =
     aws.config.Config.awsServiceUri
 
 {{
-Create a Config for LocalStack testing.
-
-Uses HTTP and localhost:4566 by default.
-
-Example:
-  config = Config.localStack Region.usEast1 (Service "kinesis") creds
-}}
-aws.config.Config.localStack : aws.config.Region -> aws.config.Service -> aws.config.Credentials -> aws.config.Config
-aws.config.Config.localStack region service creds =
-  aws.config.Config.Config
-    (aws.config.HostName "localhost")
-    (Some (aws.config.Port 4566))
-    region
-    service
-    false  -- HTTP for local
-    creds
-    aws.config.Config.localStackUri
-
-{{
-Create a Config for a custom endpoint (e.g., MinIO, LocalStack with custom port).
+Create a Config for a custom endpoint (e.g., MinIO, or other S3-compatible storage).
 
 Parses the endpoint string to extract scheme, host, and port.
 

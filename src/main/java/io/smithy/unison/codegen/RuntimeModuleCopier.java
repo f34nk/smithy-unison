@@ -113,7 +113,7 @@ public final class RuntimeModuleCopier {
          *   <li>Newtype wrappers for type safety (Region, Service, HostName, Port)</li>
          *   <li>Shared Credentials type</li>
          *   <li>Shared Config type with URI builders</li>
-         *   <li>Config.default, Config.localStack, Config.withEndpoint constructors</li>
+         *   <li>Config.default, Config.withEndpoint constructors</li>
          * </ul>
          */
         AWS_CONFIG("aws_config.u", "Shared AWS configuration and credential types"),

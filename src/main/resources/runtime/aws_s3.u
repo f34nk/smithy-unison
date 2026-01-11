@@ -232,14 +232,6 @@ aws.s3.dualStackEndpoint : Text -> Text
 aws.s3.dualStackEndpoint region =
   "s3.dualstack." ++ region ++ ".amazonaws.com"
 
-{{
-Build a LocalStack S3 endpoint for testing.
-
-}}
-aws.s3.localStackEndpoint : Nat -> Text
-aws.s3.localStackEndpoint port =
-  "localhost:" ++ Nat.toText port
-
 -- =============================================================================
 -- S3 Object Key Helpers
 -- =============================================================================
