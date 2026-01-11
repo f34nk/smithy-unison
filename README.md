@@ -52,13 +52,15 @@ Reference: https://smithy.io/2.0/index.html
 
 ### AWS Authentication
 - **AWS SigV4 request signing** - Complete implementation of Signature Version 4
-  - Credential types (`aws.sigv4.Credentials`, `aws.sigv4.SigningConfig`)
+  - Shared credential types (`aws.config.Credentials`) with anonymous, basic, and temporary credential support
+  - Signing config (`aws.sigv4.SigningConfig`) with region and service from shared Config
   - Canonical request building
   - Signing key derivation (HMAC-SHA256 chain)
   - Authorization header generation
 
 ### AWS SDK Support
-- Credential provider chain (environment variables, config files)
+- Shared configuration (`aws.config.Config`) with type-safe region and endpoint handling
+- Credential provider chain (environment variables, config files) with `aws.config.Credentials`
 - Retry logic with exponential backoff and jitter
 - Pagination with automatic helper function generation and token field inference
 
@@ -192,7 +194,7 @@ For AWS services, additional runtime modules are copied:
 - `aws_http.u` - HTTP request/response utilities
 - `aws_http_bridge.u` - Bridge for @unison/http library (enables real HTTP)
 - `aws_s3.u` - S3-specific URL routing (S3 only)
-- `aws_config.u` - AWS configuration types
+- `aws_config.u` - Shared AWS configuration with type-safe newtypes (Region, Service, HostName, Port, Config, Credentials)
 - `aws_credentials.u` - Credential provider chain
 
 ## Architecture
@@ -301,7 +303,7 @@ NoSuchKey.toFailure err =
   IO.Failure.Failure (typeLink NoSuchKey) err.message (Any err)
 
 -- Operation with exception-based error handling
-getObject : Config -> GetObjectInput -> '{IO, Exception, Threads} GetObjectOutput
+getObject : aws.config.Config -> GetObjectInput -> '{IO, Exception, Threads} GetObjectOutput
 getObject config input =
   -- Raises exception on error, returns output directly on success
 ```

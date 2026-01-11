@@ -4,6 +4,31 @@
 
 ### Added
 
+#### Shared AWS Configuration Types
+- Shared `aws.config.Config` and `aws.config.Credentials` types replacing per-service duplicates
+- Type-safe newtype wrappers: `Region`, `Service`, `HostName`, `Port`
+- Region constants for common AWS regions (usEast1, usWest2, euWest1, etc.)
+- `Config.default` for standard AWS endpoints and `Config.withEndpoint` for custom endpoints
+- Credential constructors: `anonymous`, `basicCredentials`, `temporaryCredentials`
+- Service-specific `defaultConfig` convenience functions generated for each AWS client
+- Unit tests for aws_config runtime module
+
+### Changed
+
+#### Protocol Generators Use Shared Config
+- All protocol generators now reference `aws.config.Config` instead of per-service Config types
+- PaginationGenerator updated to use shared config type in helper function signatures
+- Field accessors use newtype extractors (e.g., `Region.name`, `HostName.toText`)
+- Demo examples updated to use shared configuration types
+
+### Removed
+
+#### Per-Service Config Types
+- Removed redundant Config and Credentials type generation from ClientModuleWriter
+- All services now use the shared aws_config.u runtime module
+
+### Added
+
 #### EC2 Demo Example
 - Integration test against LocalStack with EC2 Query protocol
 - DescribeSecurityGroups, DescribeSubnets, DescribeVpcs, DescribeInstances, and RunInstances operations
