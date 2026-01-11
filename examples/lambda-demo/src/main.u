@@ -39,14 +39,15 @@ requireSome fieldName opt = do
 -- =============================================================================
 
 -- Create Lambda client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.lambda.Config
+defaultConfig : '{IO, Exception} aws.config.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.lambda.Credentials.Credentials key secret None
+  creds = aws.config.basicCredentials key secret
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  Config.Config endpoint region creds false
+  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  region = aws.config.Region.fromText regionText
+  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "lambda") creds
 
 -- Test function name - created by terraform provisioner
 testFunctionName : Text
@@ -78,8 +79,8 @@ runDemo = do
   printLine ""
   
   config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.lambda.Config.endpoint config)
-  printLine ("Region: " ++ aws.lambda.Config.region config)
+  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
+  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
   printLine ("Function: " ++ testFunctionName)
   printLine ""
   
@@ -116,7 +117,7 @@ runDemo = do
 List all Lambda functions.
 Verifies that our test function exists.
 }}
-listFunctionsDemo : aws.lambda.Config -> '{IO, Exception, Threads} ()
+listFunctionsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 listFunctionsDemo config = do
   printLine "  → Calling ListFunctions..."
   
@@ -151,7 +152,7 @@ listFunctionsDemo config = do
 {{
 Get configuration details for the test function.
 }}
-getFunctionDemo : aws.lambda.Config -> '{IO, Exception, Threads} ()
+getFunctionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 getFunctionDemo config = do
   printLine "  → Calling GetFunction..."
   printLine ("    FunctionName: " ++ testFunctionName)
@@ -189,7 +190,7 @@ getFunctionDemo config = do
 {{
 Invoke the Lambda function with test payload.
 }}
-invokeFunctionDemo : aws.lambda.Config -> '{IO, Exception, Threads} ()
+invokeFunctionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 invokeFunctionDemo config = do
   printLine "  → Calling Invoke..."
   printLine ("    FunctionName: " ++ testFunctionName)

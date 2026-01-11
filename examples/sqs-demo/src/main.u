@@ -32,14 +32,15 @@ requireSome fieldName opt = do
 -- =============================================================================
 
 -- Create SQS client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.sqs.Config
+defaultConfig : '{IO, Exception} aws.config.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = Credentials.Credentials key secret None
+  creds = aws.config.basicCredentials key secret
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  aws.sqs.Config.Config endpoint region creds false
+  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  region = aws.config.Region.fromText regionText
+  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "sqs") creds
 
 -- Test queue name - created by terraform provisioner
 testQueueName : Text
@@ -71,8 +72,8 @@ runDemo = do
   printLine ""
   
   config = !defaultConfig
-  printLine ("Endpoint: " ++ Config.endpoint config)
-  printLine ("Region: " ++ Config.region config)
+  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
+  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
   printLine ("Queue: " ++ testQueueName)
   printLine ""
   
@@ -125,7 +126,7 @@ runDemo = do
 Get the URL of the test queue.
 The terraform provisioner creates the 'sqs-demo-queue' queue.
 }}
-getQueueUrlDemo : aws.sqs.Config -> '{IO, Exception, Threads} Text
+getQueueUrlDemo : aws.config.Config -> '{IO, Exception, Threads} Text
 getQueueUrlDemo config = do
   printLine "  → Creating GetQueueUrlRequest..."
   printLine ("    QueueName: " ++ testQueueName)
@@ -146,7 +147,7 @@ getQueueUrlDemo config = do
 {{
 Send a test message to the queue.
 }}
-sendMessageDemo : aws.sqs.Config -> Text -> '{IO, Exception, Threads} ()
+sendMessageDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
 sendMessageDemo config queueUrl = do
   printLine "  → Creating SendMessageRequest..."
   printLine ("    QueueUrl: " ++ queueUrl)
@@ -170,7 +171,7 @@ sendMessageDemo config queueUrl = do
 Receive messages from the queue.
 Returns the receipt handle of the first message, if any.
 }}
-receiveMessageDemo : aws.sqs.Config -> Text -> '{IO, Exception, Threads} (Optional Text)
+receiveMessageDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} (Optional Text)
 receiveMessageDemo config queueUrl = do
   printLine "  → Creating ReceiveMessageRequest..."
   printLine ("    QueueUrl: " ++ queueUrl)
@@ -218,7 +219,7 @@ receiveMessageDemo config queueUrl = do
 {{
 Delete a message from the queue using its receipt handle.
 }}
-deleteMessageDemo : aws.sqs.Config -> Text -> Text -> '{IO, Exception, Threads} ()
+deleteMessageDemo : aws.config.Config -> Text -> Text -> '{IO, Exception, Threads} ()
 deleteMessageDemo config queueUrl receiptHandle = do
   printLine "  → Creating DeleteMessageRequest..."
   printLine ("    QueueUrl: " ++ queueUrl)
@@ -235,7 +236,7 @@ deleteMessageDemo config queueUrl receiptHandle = do
 {{
 Purge all messages from the queue.
 }}
-purgeQueueDemo : aws.sqs.Config -> Text -> '{IO, Exception, Threads} ()
+purgeQueueDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
 purgeQueueDemo config queueUrl = do
   printLine "  → Creating PurgeQueueRequest..."
   printLine ("    QueueUrl: " ++ queueUrl)

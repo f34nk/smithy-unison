@@ -45,14 +45,15 @@ requireSome fieldName opt = do
 -- =============================================================================
 
 -- Create DynamoDB client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.dynamodb.Config
+defaultConfig : '{IO, Exception} aws.config.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = Credentials.Credentials key secret None
+  creds = aws.config.basicCredentials key secret
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  aws.dynamodb.Config.Config endpoint region creds false
+  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  region = aws.config.Region.fromText regionText
+  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "dynamodb") creds
 
 -- Test table name - created by terraform provisioner
 testTable : Text
@@ -88,8 +89,8 @@ runDemo = do
   printLine ""
   
   config = !defaultConfig
-  printLine ("Endpoint: " ++ Config.endpoint config)
-  printLine ("Region: " ++ Config.region config)
+  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
+  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
   printLine ("Table: " ++ testTable)
   printLine ""
   
@@ -140,7 +141,7 @@ runDemo = do
 List all tables in the account.
 The terraform provisioner creates 'example' table.
 }}
-listTablesDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
+listTablesDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 listTablesDemo config = do
   printLine "  → Creating ListTablesRequest..."
   
@@ -165,7 +166,7 @@ listTablesDemo config = do
 Put a test item into the example table.
 Uses the hash key "TestTableHashKey" as defined in terraform.
 }}
-putItemDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
+putItemDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 putItemDemo config = do
   printLine "  → Creating PutItemRequest..."
   printLine ("    Table: " ++ testTable)
@@ -197,7 +198,7 @@ putItemDemo config = do
 {{
 Get the test item we just uploaded.
 }}
-getItemDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
+getItemDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 getItemDemo config = do
   printLine "  → Creating GetItemRequest..."
   printLine ("    Table: " ++ testTable)
@@ -236,7 +237,7 @@ getItemDemo config = do
 {{
 Delete the test item (cleanup).
 }}
-deleteItemDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
+deleteItemDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 deleteItemDemo config = do
   printLine "  → Creating DeleteItemRequest..."
   printLine ("    Table: " ++ testTable)
@@ -260,7 +261,7 @@ deleteItemDemo config = do
 {{
 Verify the test item was deleted by trying to get it again.
 }}
-verifyDeletionDemo : aws.dynamodb.Config -> '{IO, Exception, Threads} ()
+verifyDeletionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 verifyDeletionDemo config = do
   printLine "  → Attempting to get deleted item..."
   printLine ("    Table: " ++ testTable)
