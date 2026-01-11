@@ -187,8 +187,8 @@ public class PaginationGenerator {
                 .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
         
-        // Config type with namespace
-        String configType = UnisonSymbolProvider.toNamespacedTypeName("Config", clientNamespace);
+        // Config type - always use shared aws.config.Config for AWS services
+        String configType = "aws.config.Config";
         
         // Determine the token type from the input structure
         String tokenType = "Text"; // default

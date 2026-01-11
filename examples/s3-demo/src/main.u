@@ -32,14 +32,15 @@ requireParsed fieldName value = do
 -- =============================================================================
 
 -- Create S3 client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.s3.Config
+defaultConfig : '{IO, Exception} aws.config.Config
 defaultConfig = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = Credentials.Credentials key secret None
+  creds = aws.config.basicCredentials key secret
   endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  region = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  aws.s3.Config.Config endpoint region creds true
+  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
+  region = aws.config.Region.fromText regionText
+  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "s3") creds
 
 -- Test bucket name - created by terraform provisioner in docker-compose
 testBucket : Text
@@ -75,8 +76,8 @@ runDemo = do
   printLine ""
   
   config = !defaultConfig
-  printLine ("Endpoint: " ++ Config.endpoint config)
-  printLine ("Region: " ++ Config.region config)
+  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
+  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
   printLine ("Bucket: " ++ testBucket)
   printLine ""
   
@@ -134,7 +135,7 @@ runDemo = do
 List all buckets in the account.
 The terraform provisioner creates 'us-east-1-nonprod-configs' bucket.
 }}
-listBucketsDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
+listBucketsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 listBucketsDemo config = do
   printLine "  → Creating ListBucketsRequest..."
   
@@ -162,7 +163,7 @@ listBucketsDemo config = do
 {{
 Upload a test object to the configs bucket.
 }}
-putObjectDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
+putObjectDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 putObjectDemo config = do
   printLine ("  → Creating PutObjectRequest...")
   printLine ("    Bucket: " ++ testBucket)
@@ -190,7 +191,7 @@ putObjectDemo config = do
 {{
 List objects in the configs prefix.
 }}
-listObjectsV2Demo : aws.s3.Config -> '{IO, Exception, Threads} ()
+listObjectsV2Demo : aws.config.Config -> '{IO, Exception, Threads} ()
 listObjectsV2Demo config = do
   printLine "  → Creating ListObjectsV2Request..."
   printLine ("    Bucket: " ++ testBucket)
@@ -219,7 +220,7 @@ listObjectsV2Demo config = do
 {{
 Get the test object we uploaded.
 }}
-getObjectDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
+getObjectDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 getObjectDemo config = do
   printLine "  → Creating GetObjectRequest..."
   printLine ("    Bucket: " ++ testBucket)
@@ -248,7 +249,7 @@ getObjectDemo config = do
 {{
 Delete the test object (cleanup).
 }}
-deleteObjectDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
+deleteObjectDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 deleteObjectDemo config = do
   printLine "  → Creating DeleteObjectRequest..."
   printLine ("    Bucket: " ++ testBucket)
@@ -270,7 +271,7 @@ deleteObjectDemo config = do
 {{
 Verify the test object was deleted by listing objects.
 }}
-verifyDeletionDemo : aws.s3.Config -> '{IO, Exception, Threads} ()
+verifyDeletionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
 verifyDeletionDemo config = do
   printLine "  → Listing objects after deletion..."
   printLine ("    Bucket: " ++ testBucket)
