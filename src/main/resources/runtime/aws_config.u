@@ -1,10 +1,143 @@
 -- AWS Configuration Runtime Module
--- Configuration types and helpers for AWS services
+-- Shared configuration types used by all generated AWS service clients
 --
--- This module provides common configuration types used by all AWS service clients.
+-- This module provides:
+-- - Newtype wrappers for type safety (Region, Service, HostName, Port)
+-- - Shared Credentials type
+-- - Shared Config type with URI builders
+-- - Convenience functions for common configurations
 
 -- =============================================================================
--- AWS Credentials
+-- Newtype Wrappers for Type Safety
+-- =============================================================================
+
+{{
+A DNS hostname (e.g., "amazonaws.com", "localhost").
+}}
+type aws.config.HostName = aws.config.HostName Text
+
+{{
+Extract the text value from a HostName.
+}}
+aws.config.HostName.toText : aws.config.HostName -> Text
+aws.config.HostName.toText = cases aws.config.HostName t -> t
+
+{{
+A TCP port number.
+}}
+type aws.config.Port = aws.config.Port Nat
+
+{{
+Extract the numeric value from a Port.
+}}
+aws.config.Port.toNat : aws.config.Port -> Nat
+aws.config.Port.toNat = cases aws.config.Port n -> n
+
+-- =============================================================================
+-- Region
+-- =============================================================================
+
+{{
+An AWS region identifier (e.g., "us-east-1", "eu-west-1").
+
+Using a newtype instead of plain Text prevents accidentally passing
+a service name where a region is expected.
+}}
+type aws.config.Region = aws.config.Region Text
+
+{{
+Create a Region from a Text value.
+
+Example: Region.fromText "us-east-1"
+}}
+aws.config.Region.fromText : Text -> aws.config.Region
+aws.config.Region.fromText = aws.config.Region
+
+{{
+Get the name of a Region as Text.
+
+Example: Region.name Region.usEast1 -- returns "us-east-1"
+}}
+aws.config.Region.name : aws.config.Region -> Text
+aws.config.Region.name = cases aws.config.Region t -> t
+
+-- Common US regions
+aws.config.Region.usEast1 : aws.config.Region
+aws.config.Region.usEast1 = aws.config.Region "us-east-1"
+
+aws.config.Region.usEast2 : aws.config.Region
+aws.config.Region.usEast2 = aws.config.Region "us-east-2"
+
+aws.config.Region.usWest1 : aws.config.Region
+aws.config.Region.usWest1 = aws.config.Region "us-west-1"
+
+aws.config.Region.usWest2 : aws.config.Region
+aws.config.Region.usWest2 = aws.config.Region "us-west-2"
+
+-- Common EU regions
+aws.config.Region.euWest1 : aws.config.Region
+aws.config.Region.euWest1 = aws.config.Region "eu-west-1"
+
+aws.config.Region.euWest2 : aws.config.Region
+aws.config.Region.euWest2 = aws.config.Region "eu-west-2"
+
+aws.config.Region.euCentral1 : aws.config.Region
+aws.config.Region.euCentral1 = aws.config.Region "eu-central-1"
+
+-- Asia Pacific regions
+aws.config.Region.apNortheast1 : aws.config.Region
+aws.config.Region.apNortheast1 = aws.config.Region "ap-northeast-1"
+
+aws.config.Region.apSoutheast1 : aws.config.Region
+aws.config.Region.apSoutheast1 = aws.config.Region "ap-southeast-1"
+
+aws.config.Region.apSoutheast2 : aws.config.Region
+aws.config.Region.apSoutheast2 = aws.config.Region "ap-southeast-2"
+
+{{
+Load region from environment variables.
+
+Checks AWS_REGION first, then AWS_DEFAULT_REGION.
+Returns None if neither is set.
+
+Example:
+  match !Region.fromEnv with
+    Some r -> ... use region ...
+    None -> ... use default ...
+}}
+aws.config.Region.fromEnv : '{IO} Optional aws.config.Region
+aws.config.Region.fromEnv _ =
+  r = IO.getEnv "AWS_REGION"
+  dr = IO.getEnv "AWS_DEFAULT_REGION"
+  regionText = if Text.isEmpty r then dr else r
+  if Text.isEmpty regionText then None else Some (aws.config.Region regionText)
+
+-- =============================================================================
+-- Service
+-- =============================================================================
+
+{{
+An AWS service name (e.g., "s3", "kinesis", "lambda").
+
+Using a newtype instead of plain Text prevents accidentally passing
+a region where a service name is expected.
+}}
+type aws.config.Service = aws.config.Service Text
+
+{{
+Get the name of a Service as Text.
+}}
+aws.config.Service.name : aws.config.Service -> Text
+aws.config.Service.name = cases aws.config.Service t -> t
+
+{{
+Create a Service from a Text value.
+}}
+aws.config.Service.fromText : Text -> aws.config.Service
+aws.config.Service.fromText = aws.config.Service
+
+-- =============================================================================
+-- Credentials
 -- =============================================================================
 
 {{
@@ -18,6 +151,14 @@ type aws.config.Credentials = {
   secretAccessKey : Text,
   sessionToken : Optional Text
 }
+
+{{
+Create anonymous credentials (empty strings).
+
+Use for public endpoints that don't require authentication.
+}}
+aws.config.Credentials.anonymous : aws.config.Credentials
+aws.config.Credentials.anonymous = aws.config.Credentials.Credentials "" "" None
 
 {{
 Create credentials with just access key and secret key.
@@ -47,106 +188,217 @@ aws.config.hasSessionToken creds =
     None -> false
 
 -- =============================================================================
--- Service Configuration
+-- Config - Shared Configuration Type
 -- =============================================================================
 
 {{
-Configuration for an AWS service client.
+Shared configuration for AWS service clients.
 
-Contains endpoint, region, credentials, and service-specific options.
+This type is used by all generated AWS clients. It contains:
+- hostName: The base hostname (e.g., "amazonaws.com")
+- port: Optional port override
+- region: AWS region
+- service: AWS service name
+- isHttps: Whether to use HTTPS
+- credentials: AWS credentials
+- mkServiceUri: Function to build the service URI
+
+Using newtypes for region and service prevents common mistakes like
+passing arguments in the wrong order.
 }}
-type aws.config.ServiceConfig = {
-  endpoint : Text,
-  region : Text,
+type aws.config.Config = {
+  hostName : aws.config.HostName,
+  port : Optional aws.config.Port,
+  region : aws.config.Region,
+  service : aws.config.Service,
+  isHttps : Boolean,
   credentials : aws.config.Credentials,
-  timeout : Optional Nat,
-  maxRetries : Optional Nat
+  mkServiceUri : Boolean -> aws.config.HostName -> Optional aws.config.Port -> aws.config.Region -> aws.config.Service -> Text
 }
 
-{{
-Create a service configuration with default options.
-
-Example: serviceConfig "s3.us-east-1.amazonaws.com" "us-east-1" credentials
-}}
-aws.config.serviceConfig : Text -> Text -> aws.config.Credentials -> aws.config.ServiceConfig
-aws.config.serviceConfig endpoint region credentials =
-  aws.config.ServiceConfig.ServiceConfig endpoint region credentials None None
-
-{{
-Create a service configuration with custom timeout and retries.
-}}
-aws.config.serviceConfigWithOptions : Text -> Text -> aws.config.Credentials -> Nat -> Nat -> aws.config.ServiceConfig
-aws.config.serviceConfigWithOptions endpoint region credentials timeout maxRetries =
-  aws.config.ServiceConfig.ServiceConfig endpoint region credentials (Some timeout) (Some maxRetries)
-
 -- =============================================================================
--- S3-Specific Configuration
+-- URI Builders
 -- =============================================================================
 
 {{
-Configuration for Amazon S3.
+Build a standard AWS service URI.
 
-Extends service configuration with S3-specific options like path-style addressing.
+Format: https://{service}.{region}.amazonaws.com/
+
+Example: awsServiceUri produces "https://kinesis.us-east-1.amazonaws.com/"
 }}
-type aws.config.S3Config = {
-  endpoint : Text,
-  region : Text,
-  credentials : aws.config.Credentials,
-  usePathStyle : Boolean,
-  useAccelerateEndpoint : Boolean,
-  useDualStack : Boolean
-}
+aws.config.Config.awsServiceUri : Boolean -> aws.config.HostName -> Optional aws.config.Port -> aws.config.Region -> aws.config.Service -> Text
+aws.config.Config.awsServiceUri isHttps host port region service =
+  use Text ++
+  scheme = if isHttps then "https" else "http"
+  serviceName = aws.config.Service.name service
+  regionName = aws.config.Region.name region
+  hostText = aws.config.HostName.toText host
+  
+  -- Build: {service}.{region}.{host}
+  fullHost = serviceName ++ "." ++ regionName ++ "." ++ hostText
+  
+  portSuffix = match port with
+    Some p -> ":" ++ Nat.toText (aws.config.Port.toNat p)
+    None -> ""
+  
+  scheme ++ "://" ++ fullHost ++ portSuffix ++ "/"
 
 {{
-Create an S3 configuration with default options.
+Build a LocalStack URI for local development.
 
-Uses virtual-hosted style addressing by default.
+Format: http://localhost:4566/
 
-Example: s3Config "us-east-1" credentials
+Always uses the host and port directly without service/region prefixes.
 }}
-aws.config.s3Config : Text -> aws.config.Credentials -> aws.config.S3Config
-aws.config.s3Config region credentials =
-  endpoint = "s3." ++ region ++ ".amazonaws.com"
-  aws.config.S3Config.S3Config endpoint region credentials false false false
+aws.config.Config.localStackUri : Boolean -> aws.config.HostName -> Optional aws.config.Port -> aws.config.Region -> aws.config.Service -> Text
+aws.config.Config.localStackUri isHttps host port region service =
+  use Text ++
+  -- Ignore region and service for LocalStack
+  _ = region
+  _ = service
+  scheme = if isHttps then "https" else "http"
+  hostText = aws.config.HostName.toText host
+  
+  portSuffix = match port with
+    Some p -> ":" ++ Nat.toText (aws.config.Port.toNat p)
+    None -> ":4566"  -- Default LocalStack port
+  
+  scheme ++ "://" ++ hostText ++ portSuffix ++ "/"
 
 {{
-Create an S3 configuration with path-style addressing.
+Build a custom endpoint URI (ignores service/region in host).
 
-Use this for S3-compatible services like MinIO or LocalStack.
+Format: {scheme}://{host}:{port}/
 }}
-aws.config.s3ConfigPathStyle : Text -> aws.config.Credentials -> aws.config.S3Config
-aws.config.s3ConfigPathStyle region credentials =
-  endpoint = "s3." ++ region ++ ".amazonaws.com"
-  aws.config.S3Config.S3Config endpoint region credentials true false false
+aws.config.Config.customEndpointUri : Boolean -> aws.config.HostName -> Optional aws.config.Port -> aws.config.Region -> aws.config.Service -> Text
+aws.config.Config.customEndpointUri isHttps host port region service =
+  use Text ++
+  -- Ignore region and service for custom endpoints
+  _ = region
+  _ = service
+  scheme = if isHttps then "https" else "http"
+  hostText = aws.config.HostName.toText host
+  
+  portSuffix = match port with
+    Some p -> ":" ++ Nat.toText (aws.config.Port.toNat p)
+    None -> ""
+  
+  scheme ++ "://" ++ hostText ++ portSuffix ++ "/"
 
 {{
-Create an S3 configuration for a custom endpoint.
-
-Useful for S3-compatible services or testing with LocalStack.
-
-Example: s3ConfigCustom "localhost:4566" "us-east-1" credentials true
+Build the complete URI from a Config.
 }}
-aws.config.s3ConfigCustom : Text -> Text -> aws.config.Credentials -> Boolean -> aws.config.S3Config
-aws.config.s3ConfigCustom endpoint region credentials usePathStyle =
-  aws.config.S3Config.S3Config endpoint region credentials usePathStyle false false
+aws.config.Config.makeUri : aws.config.Config -> Text
+aws.config.Config.makeUri config =
+  (aws.config.Config.mkServiceUri config) 
+    (aws.config.Config.isHttps config) 
+    (aws.config.Config.hostName config) 
+    (aws.config.Config.port config) 
+    (aws.config.Config.region config) 
+    (aws.config.Config.service config)
 
 {{
-Create an S3 configuration for LocalStack testing.
-
-Example: s3ConfigLocalStack 4566 credentials
+Get the scheme (http or https) from a Config.
 }}
-aws.config.s3ConfigLocalStack : Nat -> aws.config.Credentials -> aws.config.S3Config
-aws.config.s3ConfigLocalStack port credentials =
-  endpoint = "localhost:" ++ Nat.toText port
-  aws.config.S3Config.S3Config endpoint "us-east-1" credentials true false false
+aws.config.Config.scheme : aws.config.Config -> Text
+aws.config.Config.scheme config = 
+  if aws.config.Config.isHttps config then "https" else "http"
 
 -- =============================================================================
--- Region Helpers
+-- Config Constructors
 -- =============================================================================
 
 {{
-Common AWS regions.
+Create a Config for production AWS endpoints.
+
+Uses HTTPS and standard AWS service URI format:
+https://{service}.{region}.amazonaws.com/
+
+Example:
+  config = Config.default Region.usEast1 (Service "kinesis") creds
 }}
+aws.config.Config.default : aws.config.Region -> aws.config.Service -> aws.config.Credentials -> aws.config.Config
+aws.config.Config.default region service creds =
+  aws.config.Config.Config 
+    (aws.config.HostName "amazonaws.com")
+    None
+    region
+    service
+    true  -- HTTPS
+    creds
+    aws.config.Config.awsServiceUri
+
+{{
+Create a Config for LocalStack testing.
+
+Uses HTTP and localhost:4566 by default.
+
+Example:
+  config = Config.localStack Region.usEast1 (Service "kinesis") creds
+}}
+aws.config.Config.localStack : aws.config.Region -> aws.config.Service -> aws.config.Credentials -> aws.config.Config
+aws.config.Config.localStack region service creds =
+  aws.config.Config.Config
+    (aws.config.HostName "localhost")
+    (Some (aws.config.Port 4566))
+    region
+    service
+    false  -- HTTP for local
+    creds
+    aws.config.Config.localStackUri
+
+{{
+Create a Config for a custom endpoint (e.g., MinIO, LocalStack with custom port).
+
+Parses the endpoint string to extract scheme, host, and port.
+
+Example:
+  config = Config.withEndpoint "http://localhost:9000" Region.usEast1 (Service "s3") creds
+}}
+aws.config.Config.withEndpoint : Text -> aws.config.Region -> aws.config.Service -> aws.config.Credentials -> aws.config.Config
+aws.config.Config.withEndpoint endpoint region service creds =
+  -- Simple endpoint parsing
+  isHttps = Text.startsWith "https://" endpoint
+  
+  -- Strip scheme
+  withoutScheme = 
+    if Text.startsWith "https://" endpoint 
+      then Text.drop 8 endpoint
+    else if Text.startsWith "http://" endpoint 
+      then Text.drop 7 endpoint
+    else endpoint
+  
+  -- Strip trailing slash and path
+  hostPort = 
+    match Text.indexOf "/" withoutScheme with
+      Some idx -> Text.take idx withoutScheme
+      None -> withoutScheme
+  
+  -- Split host and port
+  (host, port) = 
+    match Text.indexOf ":" hostPort with
+      Some idx -> 
+        h = Text.take idx hostPort
+        p = Text.drop (idx Nat.+ 1) hostPort
+        pNat = Optional.flatMap Nat.fromText (Some p)
+        (h, Optional.map aws.config.Port pNat)
+      None -> (hostPort, None)
+  
+  aws.config.Config.Config
+    (aws.config.HostName host)
+    port
+    region
+    service
+    isHttps
+    creds
+    aws.config.Config.customEndpointUri
+
+-- =============================================================================
+-- Backward Compatibility Helpers
+-- =============================================================================
+
+-- Plain text region constants (for backward compatibility)
 aws.config.usEast1 : Text
 aws.config.usEast1 = "us-east-1"
 
@@ -191,24 +443,12 @@ aws.config.isValidRegion region =
     notTooLong = Nat.lteq (Text.size region) 20
     hasCorrectFormat && notEmpty && notTooLong
 
--- =============================================================================
--- Default Configuration
--- =============================================================================
-
-{{
-Default timeout in milliseconds for AWS requests.
-}}
+-- Default values
 aws.config.defaultTimeout : Nat
 aws.config.defaultTimeout = 30000
 
-{{
-Default maximum retries for AWS requests.
-}}
 aws.config.defaultMaxRetries : Nat
 aws.config.defaultMaxRetries = 3
 
-{{
-Default region if none specified.
-}}
 aws.config.defaultRegion : Text
 aws.config.defaultRegion = "us-east-1"
