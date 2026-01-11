@@ -4,6 +4,12 @@ scratch/main> lib.install @unison/base/releases/3.18.0
 scratch/main> lib.install @unison/json/releases/1.3.5
 scratch/main> lib.install @unison/xml/releases/1.2.0
 
+scratch/main> load main/resources/runtime/aws_config.u
+scratch/main> add
+scratch/main> load test/resources/runtime/aws_config_test.u
+scratch/main> add
+scratch/main> run aws.config.test.runAllTests
+
 scratch/main> load main/resources/runtime/aws_json.u
 scratch/main> add
 scratch/main> load test/resources/runtime/aws_json_test.u

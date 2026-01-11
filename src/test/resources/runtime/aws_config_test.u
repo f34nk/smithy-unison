@@ -1,0 +1,279 @@
+-- Unit tests for AWS Config Runtime Module
+
+namespace aws.config.test
+
+use aws.config
+use Text ++
+
+-- === HostName Tests ===
+
+testHostNameToText : '{Exception} Boolean
+testHostNameToText = 'let
+  host = aws.config.HostName "amazonaws.com"
+  aws.config.HostName.toText host === "amazonaws.com"
+
+testHostNameRoundtrip : '{Exception} Boolean
+testHostNameRoundtrip = 'let
+  original = "localhost"
+  host = aws.config.HostName original
+  aws.config.HostName.toText host === original
+
+-- === Port Tests ===
+
+testPortToNat : '{Exception} Boolean
+testPortToNat = 'let
+  port = aws.config.Port 8080
+  aws.config.Port.toNat port === 8080
+
+testPortRoundtrip : '{Exception} Boolean
+testPortRoundtrip = 'let
+  original = 443
+  port = aws.config.Port original
+  aws.config.Port.toNat port === original
+
+-- === Region Tests ===
+
+testRegionFromText : '{Exception} Boolean
+testRegionFromText = 'let
+  region = aws.config.Region.fromText "us-west-2"
+  aws.config.Region.name region === "us-west-2"
+
+testRegionName : '{Exception} Boolean
+testRegionName = 'let
+  region = aws.config.Region "eu-central-1"
+  aws.config.Region.name region === "eu-central-1"
+
+testRegionConstants : '{Exception} Boolean
+testRegionConstants = 'let
+  test1 = aws.config.Region.name aws.config.Region.usEast1 === "us-east-1"
+  test2 = aws.config.Region.name aws.config.Region.usEast2 === "us-east-2"
+  test3 = aws.config.Region.name aws.config.Region.usWest1 === "us-west-1"
+  test4 = aws.config.Region.name aws.config.Region.usWest2 === "us-west-2"
+  test5 = aws.config.Region.name aws.config.Region.euWest1 === "eu-west-1"
+  test6 = aws.config.Region.name aws.config.Region.euWest2 === "eu-west-2"
+  test7 = aws.config.Region.name aws.config.Region.euCentral1 === "eu-central-1"
+  test1 && test2 && test3 && test4 && test5 && test6 && test7
+
+testRegionAsiaPacificConstants : '{Exception} Boolean
+testRegionAsiaPacificConstants = 'let
+  test1 = aws.config.Region.name aws.config.Region.apNortheast1 === "ap-northeast-1"
+  test2 = aws.config.Region.name aws.config.Region.apSoutheast1 === "ap-southeast-1"
+  test3 = aws.config.Region.name aws.config.Region.apSoutheast2 === "ap-southeast-2"
+  test1 && test2 && test3
+
+-- === Service Tests ===
+
+testServiceFromText : '{Exception} Boolean
+testServiceFromText = 'let
+  service = aws.config.Service.fromText "kinesis"
+  aws.config.Service.name service === "kinesis"
+
+testServiceName : '{Exception} Boolean
+testServiceName = 'let
+  service = aws.config.Service "s3"
+  aws.config.Service.name service === "s3"
+
+-- === Credentials Tests ===
+
+testCredentialsAnonymous : '{Exception} Boolean
+testCredentialsAnonymous = 'let
+  creds = aws.config.Credentials.anonymous
+  test1 = aws.config.Credentials.accessKeyId creds === ""
+  test2 = aws.config.Credentials.secretAccessKey creds === ""
+  test3 = aws.config.Credentials.sessionToken creds === None
+  test1 && test2 && test3
+
+testBasicCredentials : '{Exception} Boolean
+testBasicCredentials = 'let
+  creds = aws.config.basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI"
+  test1 = aws.config.Credentials.accessKeyId creds === "AKIAIOSFODNN7EXAMPLE"
+  test2 = aws.config.Credentials.secretAccessKey creds === "wJalrXUtnFEMI"
+  test3 = aws.config.Credentials.sessionToken creds === None
+  test1 && test2 && test3
+
+testTemporaryCredentials : '{Exception} Boolean
+testTemporaryCredentials = 'let
+  creds = aws.config.temporaryCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI" "token123"
+  test1 = aws.config.Credentials.accessKeyId creds === "AKIAIOSFODNN7EXAMPLE"
+  test2 = aws.config.Credentials.secretAccessKey creds === "wJalrXUtnFEMI"
+  test3 = aws.config.Credentials.sessionToken creds === Some "token123"
+  test1 && test2 && test3
+
+testHasSessionToken : '{Exception} Boolean
+testHasSessionToken = 'let
+  basic = aws.config.basicCredentials "key" "secret"
+  temp = aws.config.temporaryCredentials "key" "secret" "token"
+  test1 = not (aws.config.hasSessionToken basic)
+  test2 = aws.config.hasSessionToken temp
+  test1 && test2
+
+-- === URI Builder Tests ===
+
+testAwsServiceUri : '{Exception} Boolean
+testAwsServiceUri = 'let
+  uri = aws.config.Config.awsServiceUri true (aws.config.HostName "amazonaws.com") None (aws.config.Region "us-east-1") (aws.config.Service "kinesis")
+  uri === "https://kinesis.us-east-1.amazonaws.com/"
+
+testAwsServiceUriHttp : '{Exception} Boolean
+testAwsServiceUriHttp = 'let
+  uri = aws.config.Config.awsServiceUri false (aws.config.HostName "amazonaws.com") None (aws.config.Region "eu-west-1") (aws.config.Service "s3")
+  uri === "http://s3.eu-west-1.amazonaws.com/"
+
+testAwsServiceUriWithPort : '{Exception} Boolean
+testAwsServiceUriWithPort = 'let
+  uri = aws.config.Config.awsServiceUri true (aws.config.HostName "amazonaws.com") (Some (aws.config.Port 8443)) (aws.config.Region "us-west-2") (aws.config.Service "lambda")
+  uri === "https://lambda.us-west-2.amazonaws.com:8443/"
+
+testCustomEndpointUri : '{Exception} Boolean
+testCustomEndpointUri = 'let
+  uri = aws.config.Config.customEndpointUri false (aws.config.HostName "localhost") (Some (aws.config.Port 9000)) (aws.config.Region "us-east-1") (aws.config.Service "s3")
+  uri === "http://localhost:9000/"
+
+testCustomEndpointUriNoPort : '{Exception} Boolean
+testCustomEndpointUriNoPort = 'let
+  uri = aws.config.Config.customEndpointUri true (aws.config.HostName "minio.example.com") None (aws.config.Region "us-east-1") (aws.config.Service "s3")
+  uri === "https://minio.example.com/"
+
+-- === Config Constructor Tests ===
+
+testConfigDefault : '{Exception} Boolean
+testConfigDefault = 'let
+  creds = aws.config.basicCredentials "key" "secret"
+  config = aws.config.Config.default aws.config.Region.usEast1 (aws.config.Service "kinesis") creds
+  test1 = aws.config.Region.name (aws.config.Config.region config) === "us-east-1"
+  test2 = aws.config.Service.name (aws.config.Config.service config) === "kinesis"
+  test3 = aws.config.Config.isHttps config === true
+  test4 = aws.config.HostName.toText (aws.config.Config.hostName config) === "amazonaws.com"
+  test1 && test2 && test3 && test4
+
+testConfigMakeUri : '{Exception} Boolean
+testConfigMakeUri = 'let
+  creds = aws.config.basicCredentials "key" "secret"
+  config = aws.config.Config.default aws.config.Region.usWest2 (aws.config.Service "sqs") creds
+  uri = aws.config.Config.makeUri config
+  uri === "https://sqs.us-west-2.amazonaws.com/"
+
+testConfigScheme : '{Exception} Boolean
+testConfigScheme = 'let
+  creds = aws.config.basicCredentials "key" "secret"
+  httpsConfig = aws.config.Config.default aws.config.Region.usEast1 (aws.config.Service "s3") creds
+  test1 = aws.config.Config.scheme httpsConfig === "https"
+  test1
+
+testConfigWithEndpoint : '{Exception} Boolean
+testConfigWithEndpoint = 'let
+  creds = aws.config.basicCredentials "key" "secret"
+  config = aws.config.Config.withEndpoint "http://localhost:9000" aws.config.Region.usEast1 (aws.config.Service "s3") creds
+  test1 = aws.config.HostName.toText (aws.config.Config.hostName config) === "localhost"
+  test2 = match aws.config.Config.port config with
+    Some p -> aws.config.Port.toNat p === 9000
+    None -> false
+  test3 = aws.config.Config.isHttps config === false
+  test1 && test2 && test3
+
+testConfigWithEndpointHttps : '{Exception} Boolean
+testConfigWithEndpointHttps = 'let
+  creds = aws.config.basicCredentials "key" "secret"
+  config = aws.config.Config.withEndpoint "https://minio.example.com:9443" aws.config.Region.euWest1 (aws.config.Service "s3") creds
+  test1 = aws.config.HostName.toText (aws.config.Config.hostName config) === "minio.example.com"
+  test2 = match aws.config.Config.port config with
+    Some p -> aws.config.Port.toNat p === 9443
+    None -> false
+  test3 = aws.config.Config.isHttps config === true
+  test1 && test2 && test3
+
+testConfigWithEndpointNoPort : '{Exception} Boolean
+testConfigWithEndpointNoPort = 'let
+  creds = aws.config.basicCredentials "key" "secret"
+  config = aws.config.Config.withEndpoint "http://minio.local" aws.config.Region.usEast1 (aws.config.Service "s3") creds
+  test1 = aws.config.HostName.toText (aws.config.Config.hostName config) === "minio.local"
+  test2 = aws.config.Config.port config === None
+  test1 && test2
+
+-- === Backward Compatibility Tests ===
+
+testRegionTextConstants : '{Exception} Boolean
+testRegionTextConstants = 'let
+  test1 = aws.config.usEast1 === "us-east-1"
+  test2 = aws.config.usEast2 === "us-east-2"
+  test3 = aws.config.usWest1 === "us-west-1"
+  test4 = aws.config.usWest2 === "us-west-2"
+  test5 = aws.config.euWest1 === "eu-west-1"
+  test6 = aws.config.euWest2 === "eu-west-2"
+  test7 = aws.config.euCentral1 === "eu-central-1"
+  test1 && test2 && test3 && test4 && test5 && test6 && test7
+
+testIsValidRegion : '{Exception} Boolean
+testIsValidRegion = 'let
+  test1 = aws.config.isValidRegion "us-east-1"
+  test2 = aws.config.isValidRegion "eu-west-2"
+  test3 = aws.config.isValidRegion "ap-northeast-1"
+  test4 = not (aws.config.isValidRegion "")
+  test5 = not (aws.config.isValidRegion "this-is-a-very-long-region-name-that-exceeds-limits")
+  test1 && test2 && test3 && test4 && test5
+
+testDefaultValues : '{Exception} Boolean
+testDefaultValues = 'let
+  test1 = aws.config.defaultTimeout === 30000
+  test2 = aws.config.defaultMaxRetries === 3
+  test3 = aws.config.defaultRegion === "us-east-1"
+  test1 && test2 && test3
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS Config Runtime Tests..."
+  printLine ""
+  
+  -- HostName tests
+  runTest "HostName.toText" testHostNameToText ()
+  runTest "HostName roundtrip" testHostNameRoundtrip ()
+  
+  -- Port tests
+  runTest "Port.toNat" testPortToNat ()
+  runTest "Port roundtrip" testPortRoundtrip ()
+  
+  -- Region tests
+  runTest "Region.fromText" testRegionFromText ()
+  runTest "Region.name" testRegionName ()
+  runTest "Region constants (US/EU)" testRegionConstants ()
+  runTest "Region constants (AP)" testRegionAsiaPacificConstants ()
+  
+  -- Service tests
+  runTest "Service.fromText" testServiceFromText ()
+  runTest "Service.name" testServiceName ()
+  
+  -- Credentials tests
+  runTest "Credentials.anonymous" testCredentialsAnonymous ()
+  runTest "basicCredentials" testBasicCredentials ()
+  runTest "temporaryCredentials" testTemporaryCredentials ()
+  runTest "hasSessionToken" testHasSessionToken ()
+  
+  -- URI builder tests
+  runTest "awsServiceUri" testAwsServiceUri ()
+  runTest "awsServiceUri HTTP" testAwsServiceUriHttp ()
+  runTest "awsServiceUri with port" testAwsServiceUriWithPort ()
+  runTest "customEndpointUri" testCustomEndpointUri ()
+  runTest "customEndpointUri no port" testCustomEndpointUriNoPort ()
+  
+  -- Config constructor tests
+  runTest "Config.default" testConfigDefault ()
+  runTest "Config.makeUri" testConfigMakeUri ()
+  runTest "Config.scheme" testConfigScheme ()
+  runTest "Config.withEndpoint" testConfigWithEndpoint ()
+  runTest "Config.withEndpoint HTTPS" testConfigWithEndpointHttps ()
+  runTest "Config.withEndpoint no port" testConfigWithEndpointNoPort ()
+  
+  -- Backward compatibility tests
+  runTest "region text constants" testRegionTextConstants ()
+  runTest "isValidRegion" testIsValidRegion ()
+  runTest "default values" testDefaultValues ()
+  
+  printLine ""
+  printLine "All tests completed!"
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)

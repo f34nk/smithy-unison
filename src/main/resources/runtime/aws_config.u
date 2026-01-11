@@ -105,7 +105,7 @@ Example:
     Some r -> ... use region ...
     None -> ... use default ...
 }}
-aws.config.Region.fromEnv : '{IO} Optional aws.config.Region
+aws.config.Region.fromEnv : '{IO, Exception} Optional aws.config.Region
 aws.config.Region.fromEnv _ =
   r = IO.getEnv "AWS_REGION"
   dr = IO.getEnv "AWS_DEFAULT_REGION"
@@ -223,7 +223,7 @@ type aws.config.Config = {
 {{
 Build a standard AWS service URI.
 
-Format: https://{service}.{region}.amazonaws.com/
+Format: https://service.region.amazonaws.com/
 
 Example: awsServiceUri produces "https://kinesis.us-east-1.amazonaws.com/"
 }}
@@ -247,7 +247,7 @@ aws.config.Config.awsServiceUri isHttps host port region service =
 {{
 Build a custom endpoint URI (ignores service/region in host).
 
-Format: {scheme}://{host}:{port}/
+Format: scheme://host:port/
 }}
 aws.config.Config.customEndpointUri : Boolean -> aws.config.HostName -> Optional aws.config.Port -> aws.config.Region -> aws.config.Service -> Text
 aws.config.Config.customEndpointUri isHttps host port region service =
@@ -291,7 +291,7 @@ aws.config.Config.scheme config =
 Create a Config for production AWS endpoints.
 
 Uses HTTPS and standard AWS service URI format:
-https://{service}.{region}.amazonaws.com/
+https://service.region.amazonaws.com/
 
 Example:
   config = Config.default Region.usEast1 (Service "kinesis") creds
