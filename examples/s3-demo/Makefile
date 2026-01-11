@@ -13,7 +13,7 @@ all: clean generate
 .PHONY: generate
 generate: model/s3-2006-03-01.json
 	#
-	# Generate Unison code from Smithy model
+	# Generate $(CONTAINER_NAME) code from Smithy model
 	#
 	smithy build
 	tree -h generated
@@ -31,21 +31,21 @@ clean: docker/stop
 .PHONY: compile-with-lib
 compile-with-lib:
 	#
-	# Fetch deps from Unison Share and compile locally
+	# Fetch deps from Unison Share and compile $(CONTAINER_NAME) locally
 	#
 	ucm transcript compile-with-lib.md
 
 .PHONY: test
 test: generate docker/start terraform
 	#
-	# Run Unison demo against LocalStack
+	# Run $(CONTAINER_NAME) demo against LocalStack
 	#
 	ucm transcript demo.md
 
 .PHONY: integration-test
 integration-test: compile-with-lib docker/start terraform
 	#
-	# Run compiled code
+	# Run compiled $(CONTAINER_NAME) code
 	#
 	ucm run.compiled compiled/main.uc
 
