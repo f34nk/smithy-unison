@@ -20,6 +20,9 @@ scratch/main> add
 scratch/main> load generated/aws_credentials.u
 scratch/main> add
 
+scratch/main> load generated/aws_env.u
+scratch/main> add
+
 scratch/main> load generated/aws_xml.u
 scratch/main> add
 
