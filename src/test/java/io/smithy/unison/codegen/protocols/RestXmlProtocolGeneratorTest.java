@@ -156,10 +156,10 @@ public class RestXmlProtocolGeneratorTest {
         
         String output = writer.toString();
         
-        // Check that the function signature is generated (includes Threads for @unison/http)
-        // Config uses shared aws.config.Config type, input/output use service namespace
-        assertTrue(output.contains("com.example.getObject : aws.config.Config -> com.example.GetObjectInput -> '{IO, Exception, Threads} com.example.GetObjectOutput"),
-                "Should generate correct function signature with namespace. Got: " + output);
+        // Check that the function signature is generated with AWSEnv ability
+        // Input/output use service namespace
+        assertTrue(output.contains("com.example.getObject : com.example.GetObjectInput -> '{IO, AWSEnv, Exception, Http, Threads} com.example.GetObjectOutput"),
+                "Should generate correct function signature with AWSEnv ability. Got: " + output);
         
         // Check that HTTP method is set
         assertTrue(output.contains("method = \"GET\""),

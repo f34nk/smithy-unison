@@ -155,22 +155,24 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 "Raises exception on error, returns output directly on success.");
         
         // Write signature
-        // Note: HTTP operations use {IO, Exception} abilities - there is no separate Http ability in Unison
-        // Use '{IO, Exception, Threads} to support real HTTP via @unison/http bridge
-        String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", configType, inputType, outputType);
+        // Uses AWSEnv ability for region, endpoint, and signing
+        String signature = String.format("%s -> '{IO, AWSEnv, Exception, Http, Threads} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
         // Write function definition with do block for delayed computation
-        // The '{IO, Exception, Threads} return type requires a do block
         // In Unison, do blocks allow bindings directly without 'let'
-        writer.write("$L config input = do", opName);
+        writer.write("$L input = do", opName);
         writer.indent();
         
         // HTTP method
         writer.write("method = \"$L\"", method);
         
+        // Get region and service name for signing
+        writer.write("region = AWSEnv.region");
+        String signingServiceName = getSigningServiceName(service);
+        
         // Build URL with path parameters
-        generateUrlBuilding(uri, httpLabelMembers, useS3Url, inputType, clientNamespace, writer);
+        generateUrlBuilding(uri, httpLabelMembers, useS3Url, signingServiceName, inputType, clientNamespace, writer);
         
         // Build query string
         generateQueryString(httpQueryMembers, inputType, model, clientNamespace, writer);
@@ -184,19 +186,12 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         // Build request body
         generateRequestBodyBinding(operation, model, bodyMembers, payloadMember, inputType, writer);
         
-        // Sign request 
-        // TODO: Implement proper SigV4 signing - for now just use headers as-is
-        writer.write("signedHeaders = headers");
+        // Create HTTP request and sign it
+        writer.write("httpRequest = Http.Request.Request method fullUrl headers body");
+        writer.write("signedRequest = AWSEnv.sign \"$L\" httpRequest", signingServiceName);
         
-        // Make HTTP request - force the delayed computation with !
-        // Uses executeRequest which can be overridden when bridge module is loaded
-        // Some methods don't take a body parameter
-        String methodLower = method.toLowerCase();
-        if (methodLower.equals("get") || methodLower.equals("delete") || methodLower.equals("head")) {
-            writer.write("response = !(executeRequest (Http.Request.$L fullUrl signedHeaders))", methodLower);
-        } else {
-            writer.write("response = !(executeRequest (Http.Request.$L fullUrl signedHeaders body))", methodLower);
-        }
+        // Execute the signed HTTP request
+        writer.write("response = !(executeRequest signedRequest)");
         
         // Handle response - still in scope since we're in the do block
         writer.write("-- Check for errors and parse response");
@@ -211,14 +206,10 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
      * Generates URL building code with path parameter substitution.
      */
     private void generateUrlBuilding(String uri, List<MemberShape> httpLabelMembers, 
-                                      boolean useS3Url, String inputType, String clientNamespace,
+                                      boolean useS3Url, String signingServiceName, String inputType, String clientNamespace,
                                       UnisonWriter writer) {
-        // Use shared aws.config.Config type
-        String configType = "aws.config.Config";
-        
         if (useS3Url) {
             // S3-specific URL building with bucket routing
-            // Note: Unison uses accessor functions for record fields: aws.s3.Config.endpoint config
             // Check which label members exist (bucket is required, key is optional for some operations)
             boolean hasBucket = httpLabelMembers.stream()
                     .anyMatch(m -> m.getMemberName().equalsIgnoreCase("bucket"));
@@ -245,13 +236,23 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else {
                 writer.write("key = \"\"");
             }
-            // S3-specific: use Config.makeUri for endpoint, default to virtual-hosted style
-            writer.write("endpoint = aws.config.Config.makeUri config");
+            // S3-specific: use AWSEnv.endpoint or construct default S3 endpoint
+            writer.write("endpoint = match AWSEnv.endpoint with");
+            writer.indent();
+            writer.write("Some e -> e");
+            writer.write("None -> \"https://s3.\" ++ region ++ \".amazonaws.com\"");
+            writer.dedent();
             writer.write("usePathStyle = false -- TODO: Add path-style support if needed");
             writer.write("url = aws.s3.buildUrl endpoint bucket key usePathStyle");
         } else if (httpLabelMembers.isEmpty()) {
-            // No path parameters
-            writer.write("url = (aws.config.Config.makeUri config) ++ \"$L\"", uri);
+            // No path parameters - use custom endpoint or standard AWS endpoint
+            String uriStr = uri.replace("\"", "\\\"");  // Escape quotes
+            writer.write("uri = \"$L\"", uriStr);
+            writer.write("url = match AWSEnv.endpoint with");
+            writer.indent();
+            writer.write("Some e -> e ++ uri");
+            writer.write("None -> \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
+            writer.dedent();
         } else {
             // Build URL with path parameter substitution
             writer.write("baseUri = \"$L\"", uri);
@@ -270,7 +271,11 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 currentUri = nextUri;
             }
             
-            writer.write("url = (aws.config.Config.makeUri config) ++ $L", currentUri);
+            writer.write("url = match AWSEnv.endpoint with");
+            writer.indent();
+            writer.write("Some e -> e ++ $L", currentUri);
+            writer.write("None -> \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ $L", signingServiceName, currentUri);
+            writer.dedent();
         }
     }
     
@@ -1018,5 +1023,22 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
     private boolean hasS3BucketParameter(List<MemberShape> httpLabelMembers) {
         return httpLabelMembers.stream()
                 .anyMatch(m -> m.getMemberName().equalsIgnoreCase("Bucket"));
+    }
+    
+    /**
+     * Gets the signing service name from the service shape.
+     * Uses @sigv4 trait if present, otherwise derives from service name.
+     */
+    private String getSigningServiceName(ServiceShape service) {
+        return service.getTrait(software.amazon.smithy.aws.traits.auth.SigV4Trait.class)
+                .map(trait -> trait.getName())
+                .orElseGet(() -> {
+                    String serviceName = service.getId().getName().toLowerCase();
+                    // Remove "Service" suffix if present
+                    if (serviceName.endsWith("service")) {
+                        serviceName = serviceName.substring(0, serviceName.length() - 7);
+                    }
+                    return serviceName;
+                });
     }
 }
