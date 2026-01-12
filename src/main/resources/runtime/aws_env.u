@@ -23,17 +23,12 @@ Example:
     ...
 }}
 ability AWSEnv where
-  {{
-  Get the configured AWS region (e.g., "us-east-1").
-  }}
+  -- Get the configured AWS region (e.g., "us-east-1").
   region : {AWSEnv} Text
 
-  {{
-  Sign an HTTP request for the specified service.
-
-  Adds `x-amz-date`, `x-amz-content-sha256`, `Authorization`, and optional
-  `x-amz-security-token` headers.
-  }}
+  -- Sign an HTTP request for the specified service.
+  -- Adds x-amz-date, x-amz-content-sha256, Authorization, and optional
+  -- x-amz-security-token headers.
   sign : Text -> Http.Request ->{AWSEnv} Http.Request
 
 -- =============================================================================
@@ -47,16 +42,13 @@ Example:
   handler = AWSEnv.handler "us-east-1" (aws.config.basicCredentials "AKIA..." "secret...")
   handle myOperation() with handler
 }}
-AWSEnv.handler : Text -> aws.config.Credentials -> Request AWSEnv a ->{IO, Exception} a
-AWSEnv.handler regionName creds =
-  h : Request AWSEnv a ->{IO, Exception} a
-  h = cases
-    { a } -> a
-    { AWSEnv.region -> k } -> handle k regionName with h
-    { AWSEnv.sign service httpRequest -> k } ->
-      signedRequest = aws.env.signRequest regionName service creds httpRequest
-      handle k signedRequest with h
-  h
+AWSEnv.handler : Text -> aws.config.Credentials -> builtin.Request {AWSEnv} a ->{IO, Exception} a
+AWSEnv.handler regionName creds = cases
+  { a } -> a
+  { AWSEnv.region -> k } -> handle k regionName with AWSEnv.handler regionName creds
+  { AWSEnv.sign service httpRequest -> k } ->
+    signedRequest = aws.env.signRequest regionName service creds httpRequest
+    handle k signedRequest with AWSEnv.handler regionName creds
 
 {{
 Create an AWSEnv handler from environment variables.
@@ -67,7 +59,7 @@ AWS_SESSION_TOKEN.
 Example:
   handle myOperation() with !AWSEnv.handler.fromEnv
 }}
-AWSEnv.handler.fromEnv : '{IO, Exception} (Request AWSEnv a ->{IO, Exception} a)
+AWSEnv.handler.fromEnv : '{IO, Exception} (builtin.Request {AWSEnv} a ->{IO, Exception} a)
 AWSEnv.handler.fromEnv = do
   regionName = getEnv "AWS_REGION"
   creds = match !aws.credentials.fromEnvironment with
@@ -96,12 +88,12 @@ Internal helper used by the AWSEnv handler.
 }}
 aws.env.signRequest : Text -> Text -> aws.config.Credentials -> Http.Request ->{IO, Exception} Http.Request
 aws.env.signRequest regionName serviceName creds request =
-  -- Build signing config
-  signingConfig = aws.sigv4.SigningConfig.SigningConfig regionName serviceName
-    (aws.sigv4.Credentials.Credentials
-      (aws.config.Credentials.accessKeyId creds)
-      (aws.config.Credentials.secretAccessKey creds)
-      (aws.config.Credentials.sessionToken creds))
+  -- Build signing credentials from config credentials
+  accessKey = aws.config.Credentials.accessKeyId creds
+  secretKey = aws.config.Credentials.secretAccessKey creds
+  sessionToken = aws.config.Credentials.sessionToken creds
+  signingCreds = aws.sigv4.Credentials.Credentials accessKey secretKey sessionToken
+  signingConfig = aws.sigv4.SigningConfig.SigningConfig regionName serviceName signingCreds
   -- Extract request parts
   method = Http.Request.method request
   url = Http.Request.url request

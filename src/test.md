@@ -63,4 +63,14 @@ scratch/main> add
 scratch/main> load test/resources/runtime/aws_restjson_test.u
 scratch/main> add
 scratch/main> run aws.restjson.test.runAllTests
+
+scratch/main> load main/resources/runtime/aws_sigv4.u
+scratch/main> add
+scratch/main> load main/resources/runtime/aws_credentials.u
+scratch/main> add
+scratch/main> load main/resources/runtime/aws_env.u
+scratch/main> add
+scratch/main> load test/resources/runtime/aws_env_test.u
+scratch/main> add
+scratch/main> run aws.env.test.runAllTests
 ```

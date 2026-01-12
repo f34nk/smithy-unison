@@ -107,7 +107,6 @@ public class AwsQueryProtocolGeneratorTest {
         
         // Verify basic structure
         assertTrue(code.contains("aws.sqs.sendMessage"), "Should generate operation function");
-        assertTrue(code.contains("method = \"POST\""), "Should use POST method");
         assertTrue(code.contains("uri = \"/\""), "Should use root URI");
         
         // Verify AWS Query specific elements
@@ -116,9 +115,9 @@ public class AwsQueryProtocolGeneratorTest {
         assertTrue(code.contains("buildFormEncodedBody"), "Should build form-encoded body");
         assertTrue(code.contains("Content-Type"), "Should set Content-Type header");
         
-        // Verify SigV4 signing
-        assertTrue(code.contains("aws.sigv4"), "Should use SigV4 signing");
-        assertTrue(code.contains("addSigningHeaders"), "Should add signing headers");
+        // Verify AWSEnv-based signing (replaced direct aws.sigv4 calls)
+        assertTrue(code.contains("AWSEnv.sign"), "Should use AWSEnv.sign for signing");
+        assertTrue(code.contains("AWSEnv.region"), "Should use AWSEnv.region for region");
         
         // Verify HTTP execution
         assertTrue(code.contains("Http.Request.post"), "Should make HTTP POST request");
@@ -293,8 +292,8 @@ public class AwsQueryProtocolGeneratorTest {
         
         String code = writer.toString();
         
-        // Verify signing service name is lowercase
-        assertTrue(code.contains("\"sqs\"") || code.contains("SigningConfig"), 
+        // Verify signing service name is lowercase (used in AWSEnv.sign call)
+        assertTrue(code.contains("AWSEnv.sign \"sqs\""), 
                 "Should use lowercase service name for signing");
     }
 }
