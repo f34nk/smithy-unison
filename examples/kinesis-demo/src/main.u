@@ -132,7 +132,7 @@ listStreamsDemo = do
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling listStreams..."
-  result = aws.kinesis.listStreams request
+  result = !(aws.kinesis.listStreams request)
   
   printLine "  ✓ SUCCESS: ListStreams returned"
   
@@ -174,7 +174,7 @@ describeStreamDemo = do
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling describeStream..."
-  result = aws.kinesis.describeStream request
+  result = !(aws.kinesis.describeStream request)
   
   printLine "  ✓ SUCCESS: DescribeStream returned"
   
@@ -217,7 +217,7 @@ putRecordDemo = do
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling putRecord..."
-  result = aws.kinesis.putRecord request
+  result = !(aws.kinesis.putRecord request)
   
   printLine "  ✓ SUCCESS: PutRecord completed"
   
@@ -246,7 +246,7 @@ getShardIteratorDemo shardId = do
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling getShardIterator..."
-  result = aws.kinesis.getShardIterator request
+  result = !(aws.kinesis.getShardIterator request)
   
   printLine "  ✓ SUCCESS: GetShardIterator returned"
   
@@ -269,7 +269,7 @@ getRecordsDemo shardIterator = do
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling getRecords..."
-  result = aws.kinesis.getRecords request
+  result = !(aws.kinesis.getRecords request)
   
   printLine "  ✓ SUCCESS: GetRecords returned"
   

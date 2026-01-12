@@ -119,7 +119,7 @@ listFunctionsDemo = do
   request = aws.lambda.ListFunctionsRequest.ListFunctionsRequest None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.lambda.listFunctions request
+  response = !(aws.lambda.listFunctions request)
   
   printLine "  ✓ SUCCESS: ListFunctions returned"
   
@@ -155,7 +155,7 @@ getFunctionDemo = do
   request = aws.lambda.GetFunctionRequest.GetFunctionRequest testFunctionName None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.lambda.getFunction request
+  response = !(aws.lambda.getFunction request)
   
   printLine "  ✓ SUCCESS: GetFunction returned"
   
@@ -196,7 +196,7 @@ invokeFunctionDemo = do
   request = aws.lambda.InvocationRequest.InvocationRequest None None testFunctionName None None (Some payloadBytes) None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.lambda.invoke request
+  response = !(aws.lambda.invoke request)
   
   -- Extract response details
   statusCode = aws.lambda.InvocationResponse.statusCode response

@@ -144,7 +144,7 @@ listTablesDemo = do
   
   -- Call the DynamoDB client (no config needed - uses AWSEnv)
   printLine "  → Calling listTables..."
-  result = aws.dynamodb.listTables request
+  result = !(aws.dynamodb.listTables request)
   
   -- Extract and print tables
   printLine "  ✓ SUCCESS: ListTables returned"
@@ -182,7 +182,7 @@ putItemDemo = do
   
   -- Call the DynamoDB client
   printLine "  → Calling putItem..."
-  _ = aws.dynamodb.putItem request
+  _ = !(aws.dynamodb.putItem request)
   
   printLine "  ✓ SUCCESS: PutItem completed"
 
@@ -205,7 +205,7 @@ getItemDemo = do
   
   -- Call the DynamoDB client
   printLine "  → Calling getItem..."
-  result = aws.dynamodb.getItem request
+  result = !(aws.dynamodb.getItem request)
   
   printLine "  ✓ SUCCESS: GetItem returned"
   
@@ -245,7 +245,7 @@ deleteItemDemo = do
   
   -- Call the DynamoDB client
   printLine "  → Calling deleteItem..."
-  _ = aws.dynamodb.deleteItem request
+  _ = !(aws.dynamodb.deleteItem request)
   
   printLine "  ✓ SUCCESS: DeleteItem completed"
 
@@ -266,7 +266,7 @@ verifyDeletionDemo = do
   request = GetItemInput.GetItemInput None (Some true) None key None None testTable
   
   -- Call the DynamoDB client
-  result = aws.dynamodb.getItem request
+  result = !(aws.dynamodb.getItem request)
   
   printLine "  ✓ SUCCESS: GetItem returned"
   

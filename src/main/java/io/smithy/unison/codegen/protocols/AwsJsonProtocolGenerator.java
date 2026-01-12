@@ -110,12 +110,12 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 "Raises exception on error, returns output directly on success.");
         
         // Write signature - uses AWSEnv ability instead of Config parameter
-        // IO and Threads are needed because executeRequest requires {IO, Exception, Threads}
-        String signature = String.format("%s ->{IO, AWSEnv, Exception, Http, Threads} %s", inputType, outputType);
+        // Returns a delayed computation (note the tick before the brace)
+        String signature = String.format("%s -> '{IO, AWSEnv, Exception, Http, Threads} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
         // Write function definition with do block - uses AWSEnv ability
-        writer.write("$L input =", opName);
+        writer.write("$L input = do", opName);
         writer.indent();
         
         // Get region from AWSEnv ability

@@ -113,7 +113,7 @@ describeVpcsDemo = do
   request = aws.ec2.DescribeVpcsRequest.DescribeVpcsRequest None None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.ec2.describeVpcs request
+  response = !(aws.ec2.describeVpcs request)
   
   printLine "  ✓ SUCCESS: DescribeVpcs returned"
   
@@ -148,7 +148,7 @@ describeSubnetsDemo = do
   request = aws.ec2.DescribeSubnetsRequest.DescribeSubnetsRequest None None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.ec2.describeSubnets request
+  response = !(aws.ec2.describeSubnets request)
   
   printLine "  ✓ SUCCESS: DescribeSubnets returned"
   
@@ -187,7 +187,7 @@ describeSecurityGroupsDemo = do
   request = aws.ec2.DescribeSecurityGroupsRequest.DescribeSecurityGroupsRequest None None None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.ec2.describeSecurityGroups request
+  response = !(aws.ec2.describeSecurityGroups request)
   
   printLine "  ✓ SUCCESS: DescribeSecurityGroups returned"
   
@@ -239,7 +239,7 @@ runInstancesDemo = do
   request = aws.ec2.RunInstancesRequest.RunInstancesRequest None None None None None None None None None None None None None None None None (Some "ami-12345678") None None (Some aws.ec2.InstanceType't2_micro) None None None None None None None +1 None +1 None None None None None None None None None None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.ec2.runInstances request
+  response = !(aws.ec2.runInstances request)
   
   printLine "  ✓ SUCCESS: RunInstances returned"
       
@@ -288,7 +288,7 @@ describeInstancesDemo = do
   request = aws.ec2.DescribeInstancesRequest.DescribeInstancesRequest None None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
-  response = aws.ec2.describeInstances request
+  response = !(aws.ec2.describeInstances request)
   
   printLine "  ✓ SUCCESS: DescribeInstances returned"
   
