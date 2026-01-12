@@ -168,7 +168,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 .orElse("()");
         
         // Write signature - uses AWSEnv ability instead of Config parameter
-        String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", inputType, outputType);
+        // IO and Threads are needed because executeRequest requires {IO, Exception, Threads}
+        String signature = String.format("%s ->{IO, AWSEnv, Exception, Http, Threads} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
     }
     
@@ -209,7 +210,12 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("uri = \"/\"");
         // Extract signing service name (lowercase, without version suffix)
         String signingServiceName = extractSigningServiceName(service.getId().getName());
-        writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
+        // Support custom endpoints (e.g., LocalStack) via AWSEnv.endpoint
+        writer.write("url = match AWSEnv.endpoint with");
+        writer.indent();
+        writer.write("Some e -> e ++ uri");
+        writer.write("None -> \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
+        writer.dedent();
         
         // Serialize request to form parameters
         Model model = context.model();

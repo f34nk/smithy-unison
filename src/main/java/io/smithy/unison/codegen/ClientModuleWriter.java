@@ -360,16 +360,23 @@ public final class ClientModuleWriter {
                 "    listFunctions (ListFunctionsRequest None None)");
         
         // Write signature
-        writer.writeSignature(runFn, "'{AWSEnv, Exception, Http} a ->{IO, Exception} a");
+        // Operations require {IO, AWSEnv, Exception, Http, Threads} so run function accepts that
+        writer.writeSignature(runFn, "'{IO, AWSEnv, Exception, Http, Threads} a ->{IO, Exception} a");
         
         // Write implementation
         writer.write("$L action =", runFn);
+        writer.indent();
+        writer.write("Random.run do");
+        writer.indent();
+        writer.write("systemfw_concurrent_7_3_0.Threads.run do");
         writer.indent();
         writer.write("AWSEnv.provide.fromEnv do");
         writer.indent();
         writer.write("Http.run do");
         writer.indent();
-        writer.write("action()");
+        writer.write("!action");
+        writer.dedent();
+        writer.dedent();
         writer.dedent();
         writer.dedent();
         writer.dedent();

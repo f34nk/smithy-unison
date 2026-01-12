@@ -110,7 +110,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 "Raises exception on error, returns output directly on success.");
         
         // Write signature - uses AWSEnv ability instead of Config parameter
-        String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", inputType, outputType);
+        // IO and Threads are needed because executeRequest requires {IO, Exception, Threads}
+        String signature = String.format("%s ->{IO, AWSEnv, Exception, Http, Threads} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
         // Write function definition with do block - uses AWSEnv ability
@@ -125,7 +126,12 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("uri = \"$L\"", uri);
         // Extract service name for endpoint URL building
         String signingServiceName = extractSigningServiceName(serviceName);
-        writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
+        // Support custom endpoints (e.g., LocalStack) via AWSEnv.endpoint
+        writer.write("url = match AWSEnv.endpoint with");
+        writer.indent();
+        writer.write("Some e -> e ++ uri");
+        writer.write("None -> \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
+        writer.dedent();
         
         // Build headers with X-Amz-Target
         writer.write("");

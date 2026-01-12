@@ -320,7 +320,8 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String outputType = getOutputTypeName(operation, context);
         
         // Generate signature - uses AWSEnv ability instead of Config parameter
-        String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", 
+        // IO and Threads are needed because executeRequest requires {IO, Exception, Threads}
+        String signature = String.format("%s ->{IO, AWSEnv, Exception, Http, Threads} %s", 
                 inputType, outputType);
         writer.writeSignature(opName, signature);
     }
@@ -422,10 +423,17 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         // Get signing service name for URL building
         String serviceName = extractSigningServiceName(context.serviceShape().getId().getName());
         
+        // Support custom endpoints (e.g., LocalStack) via AWSEnv.endpoint
+        writer.write("baseUrl = match AWSEnv.endpoint with");
+        writer.indent();
+        writer.write("Some e -> e");
+        writer.write("None -> \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\"", serviceName);
+        writer.dedent();
+        
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
         if (inputShape.isEmpty()) {
             // No input - just use URI as-is with region from AWSEnv
-            writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", serviceName);
+            writer.write("url = baseUrl ++ uri");
             return;
         }
         
@@ -433,7 +441,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         
         if (pathParams.isEmpty()) {
             // No path parameters - just use URI as-is with region from AWSEnv
-            writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", serviceName);
+            writer.write("url = baseUrl ++ uri");
         } else {
             // Has path parameters - need substitution
             writer.write("");
@@ -467,7 +475,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 currentUri = nextUri;
             }
             
-            writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ $L", serviceName, currentUri);
+            writer.write("url = baseUrl ++ $L", currentUri);
         }
     }
     
