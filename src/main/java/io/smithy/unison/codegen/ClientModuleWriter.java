@@ -280,6 +280,11 @@ public final class ClientModuleWriter {
             }
         }
         
+        // Generate run convenience function (only for AWS services)
+        if (isAws) {
+            generateRunFunction(writer);
+        }
+        
         // Generate pagination helpers (only for selected operations)
         PaginationGenerator paginationGenerator = new PaginationGenerator(clientNamespace);
         paginationGenerator.generate(operationsToGenerate, model, writer);
@@ -327,6 +332,46 @@ public final class ClientModuleWriter {
         writer.write("$L region creds =", defaultFn);
         writer.indent();
         writer.write("aws.config.Config.default region (aws.config.Service.fromText \"$L\") creds", serviceName);
+        writer.dedent();
+        writer.writeBlankLine();
+    }
+    
+    /**
+     * Generates the run convenience function for executing operations with AWSEnv.
+     * 
+     * <p>This function handles both AWSEnv setup (from environment) and HTTP execution,
+     * allowing users to run operations with minimal boilerplate:
+     * <pre>
+     * result = aws.lambda.run do
+     *   listFunctions (ListFunctionsRequest None None)
+     * </pre>
+     */
+    private void generateRunFunction(UnisonWriter writer) {
+        String serviceName = extractServiceName(service.getId().getName());
+        String runFn = clientNamespace + ".run";
+        
+        writer.writeComment("=== Service Entry Point ===");
+        writer.writeBlankLine();
+        
+        // Write doc comment with example
+        writer.writeDocComment("Run " + serviceName.toUpperCase() + " operations using environment credentials.\n\n" +
+                "Example:\n" +
+                "  result = " + clientNamespace + ".run do\n" +
+                "    listFunctions (ListFunctionsRequest None None)");
+        
+        // Write signature
+        writer.writeSignature(runFn, "'{AWSEnv, Exception, Http} a ->{IO, Exception} a");
+        
+        // Write implementation
+        writer.write("$L action =", runFn);
+        writer.indent();
+        writer.write("AWSEnv.provide.fromEnv do");
+        writer.indent();
+        writer.write("Http.run do");
+        writer.indent();
+        writer.write("action()");
+        writer.dedent();
+        writer.dedent();
         writer.dedent();
         writer.writeBlankLine();
     }
