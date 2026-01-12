@@ -146,7 +146,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
      * 
      * <p>AWS Query operations follow the pattern:
      * <pre>
-     * operationName : Config -> InputType -> '{IO, Exception, Threads} OutputType
+     * operationName : InputType ->{AWSEnv, Exception, Http} OutputType
      * </pre>
      * 
      * @param operation The operation shape
@@ -166,11 +166,9 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String outputType = operation.getOutput()
                 .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
-        // Use shared aws.config.Config type
-        String configType = "aws.config.Config";
         
-        // Write signature
-        String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", configType, inputType, outputType);
+        // Write signature - uses AWSEnv ability instead of Config parameter
+        String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
     }
     

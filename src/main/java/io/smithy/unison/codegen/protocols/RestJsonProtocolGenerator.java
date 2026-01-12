@@ -300,12 +300,12 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
      * 
      * <p>Generates a Unison function signature in the format:
      * <pre>
-     * operationName : Config -> InputType -> '{IO, Exception, Threads} OutputType
+     * operationName : InputType ->{AWSEnv, Exception, Http} OutputType
      * </pre>
      * 
      * <p>Example:
      * <pre>
-     * aws.eventbridge.putEvents : aws.eventbridge.Config -> aws.eventbridge.PutEventsRequest -> '{IO, Exception, Threads} aws.eventbridge.PutEventsResponse
+     * aws.eventbridge.putEvents : aws.eventbridge.PutEventsRequest ->{AWSEnv, Exception, Http} aws.eventbridge.PutEventsResponse
      * </pre>
      * 
      * @param operation The operation to generate a signature for
@@ -316,14 +316,12 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         String clientNamespace = context.settings().getClientNamespace();
         
         String opName = getOperationName(operation, context);
-        // Use shared aws.config.Config type
-        String configType = "aws.config.Config";
         String inputType = getInputTypeName(operation, context);
         String outputType = getOutputTypeName(operation, context);
         
-        // Generate signature: opName : Config -> Input -> '{IO, Exception, Threads} Output
-        String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", 
-                configType, inputType, outputType);
+        // Generate signature - uses AWSEnv ability instead of Config parameter
+        String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", 
+                inputType, outputType);
         writer.writeSignature(opName, signature);
     }
     

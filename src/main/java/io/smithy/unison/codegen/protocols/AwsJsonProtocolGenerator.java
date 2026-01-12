@@ -93,9 +93,6 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         String outputType = operation.getOutput()
                 .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
-        // Use shared aws.config.Config type
-        String configType = "aws.config.Config";
-        
         // AWS JSON protocols always use POST to /
         String method = "POST";
         String uri = "/";
@@ -112,8 +109,8 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
                 "X-Amz-Target: " + target + "\n" +
                 "Raises exception on error, returns output directly on success.");
         
-        // Write signature
-        String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", configType, inputType, outputType);
+        // Write signature - uses AWSEnv ability instead of Config parameter
+        String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
         // Write function definition with do block
