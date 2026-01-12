@@ -1,0 +1,125 @@
+-- AWS Environment Ability Runtime Module
+-- Provides ability-based signing and region/credential management
+--
+-- This module provides:
+-- - AWSEnv ability for request signing and region access
+-- - Handlers for explicit config and environment variables
+-- - Convenience functions for running AWS operations
+
+-- =============================================================================
+-- AWSEnv Ability
+-- =============================================================================
+
+{{
+AWSEnv ability for AWS request signing and region access.
+
+Operations requiring AWS credentials should declare `{AWSEnv}` instead of
+threading config parameters manually.
+
+Example:
+  result = AWSEnv.provide.fromEnv do
+    signedRequest = AWSEnv.sign "lambda" baseRequest
+    region = AWSEnv.region
+    ...
+}}
+ability AWSEnv where
+  {{
+  Get the configured AWS region (e.g., "us-east-1").
+  }}
+  region : {AWSEnv} Text
+
+  {{
+  Sign an HTTP request for the specified service.
+
+  Adds `x-amz-date`, `x-amz-content-sha256`, `Authorization`, and optional
+  `x-amz-security-token` headers.
+  }}
+  sign : Text -> Http.Request ->{AWSEnv} Http.Request
+
+-- =============================================================================
+-- Handler Implementation
+-- =============================================================================
+
+{{
+Create an AWSEnv handler from explicit region and credentials.
+
+Example:
+  handler = AWSEnv.handler "us-east-1" (aws.config.basicCredentials "AKIA..." "secret...")
+  handle myOperation() with handler
+}}
+AWSEnv.handler : Text -> aws.config.Credentials -> Request AWSEnv a ->{IO, Exception} a
+AWSEnv.handler regionName creds =
+  h : Request AWSEnv a ->{IO, Exception} a
+  h = cases
+    { a } -> a
+    { AWSEnv.region -> k } -> handle k regionName with h
+    { AWSEnv.sign service httpRequest -> k } ->
+      signedRequest = aws.env.signRequest regionName service creds httpRequest
+      handle k signedRequest with h
+  h
+
+{{
+Create an AWSEnv handler from environment variables.
+
+Uses AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally
+AWS_SESSION_TOKEN.
+
+Example:
+  handle myOperation() with !AWSEnv.handler.fromEnv
+}}
+AWSEnv.handler.fromEnv : '{IO, Exception} (Request AWSEnv a ->{IO, Exception} a)
+AWSEnv.handler.fromEnv = do
+  regionName = getEnv "AWS_REGION"
+  creds = match !aws.credentials.fromEnvironment with
+    Some c -> c
+    None -> Exception.raise (Generic.failure "Missing AWS credentials in environment" ())
+  AWSEnv.handler regionName creds
+
+{{
+Convenience wrapper that handles an AWSEnv computation using environment variables.
+
+Example:
+  result = AWSEnv.provide.fromEnv do
+    ... operations using AWSEnv ...
+}}
+AWSEnv.provide.fromEnv : '{g, AWSEnv} r ->{g, IO, Exception} r
+AWSEnv.provide.fromEnv f = handle f() with !AWSEnv.handler.fromEnv
+
+-- =============================================================================
+-- Internal: Request Signing
+-- =============================================================================
+
+{{
+Sign an HTTP request with SigV4.
+
+Internal helper used by the AWSEnv handler.
+}}
+aws.env.signRequest : Text -> Text -> aws.config.Credentials -> Http.Request ->{IO, Exception} Http.Request
+aws.env.signRequest regionName serviceName creds request =
+  -- Build signing config
+  signingConfig = aws.sigv4.SigningConfig.SigningConfig regionName serviceName
+    (aws.sigv4.Credentials.Credentials
+      (aws.config.Credentials.accessKeyId creds)
+      (aws.config.Credentials.secretAccessKey creds)
+      (aws.config.Credentials.sessionToken creds))
+  -- Extract request parts
+  method = Http.Request.method request
+  url = Http.Request.url request
+  path = aws.http.extractPath url
+  queryString = aws.env.extractQueryString url
+  headers = Http.Request.headers request
+  body = Http.Request.body request
+  -- Sign and merge headers
+  signingHeaders = !(aws.sigv4.signRequest signingConfig method path queryString headers body)
+  -- Add signing headers to request
+  newHeaders = headers List.++ signingHeaders
+  Http.Request.Request method url newHeaders body
+
+{{
+Extract query string from URL (everything after ?).
+}}
+aws.env.extractQueryString : Text -> Text
+aws.env.extractQueryString url =
+  match Text.indexOf "?" url with
+    Some idx -> Text.drop (idx Nat.+ 1) url
+    None -> ""
