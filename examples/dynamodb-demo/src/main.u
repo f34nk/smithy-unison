@@ -1,12 +1,9 @@
 -- DynamoDB Demo Application
--- Tests the generated DynamoDB client against LocalStack mock server
+-- Tests the generated DynamoDB client using AWSEnv ability
 --
 -- REQUIREMENTS:
--- To run actual HTTP requests (not placeholders), install @unison/http:
---   lib.install @unison/http/releases/8.0.0
--- Then load the bridge module after aws_http.u:
---   load aws_http_bridge.u
---   add
+-- Set environment variables: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+-- Optionally AWS_SESSION_TOKEN for temporary credentials
 
 -- Import AttributeValue constructors from aws.json namespace
 use aws.json AttributeValue
@@ -25,7 +22,7 @@ use aws.json.AttributeValue'BOOL
 -- Helpers
 -- =============================================================================
 
--- Get environment variable with default value
+-- Get environment variable with a default value
 envOrDefault : Text -> Text -> '{IO, Exception} Text
 envOrDefault name default = do
   result = catch do getEnv name
@@ -33,27 +30,23 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Create basic credentials, using env vars when present, otherwise defaults
+defaultCredentials : '{IO, Exception} aws.config.Credentials
+defaultCredentials = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  aws.config.basicCredentials key secret
+
 -- Fail if a parsed Optional value is None (indicates parsing failure)
-requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome : Text -> Optional a -> '{g} a
 requireSome fieldName opt = do
   match opt with
     Some value -> value
-    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+    None -> bug ("Parsing failed: " ++ fieldName ++ " returned None")
 
 -- =============================================================================
 -- Configuration
 -- =============================================================================
-
--- Create DynamoDB client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.config.Config
-defaultConfig = do
-  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
-  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.config.basicCredentials key secret
-  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  region = aws.config.Region.fromText regionText
-  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "dynamodb") creds
 
 -- Test table name - created by terraform provisioner
 testTable : Text
@@ -72,66 +65,67 @@ testItemData = "Hello from Unison DynamoDB Client!"
 -- =============================================================================
 
 -- Entry point for UCM compile - must have '{IO, Exception} signature
--- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
-  -- Threads.run requires Random ability, use Random.run to provide it
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║  DynamoDB Client Demo (AWSEnv Ability)       ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  region = !(envOrDefault "AWS_REGION" "us-east-1")
+  creds = !defaultCredentials
+  endpointEnv = getEnv "AWS_ENDPOINT"
+  endpoint = if Text.isEmpty endpointEnv then None else Some endpointEnv
+  
+  -- Run demo with AWSEnv, Http and Threads abilities using provided defaults
+  -- Threads.run requires Random, so wrap with Random.run
   Random.run do
     systemfw_concurrent_7_3_0.Threads.run do
-      !runDemo
-
--- Actual demo implementation with Threads ability
-runDemo : '{IO, Exception, Threads} ()
-runDemo = do
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║  DynamoDB Client Demo (LocalStack Backend)  ║"
-  printLine "╚══════════════════════════════════════════════╝"
-  printLine ""
-  
-  config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
-  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
-  printLine ("Table: " ++ testTable)
-  printLine ""
-  
-  -- Demo 1: List Tables
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 1: List Tables"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(listTablesDemo config)
-  
-  -- Demo 2: Put Item
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 2: Put Item"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(putItemDemo config)
-  
-  -- Demo 3: Get Item
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 3: Get Item"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(getItemDemo config)
-  
-  -- Demo 4: Delete Item (cleanup)
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 4: Delete Item (cleanup)"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(deleteItemDemo config)
-  
-  -- Demo 5: Verify Deletion
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 5: Verify Deletion"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(verifyDeletionDemo config)
-  
-  printLine ""
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║         DynamoDB Demo Complete!              ║"
-  printLine "╚══════════════════════════════════════════════╝"
+      handle
+        Http.run do
+          regionVal = AWSEnv.region
+          printLine ("Region: " ++ regionVal)
+          printLine ("Table: " ++ testTable)
+          printLine ""
+          
+          -- Demo 1: List Tables
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 1: List Tables"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !listTablesDemo
+          
+          -- Demo 2: Put Item
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 2: Put Item"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !putItemDemo
+          
+          -- Demo 3: Get Item
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 3: Get Item"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !getItemDemo
+          
+          -- Demo 4: Delete Item (cleanup)
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 4: Delete Item (cleanup)"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !deleteItemDemo
+          
+          -- Demo 5: Verify Deletion
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 5: Verify Deletion"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !verifyDeletionDemo
+          
+          printLine ""
+          printLine "╔══════════════════════════════════════════════╗"
+          printLine "║         DynamoDB Demo Complete!              ║"
+          printLine "╚══════════════════════════════════════════════╝"
+      with AWSEnv.handler region creds endpoint
 
 -- =============================================================================
 -- Demo Functions
@@ -141,16 +135,16 @@ runDemo = do
 List all tables in the account.
 The terraform provisioner creates 'example' table.
 }}
-listTablesDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-listTablesDemo config = do
+listTablesDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+listTablesDemo = do
   printLine "  → Creating ListTablesRequest..."
   
   -- Create request with optional fields
   request = aws.dynamodb.ListTablesInput.ListTablesInput None (Some +100)
   
-  -- Call the DynamoDB client
+  -- Call the DynamoDB client (no config needed - uses AWSEnv)
   printLine "  → Calling listTables..."
-  result = !(aws.dynamodb.listTables config request)
+  result = aws.dynamodb.listTables request
   
   -- Extract and print tables
   printLine "  ✓ SUCCESS: ListTables returned"
@@ -166,8 +160,8 @@ listTablesDemo config = do
 Put a test item into the example table.
 Uses the hash key "TestTableHashKey" as defined in terraform.
 }}
-putItemDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-putItemDemo config = do
+putItemDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+putItemDemo = do
   printLine "  → Creating PutItemRequest..."
   printLine ("    Table: " ++ testTable)
   printLine ("    Key: " ++ testItemKey)
@@ -179,10 +173,7 @@ putItemDemo config = do
   dataAttr = AttributeValue'S testItemData
   
   -- Create the item map
-  item = Map.fromList [
-    ("TestTableHashKey", hashKeyAttr),
-    ("Data", dataAttr)
-  ]
+  item = Map.fromList [("TestTableHashKey", hashKeyAttr), ("Data", dataAttr)]
   
   -- PutItemInput: conditionalOperator, conditionExpression, expected, expressionAttributeNames, 
   --               expressionAttributeValues, item, returnConsumedCapacity, returnItemCollectionMetrics,
@@ -191,15 +182,15 @@ putItemDemo config = do
   
   -- Call the DynamoDB client
   printLine "  → Calling putItem..."
-  result = !(aws.dynamodb.putItem config request)
+  _ = aws.dynamodb.putItem request
   
   printLine "  ✓ SUCCESS: PutItem completed"
 
 {{
 Get the test item we just uploaded.
 }}
-getItemDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-getItemDemo config = do
+getItemDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+getItemDemo = do
   printLine "  → Creating GetItemRequest..."
   printLine ("    Table: " ++ testTable)
   printLine ("    Key: " ++ testItemKey)
@@ -214,7 +205,7 @@ getItemDemo config = do
   
   -- Call the DynamoDB client
   printLine "  → Calling getItem..."
-  result = !(aws.dynamodb.getItem config request)
+  result = aws.dynamodb.getItem request
   
   printLine "  ✓ SUCCESS: GetItem returned"
   
@@ -237,8 +228,8 @@ getItemDemo config = do
 {{
 Delete the test item (cleanup).
 }}
-deleteItemDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-deleteItemDemo config = do
+deleteItemDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+deleteItemDemo = do
   printLine "  → Creating DeleteItemRequest..."
   printLine ("    Table: " ++ testTable)
   printLine ("    Key: " ++ testItemKey)
@@ -254,15 +245,15 @@ deleteItemDemo config = do
   
   -- Call the DynamoDB client
   printLine "  → Calling deleteItem..."
-  result = !(aws.dynamodb.deleteItem config request)
+  _ = aws.dynamodb.deleteItem request
   
   printLine "  ✓ SUCCESS: DeleteItem completed"
 
 {{
 Verify the test item was deleted by trying to get it again.
 }}
-verifyDeletionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-verifyDeletionDemo config = do
+verifyDeletionDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+verifyDeletionDemo = do
   printLine "  → Attempting to get deleted item..."
   printLine ("    Table: " ++ testTable)
   printLine ("    Key: " ++ testItemKey)
@@ -275,7 +266,7 @@ verifyDeletionDemo config = do
   request = GetItemInput.GetItemInput None (Some true) None key None None testTable
   
   -- Call the DynamoDB client
-  result = !(aws.dynamodb.getItem config request)
+  result = aws.dynamodb.getItem request
   
   printLine "  ✓ SUCCESS: GetItem returned"
   
