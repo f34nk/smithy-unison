@@ -1,18 +1,15 @@
 -- Kinesis Demo Application
--- Tests the generated Kinesis client against LocalStack mock server
+-- Tests the generated Kinesis client using AWSEnv ability
 --
 -- REQUIREMENTS:
--- To run actual HTTP requests (not placeholders), install @unison/http:
---   lib.install @unison/http/releases/8.0.0
--- Then load the bridge module after aws_http.u:
---   load aws_http_bridge.u
---   add
+-- Set environment variables: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+-- Optionally AWS_SESSION_TOKEN for temporary credentials
 
 -- =============================================================================
 -- Helpers
 -- =============================================================================
 
--- Get environment variable with default value
+-- Get environment variable with a default value
 envOrDefault : Text -> Text -> '{IO, Exception} Text
 envOrDefault name default = do
   result = catch do getEnv name
@@ -20,27 +17,23 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Create basic credentials, using env vars when present, otherwise defaults
+defaultCredentials : '{IO, Exception} aws.config.Credentials
+defaultCredentials = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  aws.config.basicCredentials key secret
+
 -- Fail if a parsed Optional value is None (indicates parsing failure)
-requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome : Text -> Optional a -> '{g} a
 requireSome fieldName opt = do
   match opt with
     Some value -> value
-    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+    None -> bug ("Parsing failed: " ++ fieldName ++ " returned None")
 
 -- =============================================================================
 -- Configuration
 -- =============================================================================
-
--- Create Kinesis client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.config.Config
-defaultConfig = do
-  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
-  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.config.basicCredentials key secret
-  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  region = aws.config.Region.fromText regionText
-  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "kinesis") creds
 
 -- Test stream name - created by terraform provisioner
 testStreamName : Text
@@ -59,66 +52,67 @@ testMessageData = "Hello from Unison Kinesis Client!"
 -- =============================================================================
 
 -- Entry point for UCM compile - must have '{IO, Exception} signature
--- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
-  -- Threads.run requires Random ability, use Random.run to provide it
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║  Kinesis Client Demo (AWSEnv Ability)       ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  region = !(envOrDefault "AWS_REGION" "us-east-1")
+  creds = !defaultCredentials
+  endpointEnv = getEnv "AWS_ENDPOINT"
+  endpoint = if Text.isEmpty endpointEnv then None else Some endpointEnv
+  
+  -- Run demo with AWSEnv, Http and Threads abilities using provided defaults
+  -- Threads.run requires Random, so wrap with Random.run
   Random.run do
     systemfw_concurrent_7_3_0.Threads.run do
-      !runDemo
-
--- Actual demo implementation with Threads ability
-runDemo : '{IO, Exception, Threads} ()
-runDemo = do
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║  Kinesis Client Demo (LocalStack Backend)   ║"
-  printLine "╚══════════════════════════════════════════════╝"
-  printLine ""
-  
-  config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
-  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
-  printLine ("Stream: " ++ testStreamName)
-  printLine ""
-  
-  -- Demo 1: List Streams
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 1: List Streams"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(listStreamsDemo config)
-  
-  -- Demo 2: Describe Stream
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 2: Describe Stream"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  shardId = !(describeStreamDemo config)
-  
-  -- Demo 3: Put Record
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 3: Put Record"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  sequenceNumber = !(putRecordDemo config)
-  
-  -- Demo 4: Get Shard Iterator
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 4: Get Shard Iterator"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  shardIterator = !(getShardIteratorDemo config shardId)
-  
-  -- Demo 5: Get Records
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 5: Get Records"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(getRecordsDemo config shardIterator)
-  
-  printLine ""
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║         Kinesis Demo Complete!               ║"
-  printLine "╚══════════════════════════════════════════════╝"
+      handle
+        Http.run do
+          regionVal = AWSEnv.region
+          printLine ("Region: " ++ regionVal)
+          printLine ("Stream: " ++ testStreamName)
+          printLine ""
+          
+          -- Demo 1: List Streams
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 1: List Streams"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !listStreamsDemo
+          
+          -- Demo 2: Describe Stream
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 2: Describe Stream"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          shardId = !describeStreamDemo
+          
+          -- Demo 3: Put Record
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 3: Put Record"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          sequenceNumber = !putRecordDemo
+          
+          -- Demo 4: Get Shard Iterator
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 4: Get Shard Iterator"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          shardIterator = !(getShardIteratorDemo shardId)
+          
+          -- Demo 5: Get Records
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 5: Get Records"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !(getRecordsDemo shardIterator)
+          
+          printLine ""
+          printLine "╔══════════════════════════════════════════════╗"
+          printLine "║         Kinesis Demo Complete!               ║"
+          printLine "╚══════════════════════════════════════════════╝"
+      with AWSEnv.handler region creds endpoint
 
 -- =============================================================================
 -- Demo Functions
@@ -128,17 +122,17 @@ runDemo = do
 List all Kinesis streams.
 Verifies that our test stream exists.
 }}
-listStreamsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-listStreamsDemo config = do
+listStreamsDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+listStreamsDemo = do
   printLine "  → Creating ListStreamsInput..."
   printLine "    Limit: 10"
   
   -- ListStreamsInput: exclusiveStartStreamName, limit, nextToken
   request = aws.kinesis.ListStreamsInput.ListStreamsInput None (Some +10) None
   
-  -- Call the Kinesis client
+  -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling listStreams..."
-  result = !(aws.kinesis.listStreams config request)
+  result = aws.kinesis.listStreams request
   
   printLine "  ✓ SUCCESS: ListStreams returned"
   
@@ -170,17 +164,17 @@ listStreamsDemo config = do
 Describe the test stream to get shard information.
 Returns the first shard ID for use in subsequent operations.
 }}
-describeStreamDemo : aws.config.Config -> '{IO, Exception, Threads} Text
-describeStreamDemo config = do
+describeStreamDemo : '{IO, AWSEnv, Exception, Http, Threads} Text
+describeStreamDemo = do
   printLine "  → Creating DescribeStreamInput..."
   printLine ("    StreamName: " ++ testStreamName)
   
   -- DescribeStreamInput: exclusiveStartShardId, limit, streamARN, streamName
   request = aws.kinesis.DescribeStreamInput.DescribeStreamInput None None None (Some testStreamName)
   
-  -- Call the Kinesis client
+  -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling describeStream..."
-  result = !(aws.kinesis.describeStream config request)
+  result = aws.kinesis.describeStream request
   
   printLine "  ✓ SUCCESS: DescribeStream returned"
   
@@ -208,8 +202,8 @@ describeStreamDemo config = do
 Put a test record into the stream.
 Returns the sequence number of the record.
 }}
-putRecordDemo : aws.config.Config -> '{IO, Exception, Threads} Text
-putRecordDemo config = do
+putRecordDemo : '{IO, AWSEnv, Exception, Http, Threads} Text
+putRecordDemo = do
   printLine "  → Creating PutRecordInput..."
   printLine ("    StreamName: " ++ testStreamName)
   printLine ("    PartitionKey: " ++ testPartitionKey)
@@ -221,9 +215,9 @@ putRecordDemo config = do
   -- PutRecordInput: data, explicitHashKey, partitionKey, sequenceNumberForOrdering, streamARN, streamName
   request = aws.kinesis.PutRecordInput.PutRecordInput dataBytes None testPartitionKey None None (Some testStreamName)
   
-  -- Call the Kinesis client
+  -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling putRecord..."
-  result = !(aws.kinesis.putRecord config request)
+  result = aws.kinesis.putRecord request
   
   printLine "  ✓ SUCCESS: PutRecord completed"
   
@@ -240,8 +234,8 @@ putRecordDemo config = do
 Get a shard iterator for reading records from the stream.
 Uses TRIM_HORIZON to start from the beginning of the shard.
 }}
-getShardIteratorDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} Text
-getShardIteratorDemo config shardId = do
+getShardIteratorDemo : Text -> '{IO, AWSEnv, Exception, Http, Threads} Text
+getShardIteratorDemo shardId = do
   printLine "  → Creating GetShardIteratorInput..."
   printLine ("    StreamName: " ++ testStreamName)
   printLine ("    ShardId: " ++ shardId)
@@ -250,9 +244,9 @@ getShardIteratorDemo config shardId = do
   -- GetShardIteratorInput: shardId, shardIteratorType, startingSequenceNumber, streamARN, streamName, timestamp
   request = aws.kinesis.GetShardIteratorInput.GetShardIteratorInput shardId aws.kinesis.ShardIteratorType'TRIM_HORIZON None None (Some testStreamName) None
   
-  -- Call the Kinesis client
+  -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling getShardIterator..."
-  result = !(aws.kinesis.getShardIterator config request)
+  result = aws.kinesis.getShardIterator request
   
   printLine "  ✓ SUCCESS: GetShardIterator returned"
   
@@ -265,17 +259,17 @@ getShardIteratorDemo config shardId = do
 Get records from the stream using the shard iterator.
 Reads and verifies the data we put into the stream.
 }}
-getRecordsDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
-getRecordsDemo config shardIterator = do
+getRecordsDemo : Text -> '{IO, AWSEnv, Exception, Http, Threads} ()
+getRecordsDemo shardIterator = do
   printLine "  → Creating GetRecordsInput..."
   printLine "    Limit: 10"
   
   -- GetRecordsInput: limit, shardIterator, streamARN
   request = aws.kinesis.GetRecordsInput.GetRecordsInput (Some +10) shardIterator None
   
-  -- Call the Kinesis client
+  -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling getRecords..."
-  result = !(aws.kinesis.getRecords config request)
+  result = aws.kinesis.getRecords request
   
   printLine "  ✓ SUCCESS: GetRecords returned"
   
