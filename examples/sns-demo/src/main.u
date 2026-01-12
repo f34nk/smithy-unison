@@ -37,16 +37,12 @@ requireSome fieldName opt = do
 -- Configuration
 -- =============================================================================
 
--- Create SNS client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.config.Config
-defaultConfig = do
+-- Create AWS credentials for LocalStack
+defaultCredentials : '{IO, Exception} aws.config.Credentials
+defaultCredentials = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.config.basicCredentials key secret
-  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  region = aws.config.Region.fromText regionText
-  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "sns") creds
+  aws.config.Credentials.Credentials key secret None
 
 -- Test topic name - created by terraform provisioner
 testTopicName : Text
@@ -64,22 +60,34 @@ testMessage = "Hello from Unison SNS Client!"
 -- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
+  -- Get AWS configuration from environment
+  regionName = !(envOrDefault "AWS_REGION" "us-east-1")
+  creds = !defaultCredentials
+  endpointEnv = catch do getEnv "AWS_ENDPOINT"
+  endpointUrl = match endpointEnv with
+    Either.Right e -> if Text.isEmpty e then None else Some e
+    _ -> None
+  
   -- Threads.run requires Random ability, use Random.run to provide it
   Random.run do
     systemfw_concurrent_7_3_0.Threads.run do
-      !runDemo
+      Http.run do
+        handle !runDemo with AWSEnv.handler regionName creds endpointUrl
 
 -- Actual demo implementation with Threads ability
-runDemo : '{IO, Exception, Threads} ()
+runDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
 runDemo = do
   printLine "╔══════════════════════════════════════════════╗"
   printLine "║     SNS Client Demo (LocalStack Backend)    ║"
   printLine "╚══════════════════════════════════════════════╝"
   printLine ""
   
-  config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
-  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
+  region = AWSEnv.region
+  endpoint = match AWSEnv.endpoint with
+    Some e -> e
+    None -> "https://sns." ++ region ++ ".amazonaws.com"
+  printLine ("Endpoint: " ++ endpoint)
+  printLine ("Region: " ++ region)
   printLine ("Topic: " ++ testTopicName)
   printLine ""
   
@@ -87,28 +95,28 @@ runDemo = do
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 1: List Topics"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  topicArn = !(listTopicsDemo config)
+  topicArn = !listTopicsDemo
   
   -- Demo 2: Get Topic Attributes
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 2: Get Topic Attributes"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(getTopicAttributesDemo config topicArn)
+  !(getTopicAttributesDemo topicArn)
   
   -- Demo 3: List Subscriptions
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 3: List Topic Subscriptions"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(listSubscriptionsDemo config topicArn)
+  !(listSubscriptionsDemo topicArn)
   
   -- Demo 4: Publish Message
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 4: Publish Message to Topic"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(publishMessageDemo config topicArn)
+  !(publishMessageDemo topicArn)
   
   printLine ""
   printLine "╔══════════════════════════════════════════════╗"
@@ -127,8 +135,8 @@ runDemo = do
 List all SNS topics.
 Verifies that our test topic exists and returns its ARN.
 }}
-listTopicsDemo : aws.config.Config -> '{IO, Exception, Threads} Text
-listTopicsDemo config = do
+listTopicsDemo : '{IO, AWSEnv, Exception, Http, Threads} Text
+listTopicsDemo = do
   printLine "  → Creating ListTopicsInput..."
   
   -- ListTopicsInput: nextToken
@@ -136,7 +144,7 @@ listTopicsDemo config = do
   
   -- Call the SNS client
   printLine "  → Calling listTopics..."
-  result = !(aws.sns.listTopics config request)
+  result = !(aws.sns.listTopics request)
   
   printLine "  ✓ SUCCESS: ListTopics returned"
   
@@ -163,8 +171,8 @@ listTopicsDemo config = do
 Get attributes for the test topic.
 Displays topic configuration details.
 }}
-getTopicAttributesDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
-getTopicAttributesDemo config topicArn = do
+getTopicAttributesDemo : Text -> '{IO, AWSEnv, Exception, Http, Threads} ()
+getTopicAttributesDemo topicArn = do
   printLine "  → Creating GetTopicAttributesInput..."
   printLine ("    TopicArn: " ++ topicArn)
   
@@ -173,7 +181,7 @@ getTopicAttributesDemo config topicArn = do
   
   -- Call the SNS client
   printLine "  → Calling getTopicAttributes..."
-  result = !(aws.sns.getTopicAttributes config request)
+  result = !(aws.sns.getTopicAttributes request)
   
   printLine "  ✓ SUCCESS: GetTopicAttributes returned"
   
@@ -195,8 +203,8 @@ getTopicAttributesDemo config topicArn = do
 List all subscriptions for the test topic.
 Shows the SQS queue that is subscribed to receive messages.
 }}
-listSubscriptionsDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
-listSubscriptionsDemo config topicArn = do
+listSubscriptionsDemo : Text -> '{IO, AWSEnv, Exception, Http, Threads} ()
+listSubscriptionsDemo topicArn = do
   printLine "  → Creating ListSubscriptionsByTopicInput..."
   printLine ("    TopicArn: " ++ topicArn)
   
@@ -205,7 +213,7 @@ listSubscriptionsDemo config topicArn = do
   
   -- Call the SNS client
   printLine "  → Calling listSubscriptionsByTopic..."
-  result = !(aws.sns.listSubscriptionsByTopic config request)
+  result = !(aws.sns.listSubscriptionsByTopic request)
   
   printLine "  ✓ SUCCESS: ListSubscriptionsByTopic returned"
   
@@ -237,8 +245,8 @@ Publish a message to the test topic.
 Demonstrates basic SNS publish operation.
 The message will be delivered to all subscribed endpoints (SQS queue).
 }}
-publishMessageDemo : aws.config.Config -> Text -> '{IO, Exception, Threads} ()
-publishMessageDemo config topicArn = do
+publishMessageDemo : Text -> '{IO, AWSEnv, Exception, Http, Threads} ()
+publishMessageDemo topicArn = do
   printLine "  → Creating PublishInput..."
   printLine ("    TopicArn: " ++ topicArn)
   printLine ("    Message: \"" ++ testMessage ++ "\"")
@@ -249,7 +257,7 @@ publishMessageDemo config topicArn = do
   
   -- Call the SNS client
   printLine "  → Calling publish..."
-  result = !(aws.sns.publish config request)
+  result = !(aws.sns.publish request)
   
   printLine "  ✓ SUCCESS: Publish completed"
   
