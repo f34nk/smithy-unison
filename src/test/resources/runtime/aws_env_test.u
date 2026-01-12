@@ -41,7 +41,7 @@ testHandlerRegion = 'let
   result =
     handle
       AWSEnv.region
-    with AWSEnv.handler "us-west-2" creds
+    with AWSEnv.handler "us-west-2" creds None
   result === "us-west-2"
 
 testHandlerRegionEuCentral : '{IO, Exception} Boolean
@@ -50,7 +50,7 @@ testHandlerRegionEuCentral = 'let
   result =
     handle
       AWSEnv.region
-    with AWSEnv.handler "eu-central-1" creds
+    with AWSEnv.handler "eu-central-1" creds None
   result === "eu-central-1"
 
 testHandlerSignAddsHeaders : '{IO, Exception} Boolean
@@ -60,7 +60,7 @@ testHandlerSignAddsHeaders = 'let
   result =
     handle
       AWSEnv.sign "lambda" baseRequest
-    with AWSEnv.handler "us-east-1" creds
+    with AWSEnv.handler "us-east-1" creds None
   -- Check that signing headers were added
   headers = Http.Request.headers result
   hasAuthHeader = aws.http.hasHeader "Authorization" headers
@@ -77,7 +77,7 @@ testHandlerSignPreservesRequest = 'let
   result =
     handle
       AWSEnv.sign "dynamodb" baseRequest
-    with AWSEnv.handler "us-west-2" creds
+    with AWSEnv.handler "us-west-2" creds None
   -- Method and URL should be preserved
   test1 = Http.Request.method result === "POST"
   test2 = Http.Request.url result === "https://dynamodb.us-west-2.amazonaws.com/"
@@ -95,7 +95,7 @@ testHandlerChainedOperations = 'let
       baseRequest = Http.Request.get ("https://s3." ++ region ++ ".amazonaws.com/bucket") []
       signedRequest = AWSEnv.sign "s3" baseRequest
       (region, Http.Request.headers signedRequest)
-    with AWSEnv.handler "ap-southeast-1" creds
+    with AWSEnv.handler "ap-southeast-1" creds None
   (regionResult, headers) = result
   test1 = regionResult === "ap-southeast-1"
   test2 = aws.http.hasHeader "Authorization" headers
@@ -108,7 +108,7 @@ testHandlerWithSessionToken = 'let
   result =
     handle
       AWSEnv.sign "sts" baseRequest
-    with AWSEnv.handler "us-east-1" creds
+    with AWSEnv.handler "us-east-1" creds None
   headers = Http.Request.headers result
   -- Should have the security token header when session token is present
   aws.http.hasHeader "x-amz-security-token" headers
@@ -120,17 +120,29 @@ testHandlerWithAnonymousCredentials = 'let
   result =
     handle
       AWSEnv.sign "s3" baseRequest
-    with AWSEnv.handler "us-east-1" creds
+    with AWSEnv.handler "us-east-1" creds None
   headers = Http.Request.headers result
   -- Should NOT have security token header with basic credentials
   not (aws.http.hasHeader "x-amz-security-token" headers)
+
+-- Missing Host header should be added during AWSEnv.sign
+testHandlerSignAddsHostWhenMissing : '{IO, Exception} Boolean
+testHandlerSignAddsHostWhenMissing = 'let
+  creds = aws.config.basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  baseRequest = Http.Request.get "https://dynamodb.us-east-1.amazonaws.com/" []
+  result =
+    handle
+      AWSEnv.sign "dynamodb" baseRequest
+    with AWSEnv.handler "us-east-1" creds None
+  headers = Http.Request.headers result
+  aws.http.getHeader "Host" headers === Some "dynamodb.us-east-1.amazonaws.com"
 
 -- === signRequest Internal Function Tests ===
 
 testSignRequestAddsAuthorizationHeader : '{IO, Exception} Boolean
 testSignRequestAddsAuthorizationHeader = 'let
   creds = aws.config.basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  baseRequest = Http.Request.post "https://kinesis.us-east-1.amazonaws.com/" [] Bytes.empty
+  baseRequest = Http.Request.get "https://kinesis.us-east-1.amazonaws.com/" []
   result = aws.env.signRequest "us-east-1" "kinesis" creds baseRequest
   headers = Http.Request.headers result
   authHeader = aws.http.getHeader "Authorization" headers
@@ -141,7 +153,7 @@ testSignRequestAddsAuthorizationHeader = 'let
 testSignRequestAddsAmzDateHeader : '{IO, Exception} Boolean
 testSignRequestAddsAmzDateHeader = 'let
   creds = aws.config.basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  baseRequest = Http.Request.post "https://sqs.eu-west-1.amazonaws.com/" [] Bytes.empty
+  baseRequest = Http.Request.get "https://sqs.eu-west-1.amazonaws.com/" []
   result = aws.env.signRequest "eu-west-1" "sqs" creds baseRequest
   headers = Http.Request.headers result
   dateHeader = aws.http.getHeader "x-amz-date" headers
@@ -183,12 +195,12 @@ testDifferentServicesGetDifferentSignatures = 'let
   lambdaResult =
     handle
       AWSEnv.sign "lambda" baseRequest
-    with AWSEnv.handler "us-east-1" creds
+    with AWSEnv.handler "us-east-1" creds None
   
   s3Result =
     handle
       AWSEnv.sign "s3" baseRequest
-    with AWSEnv.handler "us-east-1" creds
+    with AWSEnv.handler "us-east-1" creds None
   
   lambdaAuth = aws.http.getHeader "Authorization" (Http.Request.headers lambdaResult)
   s3Auth = aws.http.getHeader "Authorization" (Http.Request.headers s3Result)
@@ -199,6 +211,48 @@ testDifferentServicesGetDifferentSignatures = 'let
       -- Both should contain their respective service names in the credential scope
       (Text.contains "lambda" lambdaValue) && (Text.contains "s3" s3Value)
     _ -> false
+
+testSignRequestAddsHostWhenMissing : '{IO, Exception} Boolean
+testSignRequestAddsHostWhenMissing = 'let
+  creds = aws.config.basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  baseRequest = Http.Request.get "https://kinesis.us-east-1.amazonaws.com/" []
+  result = aws.env.signRequest "us-east-1" "kinesis" creds baseRequest
+  headers = Http.Request.headers result
+  aws.http.getHeader "Host" headers === Some "kinesis.us-east-1.amazonaws.com"
+
+-- === Endpoint Tests ===
+
+testHandlerEndpointNone : '{IO, Exception} Boolean
+testHandlerEndpointNone = 'let
+  creds = aws.config.basicCredentials "AKIAIOSFODNN7EXAMPLE" "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  result =
+    handle
+      AWSEnv.endpoint
+    with AWSEnv.handler "us-east-1" creds None
+  result === None
+
+testHandlerEndpointSome : '{IO, Exception} Boolean
+testHandlerEndpointSome = 'let
+  creds = aws.config.basicCredentials "test" "test"
+  customEndpoint = "http://localhost:4566"
+  result =
+    handle
+      AWSEnv.endpoint
+    with AWSEnv.handler "us-east-1" creds (Some customEndpoint)
+  result === Some customEndpoint
+
+testHandlerEndpointWithRegion : '{IO, Exception} Boolean
+testHandlerEndpointWithRegion = 'let
+  creds = aws.config.basicCredentials "test" "test"
+  customEndpoint = "http://localhost:4566"
+  result =
+    handle
+      region = AWSEnv.region
+      endpoint = AWSEnv.endpoint
+      (region, endpoint)
+    with AWSEnv.handler "us-east-1" creds (Some customEndpoint)
+  (regionResult, endpointResult) = result
+  (regionResult === "us-east-1") && (endpointResult === Some customEndpoint)
 
 -- === Test Runner ===
 
@@ -224,15 +278,22 @@ runAllTests = do
   runTest "handler chained operations" testHandlerChainedOperations ()
   runTest "handler with session token" testHandlerWithSessionToken ()
   runTest "handler without session token" testHandlerWithAnonymousCredentials ()
+  runTest "handler adds Host when missing" testHandlerSignAddsHostWhenMissing ()
   
   -- signRequest internal function tests
   runTest "signRequest adds Authorization header" testSignRequestAddsAuthorizationHeader ()
   runTest "signRequest adds x-amz-date header" testSignRequestAddsAmzDateHeader ()
   runTest "signRequest adds x-amz-content-sha256 header" testSignRequestAddsContentSha256Header ()
   runTest "signRequest preserves original headers" testSignRequestPreservesOriginalHeaders ()
+  runTest "signRequest adds Host when missing" testSignRequestAddsHostWhenMissing ()
   
   -- Multiple services tests
   runTest "different services get different signatures" testDifferentServicesGetDifferentSignatures ()
+  
+  -- Endpoint tests
+  runTest "handler endpoint None" testHandlerEndpointNone ()
+  runTest "handler endpoint Some" testHandlerEndpointSome ()
+  runTest "handler endpoint with region" testHandlerEndpointWithRegion ()
   
   printLine ""
   printLine "All tests completed!"

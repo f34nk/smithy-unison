@@ -26,6 +26,10 @@ ability AWSEnv where
   -- Get the configured AWS region (e.g., "us-east-1").
   region : {AWSEnv} Text
 
+  -- Get the optional custom endpoint (e.g., "http://localhost:4566" for LocalStack).
+  -- Returns None for standard AWS endpoints.
+  endpoint : {AWSEnv} Optional Text
+
   -- Sign an HTTP request for the specified service.
   -- Adds x-amz-date, x-amz-content-sha256, Authorization, and optional
   -- x-amz-security-token headers.
@@ -36,25 +40,30 @@ ability AWSEnv where
 -- =============================================================================
 
 {{
-Create an AWSEnv handler from explicit region and credentials.
+Create an AWSEnv handler from explicit region, credentials, and optional endpoint.
 
 Example:
-  handler = AWSEnv.handler "us-east-1" (aws.config.basicCredentials "AKIA..." "secret...")
+  handler = AWSEnv.handler "us-east-1" (aws.config.basicCredentials "AKIA..." "secret...") None
+  handle myOperation() with handler
+  
+  -- For LocalStack:
+  handler = AWSEnv.handler "us-east-1" (aws.config.basicCredentials "test" "test") (Some "http://localhost:4566")
   handle myOperation() with handler
 }}
-AWSEnv.handler : Text -> aws.config.Credentials -> builtin.Request {AWSEnv} a ->{IO, Exception} a
-AWSEnv.handler regionName creds = cases
+AWSEnv.handler : Text -> aws.config.Credentials -> Optional Text -> builtin.Request {AWSEnv} a ->{IO, Exception} a
+AWSEnv.handler regionName creds endpointUrl = cases
   { a } -> a
-  { AWSEnv.region -> k } -> handle k regionName with AWSEnv.handler regionName creds
+  { AWSEnv.region -> k } -> handle k regionName with AWSEnv.handler regionName creds endpointUrl
+  { AWSEnv.endpoint -> k } -> handle k endpointUrl with AWSEnv.handler regionName creds endpointUrl
   { AWSEnv.sign service httpRequest -> k } ->
     signedRequest = aws.env.signRequest regionName service creds httpRequest
-    handle k signedRequest with AWSEnv.handler regionName creds
+    handle k signedRequest with AWSEnv.handler regionName creds endpointUrl
 
 {{
 Create an AWSEnv handler from environment variables.
 
 Uses AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally
-AWS_SESSION_TOKEN.
+AWS_SESSION_TOKEN and AWS_ENDPOINT.
 
 Example:
   handle myOperation() with !AWSEnv.handler.fromEnv
@@ -65,7 +74,9 @@ AWSEnv.handler.fromEnv = do
   creds = match !aws.credentials.fromEnvironment with
     Some c -> c
     None -> Exception.raise (Generic.failure "Missing AWS credentials in environment" ())
-  AWSEnv.handler regionName creds
+  endpointEnv = getEnv "AWS_ENDPOINT"
+  endpointUrl = if Text.isEmpty endpointEnv then None else Some endpointEnv
+  AWSEnv.handler regionName creds endpointUrl
 
 {{
 Convenience wrapper that handles an AWSEnv computation using environment variables.
@@ -100,11 +111,14 @@ aws.env.signRequest regionName serviceName creds request =
   path = aws.http.extractPath url
   queryString = aws.env.extractQueryString url
   headers = Http.Request.headers request
+  hostHeader = ("Host", aws.http.extractHost url)
+  hasHost = List.any (h -> match h with (name, _) -> Text.eq (Text.toLowercase name) "host") headers
+  headersWithHost = if hasHost then headers else hostHeader List.+: headers
   body = Http.Request.body request
   -- Sign and merge headers
-  signingHeaders = !(aws.sigv4.signRequest signingConfig method path queryString headers body)
+  signingHeaders = !(aws.sigv4.signRequest signingConfig method path queryString headersWithHost body)
   -- Add signing headers to request
-  newHeaders = headers List.++ signingHeaders
+  newHeaders = headersWithHost List.++ signingHeaders
   Http.Request.Request method url newHeaders body
 
 {{

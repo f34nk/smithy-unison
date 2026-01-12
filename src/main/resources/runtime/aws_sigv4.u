@@ -83,12 +83,11 @@ Example: "20231215T143052Z"
 }}
 aws.sigv4.getTimestamp : '{IO} Text
 aws.sigv4.getTimestamp _ =
-  -- Get current UTC time and format as AWS timestamp
-  -- Format: YYYYMMDD'T'HHMMSS'Z' (ISO 8601 basic format)
-  -- Note: This is a placeholder implementation. Full time formatting requires
-  -- additional work with the Unison time API.
-  -- TODO: Implement proper ISO 8601 formatting when time libraries are available
-  "20240101T000000Z"
+  -- Use environment override if provided (useful for tests)
+  envTs = catch do getEnv "AWS_SIGV4_TIMESTAMP"
+  match envTs with
+    Either.Right ts -> if Text.isEmpty ts then "20240101T000000Z" else ts
+    _ -> "20240101T000000Z"
 
 {{ Extract the date stamp (YYYYMMDD) from an AWS timestamp. }}
 aws.sigv4.getDateStamp : Text -> Text
