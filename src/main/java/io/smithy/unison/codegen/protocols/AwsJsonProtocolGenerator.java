@@ -113,14 +113,19 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         String signature = String.format("%s ->{AWSEnv, Exception, Http} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
         
-        // Write function definition with do block
-        writer.write("$L config input = do", opName);
+        // Write function definition with do block - uses AWSEnv ability
+        writer.write("$L input =", opName);
         writer.indent();
         
+        // Get region from AWSEnv ability
+        writer.write("region = AWSEnv.region");
+        writer.write("");
+        
         // HTTP method and URI
-        writer.write("method = \"$L\"", method);
         writer.write("uri = \"$L\"", uri);
-        writer.write("url = (aws.config.Config.makeUri config) ++ uri");
+        // Extract service name for endpoint URL building
+        String signingServiceName = extractSigningServiceName(serviceName);
+        writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
         
         // Build headers with X-Amz-Target
         writer.write("");
@@ -148,23 +153,16 @@ public class AwsJsonProtocolGenerator implements ProtocolGenerator {
         }
         writer.write("bodyBytes = Text.toUtf8 $L", bodyVar);
         
-        // Sign request with SigV4
+        // Build base request and sign with AWSEnv ability
         writer.write("");
-        writer.write("-- Sign request with AWS Signature Version 4");
-        writer.write("region = aws.config.Region.name (aws.config.Config.region config)");
-        writer.write("creds = aws.config.Config.credentials config");
-        writer.write("-- Convert to aws.sigv4.Credentials for signing");
-        writer.write("awsCreds = aws.sigv4.Credentials.Credentials (aws.config.Credentials.accessKeyId creds) (aws.config.Credentials.secretAccessKey creds) (aws.config.Credentials.sessionToken creds)");
-        // Extract service name for signing (lowercase, without version suffix)
-        String signingServiceName = extractSigningServiceName(serviceName);
-        writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
-        writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("-- Build and sign request with AWSEnv ability");
+        writer.write("baseRequest = Http.Request.post url headers bodyBytes");
+        writer.write("signedRequest = AWSEnv.sign \"$L\" baseRequest", signingServiceName);
         
         // Make HTTP request
         writer.write("");
         writer.write("-- Make HTTP request");
-        writer.write("request = Http.Request.post url allHeaders bodyBytes");
-        writer.write("response = !(executeRequest request)");
+        writer.write("response = !(executeRequest signedRequest)");
         
         // Handle response - check status and parse
         writer.write("");

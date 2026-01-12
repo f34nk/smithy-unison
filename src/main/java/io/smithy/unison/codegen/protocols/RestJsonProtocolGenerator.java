@@ -365,9 +365,13 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         // Write function signature
         generateOperationSignature(operation, writer, context);
         
-        // Write function definition with do block
-        writer.write("$L config input = do", opName);
+        // Write function definition with do block - uses AWSEnv ability
+        writer.write("$L input =", opName);
         writer.indent();
+        
+        // Get region from AWSEnv ability
+        writer.write("region = AWSEnv.region");
+        writer.write("");
         
         // HTTP method and URI
         writer.write("method = \"$L\"", method);
@@ -413,22 +417,23 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     private void generateUrlBuilding(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
-        // Use shared aws.config.Config type
-        String configType = "aws.config.Config";
         String inputType = getInputTypeName(operation, context);
+        
+        // Get signing service name for URL building
+        String serviceName = extractSigningServiceName(context.serviceShape().getId().getName());
         
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
         if (inputShape.isEmpty()) {
-            // No input - just use URI as-is
-            writer.write("url = (aws.config.Config.makeUri config) ++ uri");
+            // No input - just use URI as-is with region from AWSEnv
+            writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", serviceName);
             return;
         }
         
         List<MemberShape> pathParams = getPathParameterMembers(inputShape.get());
         
         if (pathParams.isEmpty()) {
-            // No path parameters - just use URI as-is
-            writer.write("url = (aws.config.Config.makeUri config) ++ uri");
+            // No path parameters - just use URI as-is with region from AWSEnv
+            writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", serviceName);
         } else {
             // Has path parameters - need substitution
             writer.write("");
@@ -462,7 +467,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 currentUri = nextUri;
             }
             
-            writer.write("url = (aws.config.Config.makeUri config) ++ $L", currentUri);
+            writer.write("url = \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ $L", serviceName, currentUri);
         }
     }
     
@@ -812,24 +817,21 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     private void generateHttpCall(OperationShape operation, UnisonWriter writer, UnisonContext context) {
         String method = getHttpMethod(operation);
         String serviceName = extractSigningServiceName(context.serviceShape().getId().getName());
+        String methodLower = method.toLowerCase();
         
+        // Build base request and sign with AWSEnv ability
         writer.write("");
-        writer.write("-- Sign request with AWS Signature Version 4");
-        writer.write("region = aws.config.Region.name (aws.config.Config.region config)");
-        writer.write("creds = aws.config.Config.credentials config");
-        writer.write("awsCreds = aws.sigv4.Credentials.Credentials (aws.config.Credentials.accessKeyId creds) (aws.config.Credentials.secretAccessKey creds) (aws.config.Credentials.sessionToken creds)");
-        writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", serviceName);
-        writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("-- Build and sign request with AWSEnv ability");
+        if (methodLower.equals("get") || methodLower.equals("delete") || methodLower.equals("head")) {
+            writer.write("baseRequest = Http.Request.$L fullUrl headers", methodLower);
+        } else {
+            writer.write("baseRequest = Http.Request.$L fullUrl headers bodyBytes", methodLower);
+        }
+        writer.write("signedRequest = AWSEnv.sign \"$L\" baseRequest", serviceName);
         
         writer.write("");
         writer.write("-- Make HTTP request");
-        String methodLower = method.toLowerCase();
-        if (methodLower.equals("get") || methodLower.equals("delete") || methodLower.equals("head")) {
-            writer.write("request = Http.Request.$L fullUrl allHeaders", methodLower);
-        } else {
-            writer.write("request = Http.Request.$L fullUrl allHeaders bodyBytes", methodLower);
-        }
-        writer.write("response = !(executeRequest request)");
+        writer.write("response = !(executeRequest signedRequest)");
     }
     
     /**
