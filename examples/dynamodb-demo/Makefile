@@ -6,7 +6,6 @@ export AWS_ENDPOINT=http://localhost:$(HOST_PORT)
 export TF_VAR_endpoint=$(AWS_ENDPOINT)
 export SERVICES=dynamodb
 export CONTAINER_NAME=$(SERVICES)-demo
-AWS_SIGV4_TIMESTAMP := $(shell date -u +%Y%m%dT%H%M%SZ)
 
 .PHONY: all
 all: clean generate
@@ -29,12 +28,15 @@ clean: docker/stop
 	rm -f terraform/terraform.tfstate
 	rm -f terraform/terraform.tfstate.backup
 
+# Run demo tests with UCM transcript
+# Note: For reproducible tests, set AWS_SIGV4_TIMESTAMP environment variable:
+#   AWS_SIGV4_TIMESTAMP=20260113T120000Z make test
 .PHONY: test
 test: generate docker/start terraform
 	#
 	# Run $(CONTAINER_NAME)
 	#
-	unset AWS_SESSION_TOKEN && AWS_SIGV4_TIMESTAMP=$(AWS_SIGV4_TIMESTAMP) ucm transcript demo.md
+	unset AWS_SESSION_TOKEN && ucm transcript demo.md
 
 .PHONY: compile-with-lib
 compile-with-lib:
