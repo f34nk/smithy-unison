@@ -80,14 +80,39 @@ Get the current AWS-formatted timestamp.
 
 Returns timestamp in ISO 8601 basic format: YYYYMMDD'T'HHMMSS'Z'
 Example: "20231215T143052Z"
+
+For reproducible tests, set the AWS_SIGV4_TIMESTAMP environment variable.
 }}
-aws.sigv4.getTimestamp : '{IO} Text
+aws.sigv4.getTimestamp : '{IO, Exception} Text
 aws.sigv4.getTimestamp _ =
-  -- Use environment override if provided (useful for tests)
+  -- Check for environment override (useful for reproducible tests)
   envTs = catch do getEnv "AWS_SIGV4_TIMESTAMP"
   match envTs with
-    Either.Right ts -> if Text.isEmpty ts then "20240101T000000Z" else ts
-    _ -> "20240101T000000Z"
+    Either.Right ts -> 
+      if Text.isEmpty ts then
+        -- Get real timestamp from system clock
+        aws.sigv4.getCurrentTimestamp()
+      else ts
+    _ -> aws.sigv4.getCurrentTimestamp()
+
+{{
+Internal helper to get current timestamp in AWS SigV4 format.
+
+Returns timestamp in ISO 8601 basic format without fractional seconds:
+YYYYMMDD'T'HHMMSS'Z'
+
+Example: "20260113T142530Z"
+}}
+aws.sigv4.getCurrentTimestamp : '{IO, Exception} Text
+aws.sigv4.getCurrentTimestamp _ =
+  instant = !realtime
+  -- Convert to UTC OffsetDateTime
+  utcDateTime = Instant.atUTC instant
+  -- Get basic ISO 8601: YYYYMMDDThhmmss.nnnnnnnnnZ
+  basicIso = OffsetDateTime.toBasicISO8601 utcDateTime
+  -- AWS SigV4 format: YYYYMMDDTHHMMSSZ (no fractional seconds)
+  -- Take first 15 chars (YYYYMMDDThhmmss) and append Z
+  (Text.take 15 basicIso) Text.++ "Z"
 
 {{ Extract the date stamp (YYYYMMDD) from an AWS timestamp. }}
 aws.sigv4.getDateStamp : Text -> Text
@@ -259,7 +284,7 @@ Parameters:
 - headers: Request headers as name-value pairs
 - body: Request body bytes
 }}
-aws.sigv4.signRequest : aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+aws.sigv4.signRequest : aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO, Exception} [(Text, Text)]
 aws.sigv4.signRequest config method path queryString headers body _ =
   -- Get timestamp
   timestamp = !aws.sigv4.getTimestamp
@@ -295,7 +320,7 @@ Add SigV4 signing headers to an existing header list.
 Convenience function that signs the request and merges the signing
 headers with the original headers.
 }}
-aws.sigv4.addSigningHeaders : aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO} [(Text, Text)]
+aws.sigv4.addSigningHeaders : aws.sigv4.SigningConfig -> Text -> Text -> Text -> [(Text, Text)] -> Bytes -> '{IO, Exception} [(Text, Text)]
 aws.sigv4.addSigningHeaders config method path queryString headers body _ =
   signingHeaders = !(aws.sigv4.signRequest config method path queryString headers body)
   headers ++ signingHeaders

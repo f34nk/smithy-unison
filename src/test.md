@@ -16,6 +16,9 @@ scratch/main> add
 
 scratch/main> load main/resources/runtime/aws_sigv4.u
 scratch/main> add
+scratch/main> load test/resources/runtime/aws_sigv4_test.u
+scratch/main> add
+scratch/main> run aws.sigv4.test.runAllTests
 
 scratch/main> load main/resources/runtime/aws_json.u
 scratch/main> add

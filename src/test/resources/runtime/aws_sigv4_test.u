@@ -1,0 +1,209 @@
+-- Unit tests for AWS SigV4 Runtime Module
+-- Tests for timestamp generation and format validation
+
+namespace aws.sigv4.test
+
+use aws.sigv4
+use Text ++
+
+-- === Timestamp Format Tests ===
+
+-- Test that getCurrentTimestamp returns exactly 16 characters
+testTimestampLength : '{IO, Exception} Boolean
+testTimestampLength = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  Text.size timestamp === 16
+
+-- Test that timestamp has 'T' separator at position 8
+testTimestampTSeparator : '{IO, Exception} Boolean
+testTimestampTSeparator = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  -- Position 8 (0-indexed) should be 'T'
+  Text.take 1 (Text.drop 8 timestamp) === "T"
+
+-- Test that timestamp ends with 'Z' suffix
+testTimestampZSuffix : '{IO, Exception} Boolean
+testTimestampZSuffix = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  -- Last character (position 15) should be 'Z'
+  Text.take 1 (Text.drop 15 timestamp) === "Z"
+
+-- Test that date portion (first 8 chars) is numeric
+testTimestampDateNumeric : '{IO, Exception} Boolean
+testTimestampDateNumeric = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  datePart = Text.take 8 timestamp
+  match Nat.fromText datePart with
+    Some _ -> true
+    None -> false
+
+-- Test that time portion (chars 9-14) is numeric
+testTimestampTimeNumeric : '{IO, Exception} Boolean
+testTimestampTimeNumeric = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  timePart = Text.take 6 (Text.drop 9 timestamp)
+  match Nat.fromText timePart with
+    Some _ -> true
+    None -> false
+
+-- === Timestamp Reasonableness Tests ===
+
+-- Test that year is >= 2020
+testTimestampYearMinimum : '{IO, Exception} Boolean
+testTimestampYearMinimum = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  yearText = Text.take 4 timestamp
+  match Nat.fromText yearText with
+    Some year -> Nat.gteq year 2020
+    None -> false
+
+-- Test that year is < 2100 (sanity check)
+testTimestampYearMaximum : '{IO, Exception} Boolean
+testTimestampYearMaximum = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  yearText = Text.take 4 timestamp
+  match Nat.fromText yearText with
+    Some year -> Nat.lt year 2100
+    None -> false
+
+-- Test that month is valid (01-12)
+testTimestampMonthValid : '{IO, Exception} Boolean
+testTimestampMonthValid = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  monthText = Text.take 2 (Text.drop 4 timestamp)
+  match Nat.fromText monthText with
+    Some month -> Nat.gteq month 1 && Nat.lteq month 12
+    None -> false
+
+-- Test that day is valid (01-31)
+testTimestampDayValid : '{IO, Exception} Boolean
+testTimestampDayValid = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  dayText = Text.take 2 (Text.drop 6 timestamp)
+  match Nat.fromText dayText with
+    Some day -> Nat.gteq day 1 && Nat.lteq day 31
+    None -> false
+
+-- Test that hour is valid (00-23)
+testTimestampHourValid : '{IO, Exception} Boolean
+testTimestampHourValid = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  hourText = Text.take 2 (Text.drop 9 timestamp)
+  match Nat.fromText hourText with
+    Some hour -> Nat.lteq hour 23
+    None -> false
+
+-- Test that minute is valid (00-59)
+testTimestampMinuteValid : '{IO, Exception} Boolean
+testTimestampMinuteValid = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  minuteText = Text.take 2 (Text.drop 11 timestamp)
+  match Nat.fromText minuteText with
+    Some minute -> Nat.lteq minute 59
+    None -> false
+
+-- Test that second is valid (00-59)
+testTimestampSecondValid : '{IO, Exception} Boolean
+testTimestampSecondValid = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  secondText = Text.take 2 (Text.drop 13 timestamp)
+  match Nat.fromText secondText with
+    Some second -> Nat.lteq second 59
+    None -> false
+
+-- === getDateStamp Tests ===
+
+-- Test that getDateStamp extracts first 8 characters
+testGetDateStamp : '{IO, Exception} Boolean
+testGetDateStamp = do
+  timestamp = "20260114T153045Z"
+  datestamp = aws.sigv4.getDateStamp timestamp
+  datestamp === "20260114"
+
+-- Test getDateStamp with actual timestamp
+testGetDateStampFromCurrent : '{IO, Exception} Boolean
+testGetDateStampFromCurrent = do
+  timestamp = !aws.sigv4.getCurrentTimestamp
+  datestamp = aws.sigv4.getDateStamp timestamp
+  -- Datestamp should be 8 characters
+  test1 = Text.size datestamp === 8
+  -- Should match first 8 chars of timestamp
+  test2 = datestamp === Text.take 8 timestamp
+  test1 && test2
+
+-- === getTimestamp (with env override) Tests ===
+
+-- Test that getTimestamp returns valid format (may use env var or real time)
+testGetTimestampFormat : '{IO, Exception} Boolean
+testGetTimestampFormat = do
+  timestamp = !aws.sigv4.getTimestamp
+  -- Should always be 16 characters regardless of source
+  test1 = Text.size timestamp === 16
+  -- Should have T separator
+  test2 = Text.take 1 (Text.drop 8 timestamp) === "T"
+  -- Should end with Z
+  test3 = Text.take 1 (Text.drop 15 timestamp) === "Z"
+  test1 && test2 && test3
+
+-- === Multiple Call Consistency Tests ===
+
+-- Test that consecutive calls return consistent format
+testTimestampConsistentFormat : '{IO, Exception} Boolean
+testTimestampConsistentFormat = do
+  ts1 = !aws.sigv4.getCurrentTimestamp
+  ts2 = !aws.sigv4.getCurrentTimestamp
+  ts3 = !aws.sigv4.getCurrentTimestamp
+  -- All should be 16 chars
+  test1 = Text.size ts1 === 16
+  test2 = Text.size ts2 === 16
+  test3 = Text.size ts3 === 16
+  -- All should have valid format
+  test4 = Text.take 1 (Text.drop 8 ts1) === "T"
+  test5 = Text.take 1 (Text.drop 8 ts2) === "T"
+  test6 = Text.take 1 (Text.drop 8 ts3) === "T"
+  test1 && test2 && test3 && test4 && test5 && test6
+
+-- === Test Runner ===
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "Running AWS SigV4 Runtime Tests..."
+  printLine ""
+  
+  printLine "-- Timestamp Format Tests --"
+  runTest "timestamp length (16 chars)" testTimestampLength ()
+  runTest "timestamp T separator" testTimestampTSeparator ()
+  runTest "timestamp Z suffix" testTimestampZSuffix ()
+  runTest "timestamp date is numeric" testTimestampDateNumeric ()
+  runTest "timestamp time is numeric" testTimestampTimeNumeric ()
+  
+  printLine ""
+  printLine "-- Timestamp Reasonableness Tests --"
+  runTest "year >= 2020" testTimestampYearMinimum ()
+  runTest "year < 2100" testTimestampYearMaximum ()
+  runTest "month valid (01-12)" testTimestampMonthValid ()
+  runTest "day valid (01-31)" testTimestampDayValid ()
+  runTest "hour valid (00-23)" testTimestampHourValid ()
+  runTest "minute valid (00-59)" testTimestampMinuteValid ()
+  runTest "second valid (00-59)" testTimestampSecondValid ()
+  
+  printLine ""
+  printLine "-- getDateStamp Tests --"
+  runTest "getDateStamp extracts date" testGetDateStamp ()
+  runTest "getDateStamp from current" testGetDateStampFromCurrent ()
+  
+  printLine ""
+  printLine "-- getTimestamp Tests --"
+  runTest "getTimestamp format" testGetTimestampFormat ()
+  
+  printLine ""
+  printLine "-- Consistency Tests --"
+  runTest "consistent format across calls" testTimestampConsistentFormat ()
+  
+  printLine ""
+  printLine "All SigV4 tests completed!"
+
+runTest : Text -> '{IO, Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)
