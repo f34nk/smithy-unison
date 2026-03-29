@@ -973,7 +973,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         // Generate helper function to parse a single element (Exception when nested Soup parsers are used)
         writer.write("");
         writer.write("$L : Soup ->{Exception} $L", parserName, structTypeName);
-        writer.write("$L elemSoup = do", parserName);
+        writer.write("$L elemSoup =", parserName);
         writer.indent();
         writer.write("");
         
@@ -1122,8 +1122,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             }
         }
         
-        // Construct the structure
-        writer.write("$L", structTypeName + "." + UnisonSymbolProvider.toUnisonTypeName(elementStructure.getId().getName()));
+        // Construct the structure (unqualified Type.Type — same as generateFieldExtraction).
+        // Namespaced aws.ec2.Foo.Foo is invalid; the data constructor is Foo.Foo in scope.
+        String elementTypeName = UnisonSymbolProvider.toUnisonTypeName(elementStructure.getId().getName());
+        writer.write("$L", elementTypeName + "." + elementTypeName);
         for (MemberShape structMember : structMembers) {
             String fieldName = UnisonSymbolProvider.toUnisonFunctionName(structMember.getMemberName());
             writer.write("  $L", UnisonReservedWords.appendSuffix(fieldName, "Val"));

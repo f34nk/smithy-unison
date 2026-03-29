@@ -260,13 +260,17 @@ aws.xml.findAttr tagName attrName soup =
 Extract all elements with a given name and get their text content.
 
 Returns a list of text values from matching elements.
+
+Uses aws.xml.runXml so this works inside Exception-based response parsers
+(Soup.named requires Throw XMLError from @unison/xml).
 }}
-aws.xml.findAllText : Text -> Soup -> [Text]
+aws.xml.findAllText : Text -> Soup ->{Exception} [Text]
 aws.xml.findAllText tagName soup =
-  match Soup.withXML (Soup.toXML (Soup.root soup)) (s ->
-      Soup.text (Soup.named tagName (Soup.root s))) with
-    Left _ -> []
-    Right texts -> texts
+  aws.xml.runXml do
+    match Soup.withXML (Soup.toXML (Soup.root soup)) (s ->
+        Soup.text (Soup.named tagName (Soup.root s))) with
+      Left _ -> []
+      Right texts -> texts
 
 {{
 Collect child elements as a list using a mapping function.
@@ -478,7 +482,7 @@ aws.xml.parseFlatList = aws.xml.parseList
 {{
 Soup-native alias for flattened lists (same behaviour as parseListSoup).
 }}
-aws.xml.parseFlatListSoup : Text -> (Soup -> a) -> Soup ->{Exception} [a]
+aws.xml.parseFlatListSoup : Text -> (Soup ->{Exception} a) -> Soup ->{Exception} [a]
 aws.xml.parseFlatListSoup = aws.xml.parseListSoup
 
 {{
@@ -487,21 +491,25 @@ Parse a list of child elements using a Soup-based mapper function.
 Finds all child elements with the given tag name and applies the parser
 function to each Soup element directly, with no intermediate text conversion.
 
+The parser may use Exception (e.g. requireText) — navigation runs inside
+aws.xml.runXml (Throw XMLError only), then each element is parsed in the
+caller Exception context.
+
 Example:
   items = aws.xml.parseListSoup "Item" parseItemFromSoup containerSoup
 
-Uses aws.xml.runXml so this works inside Exception-based response parsers
-(Soup.named and Soup.childTags require Throw XMLError from @unison/xml).
+Uses aws.xml.runXml for Soup.named / childTags (Throw XMLError from @unison/xml).
 }}
-aws.xml.parseListSoup : Text -> (Soup -> a) -> Soup ->{Exception} [a]
+aws.xml.parseListSoup : Text -> (Soup ->{Exception} a) -> Soup ->{Exception} [a]
 aws.xml.parseListSoup tagName parser soup =
   -- Soup.root s is the [document] meta-node, not the serialized element.
   -- One childTags descends to the serialized element; a second descends to its children.
-  aws.xml.runXml do
+  elemSoups = aws.xml.runXml do
     match Soup.withXML (Soup.toXML soup) (s ->
-      parser (Soup.named tagName (Soup.childTags (Soup.childTags (Soup.root s))))) with
+      Soup.named tagName (Soup.childTags (Soup.childTags (Soup.root s)))) with
       Left _ -> []
-      Right results -> results
+      Right soups -> soups
+  List.map parser elemSoups
 
 {{
 Parse an optional wrapped list using a Soup-based mapper function.
@@ -509,7 +517,7 @@ Parse an optional wrapped list using a Soup-based mapper function.
 Returns `None` if the container element is not found. If the container
 exists but has no matching child elements, returns `Some` with an empty list.
 }}
-aws.xml.parseOptionalWrappedListSoup : Text -> Text -> (Soup -> a) -> Soup ->{Exception} Optional [a]
+aws.xml.parseOptionalWrappedListSoup : Text -> Text -> (Soup ->{Exception} a) -> Soup ->{Exception} Optional [a]
 aws.xml.parseOptionalWrappedListSoup containerTag itemTag parser soup =
   match aws.xml.findOpt containerTag soup with
     None -> None
@@ -521,7 +529,7 @@ Parse a nested structure element using a Soup-based mapper function.
 Finds the element by name and applies the parser to the Soup cursor.
 Returns None if the element is not found.
 }}
-aws.xml.parseNestedSoup : Text -> (Soup -> a) -> Soup -> Optional a
+aws.xml.parseNestedSoup : Text -> (Soup ->{Exception} a) -> Soup ->{Exception} Optional a
 aws.xml.parseNestedSoup tagName parser soup =
   match aws.xml.findOpt tagName soup with
     None -> None
