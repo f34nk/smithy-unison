@@ -994,7 +994,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.indent();
         
         // Convert XML text to Soup for field extraction
-        writer.write("elemSoup = Soup.parseXML elemXml");
+        writer.write("elemSoup = aws.xml.parse elemXml");
         writer.write("");
         
         // Extract each field from the element - handle all types properly
@@ -1279,7 +1279,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         
         writer.write("-- AWS Query response structure:");
         writer.write("-- <OperationNameResponse><OperationNameResult>...</OperationNameResult></OperationNameResponse>");
-        writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
+        writer.write("soup = !(aws.xml.parseResponse response)");
         writer.write("resultSoup = aws.xml.runXml (aws.xml.findAndDrill soup [\"$LResponse\", \"$LResult\"])", operationName, operationName);
     }
     
@@ -1506,7 +1506,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                                           String errorTypeName, UnisonWriter writer) {
         // Parse AWS Query error XML structure using Soup
         writer.write("-- Parse AWS Query error response using Soup");
-        writer.write("soup = Soup.parseXML (fromUtf8 (Http.Response.body response))");
+        writer.write("soup = !(aws.xml.parseResponse response)");
         writer.write("errorSoup = aws.xml.runXml (aws.xml.findAndDrill soup [\"ErrorResponse\", \"Error\"])");
         writer.write("code = aws.xml.findText \"Code\" errorSoup |> Optional.getOrElse \"UnknownError\"");
         writer.write("message = aws.xml.findText \"Message\" errorSoup |> Optional.getOrElse \"\"");

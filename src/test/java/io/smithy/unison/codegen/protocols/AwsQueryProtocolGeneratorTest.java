@@ -188,8 +188,8 @@ public class AwsQueryProtocolGeneratorTest {
         // Verify AWS Query response structure navigation (Soup-based)
         assertTrue(code.contains("SendMessageResponse"), "Should look for operation response wrapper");
         assertTrue(code.contains("SendMessageResult"), "Should extract result element");
-        assertTrue(code.contains("Soup.parseXML") || code.contains("aws.xml.findAndDrill"), 
-                "Should use Soup-based XML parsing");
+        assertTrue(code.contains("aws.xml.parseResponse"), "Should use bridge entry point for response parsing");
+        assertTrue(code.contains("aws.xml.findAndDrill"), "Should use bridge to navigate response wrapper");
         assertTrue(code.contains("resultSoup"), "Should use resultSoup for field extraction");
         
         // Verify field extraction
@@ -224,8 +224,8 @@ public class AwsQueryProtocolGeneratorTest {
         // Verify AWS Query error structure (Soup-based)
         assertTrue(code.contains("ErrorResponse"), "Should parse ErrorResponse wrapper");
         assertTrue(code.contains("Error"), "Should extract Error element");
-        assertTrue(code.contains("Soup.parseXML") || code.contains("aws.xml.findAndDrill"), 
-                "Should use Soup-based parsing");
+        assertTrue(code.contains("aws.xml.parseResponse"), "Should use bridge entry point for error parsing");
+        assertTrue(code.contains("aws.xml.findAndDrill"), "Should use bridge to navigate error wrapper");
         assertTrue(code.contains("aws.xml.findText"), "Should use Soup-based text extraction");
         assertTrue(code.contains("Code"), "Should extract error code");
         assertTrue(code.contains("Message"), "Should extract error message");

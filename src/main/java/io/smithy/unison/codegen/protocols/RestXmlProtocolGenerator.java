@@ -560,7 +560,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 generatePayloadExtraction(payloadMember.get(), model, writer);
             } else if (!bodyMembers.isEmpty()) {
                 // Generate XML parsing for body members using Soup
-                writer.write("soup = Soup.parseXML (fromUtf8 (Response.body response))");
+                writer.write("soup = !(aws.xml.parseResponse response)");
                 for (MemberShape member : bodyMembers) {
                     String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
                     String varName = memberName + "Val";
@@ -800,8 +800,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("$L.parseError : Response -> $L", clientNamespace, errorTypeName);
         writer.write("$L.parseError response =", clientNamespace);
         writer.indent();
-        writer.write("-- Parse XML error using Soup: <Error><Code>...</Code><Message>...</Message></Error>");
-        writer.write("soup = Soup.parseXML (fromUtf8 (Response.body response))");
+        writer.write("-- Parse XML error response");
+        writer.write("soup = !(aws.xml.parseResponse response)");
         writer.write("code = aws.xml.findText \"Code\" soup |> Optional.getOrElse \"UnknownError\"");
         writer.write("message = aws.xml.findText \"Message\" soup |> Optional.getOrElse \"\"");
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);
@@ -828,7 +828,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 output.getId().getName());
         
         // Parse response body to Soup
-        writer.write("soup = Soup.parseXML (fromUtf8 (Response.body response))");
+        writer.write("soup = !(aws.xml.parseResponse response)");
         
         // Get all members in order (important for constructor)
         List<MemberShape> allMembers = new ArrayList<>(output.getAllMembers().values());
