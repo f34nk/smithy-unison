@@ -11,10 +11,14 @@
 --
 -- Load this module AFTER loading aws_xml.u and installing @unison/xml
 
--- Helper to convert Throw to Optional without ambiguity
--- Uses Throw.toEither which is unambiguous, then converts to Optional
-throwToOptional : '{g, Throw e} a ->{g} Optional a
-throwToOptional thunk = 
+{{
+Internal helper: convert a Throw-based thunk to Optional.
+
+Uses Throw.toEither to avoid ambiguity in handler resolution.
+Used only within aws_xml_bridge.u.
+}}
+aws.xml.throwToOptional : '{g, Throw e} a ->{g} Optional a
+aws.xml.throwToOptional thunk =
   match Throw.toEither thunk with
     Left _ -> None
     Right result -> Some result
@@ -109,7 +113,7 @@ Find an element, returning Optional instead of throwing.
 }}
 aws.xml.findOpt : Text -> Soup -> Optional Soup
 aws.xml.findOpt tagName soup =
-  throwToOptional do Soup.findFirst tagName soup
+  aws.xml.throwToOptional do Soup.findFirst tagName soup
 
 {{
 Iterate over child elements (tags only, skips text nodes).
@@ -178,7 +182,7 @@ Get an attribute value as Optional.
 }}
 aws.xml.attrOpt : Text -> Soup -> Optional Text
 aws.xml.attrOpt name soup =
-  throwToOptional do Soup.getAttribute name soup
+  aws.xml.throwToOptional do Soup.getAttribute name soup
 
 {{
 Check if the current element has an attribute.
@@ -197,7 +201,7 @@ Returns Optional - None if element not found.
 }}
 aws.xml.findText : Text -> Soup -> Optional Text
 aws.xml.findText tagName soup =
-  throwToOptional do
+  aws.xml.throwToOptional do
     elem = Soup.findFirst tagName soup
     Soup.text elem
 
@@ -244,7 +248,7 @@ Returns Optional - None if element or attribute not found.
 }}
 aws.xml.findAttr : Text -> Text -> Soup -> Optional Text
 aws.xml.findAttr tagName attrName soup =
-  throwToOptional do
+  aws.xml.throwToOptional do
     elem = Soup.findFirst tagName soup
     Soup.getAttribute attrName elem
 
@@ -304,7 +308,7 @@ aws.xml.runXml thunk =
 Run an XML operation returning Optional instead of throwing.
 }}
 aws.xml.tryXml : '{Throw XMLError} a -> Optional a
-aws.xml.tryXml = throwToOptional
+aws.xml.tryXml = aws.xml.throwToOptional
 
 -- =============================================================================
 -- XMLNode Helpers
