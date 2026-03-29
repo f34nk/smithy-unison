@@ -62,6 +62,10 @@ scratch/main> load test/resources/runtime/aws_xml_bridge_test.u
 scratch/main> add
 scratch/main> run aws.xml.bridge.test.runAllTests
 
+scratch/main> load test/resources/runtime/aws_xml_soup_list_test.u
+scratch/main> add
+scratch/main> run aws.xml.soup.list.test.runAllTests
+
 scratch/main> load main/resources/runtime/aws_query.u
 scratch/main> add
 scratch/main> load test/resources/runtime/aws_query_test.u

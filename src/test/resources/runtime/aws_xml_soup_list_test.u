@@ -1,0 +1,213 @@
+-- Isolated unit tests for parseListSoup / parseOptionalWrappedListSoup
+--
+-- These tests reproduce the SNS ListTopics "found 0 topic(s)" failure.
+-- The bug hypothesis: Soup.toXML on a non-root cursor returns the FULL
+-- document, so Soup.root inside parseListSoup navigates to the document
+-- root (ListTopicsResponse) rather than the container element (Topics),
+-- causing Soup.named "member" to find nothing.
+
+namespace aws.xml.soup.list.test
+
+use aws.xml
+use Text ++
+
+-- Real SNS ListTopics XML (lowercase <member> as LocalStack/AWS emits it)
+sampleListTopicsXml : Text
+sampleListTopicsXml =
+  "<?xml version='1.0' encoding='utf-8'?>" ++
+  "<ListTopicsResponse xmlns=\"http://sns.amazonaws.com/doc/2010-03-31/\">" ++
+  "<ListTopicsResult>" ++
+  "<Topics>" ++
+  "<member><TopicArn>arn:aws:sns:us-east-1:000000000000:sns-demo-topic</TopicArn></member>" ++
+  "<member><TopicArn>arn:aws:sns:us-east-1:000000000000:other-topic</TopicArn></member>" ++
+  "</Topics>" ++
+  "</ListTopicsResult>" ++
+  "<ResponseMetadata><RequestId>test-req-123</RequestId></ResponseMetadata>" ++
+  "</ListTopicsResponse>"
+
+-- ─────────────────────────────────────────────────────────────────
+-- Diagnostic: inspect what Soup.toXML returns for a sub-element
+-- ─────────────────────────────────────────────────────────────────
+
+-- Shows the first 120 chars of the XML that Soup.toXML produces when
+-- the cursor is positioned at the <Topics> element (not the document root).
+-- If it starts with "<?xml" or "<ListTopics" the full document is returned
+-- (bug). If it starts with "<Topics>" only the subtree is returned (good).
+testSoupToXmlReturnsSubtree : '{IO, Exception} ()
+testSoupToXmlReturnsSubtree = do
+  printLine "=== Diagnostic: what does Soup.toXML return for a sub-element cursor? ==="
+  soup = aws.xml.parse sampleListTopicsXml
+  resultSoup = aws.xml.runXml (aws.xml.findAndDrill soup ["ListTopicsResponse", "ListTopicsResult"])
+  topicsOpt = aws.xml.findOpt "Topics" resultSoup
+  match topicsOpt with
+    None -> printLine "  FAIL: could not navigate to <Topics>"
+    Some topicsSoup ->
+      xmlText = handle Soup.toXML topicsSoup with cases
+        { x }               -> x
+        { Throw.throw _ -> _ } -> "<<Soup.toXML threw>>"
+      preview = Text.take 120 xmlText
+      printLine ("  Soup.toXML preview (first 120 chars):")
+      printLine ("    " ++ preview)
+      if Text.startsWith "<Topics>" xmlText then
+        printLine "  → Subtree only ✓ (Soup.toXML is scoped to cursor)"
+      else
+        printLine "  → Full document ✗ (Soup.toXML returns whole doc — parseListSoup will navigate wrong root)"
+  printLine ""
+
+-- ─────────────────────────────────────────────────────────────────
+-- Core regression test: parseOptionalWrappedListSoup with lowercase "member"
+-- ─────────────────────────────────────────────────────────────────
+
+testParseOptionalWrappedListSoup_lowercase : '{Exception} Boolean
+testParseOptionalWrappedListSoup_lowercase = 'let
+  soup = aws.xml.parse sampleListTopicsXml
+  resultSoup = aws.xml.runXml (aws.xml.findAndDrill soup ["ListTopicsResponse", "ListTopicsResult"])
+  parseArn elemSoup = Optional.getOrElse "MISSING" (aws.xml.findText "TopicArn" elemSoup)
+  result = aws.xml.parseOptionalWrappedListSoup "Topics" "member" parseArn resultSoup
+  match result with
+    None    -> false  -- Topics element not found at all
+    Some [] -> false  -- Topics found but no members (the bug)
+    Some items -> List.size items === 2
+
+testParseOptionalWrappedListSoup_uppercase : '{Exception} Boolean
+testParseOptionalWrappedListSoup_uppercase = 'let
+  soup = aws.xml.parse sampleListTopicsXml
+  resultSoup = aws.xml.runXml (aws.xml.findAndDrill soup ["ListTopicsResponse", "ListTopicsResult"])
+  parseArn elemSoup = Optional.getOrElse "MISSING" (aws.xml.findText "TopicArn" elemSoup)
+  result = aws.xml.parseOptionalWrappedListSoup "Topics" "Member" parseArn resultSoup
+  match result with
+    None    -> false
+    Some [] -> false  -- Uppercase "Member" also returns empty (wrong tag name for SNS)
+    Some items -> List.size items === 2
+
+-- ─────────────────────────────────────────────────────────────────
+-- Cross-check: text-based path always worked (confirms XML is correct)
+-- ─────────────────────────────────────────────────────────────────
+
+testTextBasedPath_lowercase : '{Exception} Boolean
+testTextBasedPath_lowercase = 'let
+  -- The text extraction path that parseOptionalWrappedList uses internally
+  arns = aws.xml.extractAllBlocks "member" sampleListTopicsXml
+  List.size arns === 2
+
+testTextBasedPath_uppercase : '{Exception} Boolean
+testTextBasedPath_uppercase = 'let
+  arns = aws.xml.extractAllBlocks "Member" sampleListTopicsXml
+  List.size arns === 2   -- should be 0 — SNS uses lowercase
+
+-- ─────────────────────────────────────────────────────────────────
+-- Step-by-step drill-down into parseListSoup internals
+-- ─────────────────────────────────────────────────────────────────
+
+-- Does Soup.withXML fire at all for a simple callback?
+testWithXmlBasic : '{IO, Exception} ()
+testWithXmlBasic = do
+  simpleXml = "<Topics><member><TopicArn>arn:test:topic1</TopicArn></member></Topics>"
+  soup = aws.xml.parse simpleXml
+  rootSoup = Soup.root soup
+  xmlForSoup = handle Soup.toXML rootSoup with cases
+    { x } -> x
+    { Throw.throw _ -> _ } -> "<<error>>"
+
+  -- Test 1: callback that returns a constant — verifies withXML fires at all
+  r1 = Soup.withXML xmlForSoup (s -> "fired")
+  printLine ("  withXML constant callback: " ++ match r1 with
+    Left err -> "Left " ++ err
+    Right xs -> "Right " ++ Nat.toText (List.size xs) ++ " item(s)")
+
+  -- Test 2: callback that navigates to root and fires its tag name
+  r2 = Soup.withXML xmlForSoup (s ->
+    Soup.tagName (Soup.root s))
+  printLine ("  withXML root tagName: " ++ match r2 with
+    Left err -> "Left " ++ err
+    Right xs -> "Right " ++ Text.join ", " xs)
+
+  -- Test 3: childTags fires via Each — count children
+  r3 = Soup.withXML xmlForSoup (s ->
+    Soup.tagName (Soup.childTags (Soup.root s)))
+  printLine ("  withXML childTags tagNames: " ++ match r3 with
+    Left err -> "Left " ++ err
+    Right xs -> "Right " ++ Text.join ", " xs)
+
+  -- Test 4: Soup.named filter on childTags
+  r4 = Soup.withXML xmlForSoup (s ->
+    Soup.tagName (Soup.named "member" (Soup.childTags (Soup.root s))))
+  printLine ("  withXML named 'member': " ++ match r4 with
+    Left err -> "Left " ++ err
+    Right xs -> "Right " ++ Text.join ", " xs)
+
+  -- Test 5: parseListSoup with identity (tag -> tag name)
+  r5 = aws.xml.parseListSoup "member" (e -> Optional.getOrElse "?" (aws.xml.findText "TopicArn" e)) rootSoup
+  printLine ("  parseListSoup result size: " ++ Nat.toText (List.size r5))
+  printLine ""
+
+-- Does parseChildList work? (same pattern without Soup.named)
+-- parseChildList needs {Throw XMLError} (from Soup.toXML), wrap with runXml.
+testParseChildList : '{IO, Exception} ()
+testParseChildList = do
+  simpleXml = "<Topics><member><TopicArn>arn:test:topic1</TopicArn></member><member><TopicArn>arn:test:topic2</TopicArn></member></Topics>"
+  soup = aws.xml.parse simpleXml
+  rootSoup = Soup.root soup
+  parseArn elemSoup = Optional.getOrElse "MISSING" (aws.xml.findText "TopicArn" elemSoup)
+  items = aws.xml.runXml '(aws.xml.parseChildList parseArn rootSoup)
+  printLine ("  parseChildList size: " ++ Nat.toText (List.size items))
+  printLine ("  parseChildList items: " ++ Text.join ", " items)
+  printLine ""
+
+-- Simpler case: parseListSoup on a fresh soup (root IS the container)
+testParseListSoup_fromRoot : '{Exception} Boolean
+testParseListSoup_fromRoot = 'let
+  simpleXml = "<Topics><member><TopicArn>arn:test:topic1</TopicArn></member><member><TopicArn>arn:test:topic2</TopicArn></member></Topics>"
+  soup = aws.xml.parse simpleXml
+  rootSoup = Soup.root soup
+  parseArn elemSoup = Optional.getOrElse "MISSING" (aws.xml.findText "TopicArn" elemSoup)
+  items = aws.xml.parseListSoup "member" parseArn rootSoup
+  List.size items === 2
+
+-- Now the container is NESTED — this is the SNS case
+testParseListSoup_fromSubElement : '{Exception} Boolean
+testParseListSoup_fromSubElement = 'let
+  nestedXml = "<Result><Topics><member><TopicArn>arn:test:topic1</TopicArn></member><member><TopicArn>arn:test:topic2</TopicArn></member></Topics></Result>"
+  soup = aws.xml.parse nestedXml
+  resultSoup = aws.xml.runXml (aws.xml.findAndDrill soup ["Result"])
+  topicsOpt = aws.xml.findOpt "Topics" resultSoup
+  parseArn elemSoup = Optional.getOrElse "MISSING" (aws.xml.findText "TopicArn" elemSoup)
+  match topicsOpt with
+    None -> false
+    Some topicsSoup ->
+      items = aws.xml.parseListSoup "member" parseArn topicsSoup
+      List.size items === 2
+
+-- ─────────────────────────────────────────────────────────────────
+-- Test runner
+-- ─────────────────────────────────────────────────────────────────
+
+runTest : Text -> '{Exception} Boolean -> '{IO, Exception} ()
+runTest name test = do
+  result = if test () then "✓ PASS" else "✗ FAIL"
+  printLine (result ++ " - " ++ name)
+
+runAllTests : '{IO, Exception} ()
+runAllTests = do
+  printLine "╔══════════════════════════════════════════════════════════════╗"
+  printLine "║        parseListSoup / parseOptionalWrappedListSoup          ║"
+  printLine "║        Isolation Tests (SNS ListTopics repro)                ║"
+  printLine "╚══════════════════════════════════════════════════════════════╝"
+  printLine ""
+  !testSoupToXmlReturnsSubtree
+  printLine "--- Text-based cross-checks ---"
+  !(runTest "textPath lowercase member (expect PASS)"  testTextBasedPath_lowercase)
+  !(runTest "textPath uppercase Member (expect FAIL)"  testTextBasedPath_uppercase)
+  printLine ""
+  printLine "--- Soup.withXML step-by-step drill-down ---"
+  !testWithXmlBasic
+  !testParseChildList
+  printLine "--- Soup-based parseListSoup ---"
+  !(runTest "parseListSoup from root soup (simple)"    testParseListSoup_fromRoot)
+  !(runTest "parseListSoup from sub-element (nested)"  testParseListSoup_fromSubElement)
+  printLine ""
+  printLine "--- parseOptionalWrappedListSoup (full SNS XML) ---"
+  !(runTest "lowercase 'member' (correct SNS tag)"     testParseOptionalWrappedListSoup_lowercase)
+  !(runTest "uppercase 'Member' (incorrect SNS tag)"   testParseOptionalWrappedListSoup_uppercase)
+  printLine ""
+  printLine "All tests complete."
