@@ -43,6 +43,19 @@ aws.xml.decodeToSoup bytes =
   Soup.parseXML text
 
 {{
+Parse an HTTP response body as XML, returning a Soup cursor.
+
+Decodes the response body bytes as UTF-8, then parses as XML.
+Raises Exception if UTF-8 decoding fails.
+
+Use this as the standard entry point in all response parsers instead
+of calling Soup.parseXML directly.
+}}
+aws.xml.parseResponse : Http.Response -> '{Exception} Soup
+aws.xml.parseResponse response = do
+  aws.xml.decodeToSoup (Http.Response.body response)
+
+{{
 Parse XML text to a Soup cursor with Exception handling.
 
 Unlike the basic `aws.xml.parse`, this function handles parsing errors
