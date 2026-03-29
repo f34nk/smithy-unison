@@ -92,36 +92,6 @@ public class XmlGeneratorTest {
     }
     
     @Test
-    void testGenerateEncode() {
-        generator.generateEncode(writer);
-        
-        String output = writer.toString();
-        
-        // Check function signature
-        assertTrue(output.contains("aws.xml.encode : a -> Bytes"),
-                "Should generate correct signature. Got: " + output);
-        
-        // Should be a placeholder
-        assertTrue(output.contains("Bytes.empty") || output.contains("placeholder"),
-                "Should be a placeholder implementation. Got: " + output);
-    }
-    
-    @Test
-    void testGenerateDecode() {
-        generator.generateDecode(writer);
-        
-        String output = writer.toString();
-        
-        // Check function signature
-        assertTrue(output.contains("aws.xml.decode : Bytes -> a"),
-                "Should generate correct signature. Got: " + output);
-        
-        // Should indicate it's not fully implemented
-        assertTrue(output.contains("bug") || output.contains("placeholder"),
-                "Should indicate placeholder status. Got: " + output);
-    }
-    
-    @Test
     void testGenerateElement() {
         generator.generateElement(writer);
         
@@ -187,10 +157,10 @@ public class XmlGeneratorTest {
                 "Should generate extractElement. Got: " + output);
         assertTrue(output.contains("aws.xml.extractAttribute :"),
                 "Should generate extractAttribute. Got: " + output);
-        assertTrue(output.contains("aws.xml.encode :"),
-                "Should generate encode. Got: " + output);
-        assertTrue(output.contains("aws.xml.decode :"),
-                "Should generate decode. Got: " + output);
+        assertFalse(output.contains("aws.xml.encode :"),
+                "Should not generate generic encode stub. Got: " + output);
+        assertFalse(output.contains("aws.xml.decode :"),
+                "Should not generate generic decode stub. Got: " + output);
     }
     
     @Test
@@ -207,8 +177,8 @@ public class XmlGeneratorTest {
         assertTrue(output.contains("aws.xml.optionalElement :"), "Should generate optionalElement");
         assertTrue(output.contains("aws.xml.extractElement :"), "Should generate extractElement");
         assertTrue(output.contains("aws.xml.extractAttribute :"), "Should generate extractAttribute");
-        assertTrue(output.contains("aws.xml.encode :"), "Should generate encode");
-        assertTrue(output.contains("aws.xml.decode :"), "Should generate decode");
+        assertFalse(output.contains("aws.xml.encode :"), "Should not generate generic encode stub");
+        assertFalse(output.contains("aws.xml.decode :"), "Should not generate generic decode stub");
         
         // Check section comments
         assertTrue(output.contains("AWS XML Utilities"),

@@ -497,16 +497,15 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else if (targetShape.isStringShape()) {
                 writer.write("body = Text.toUtf8 ($L.$L input)", inputType, memberName);
             } else {
-                // Structure payload - serialize as XML
-                writer.write("body = aws.xml.encode ($L.$L input)", inputType, memberName);
+                // Structure payload - type-specific XML serialization not yet generated
+                writer.write("body = Bytes.empty -- TODO: serialize $L.$L as XML", inputType, memberName);
             }
         } else if (bodyMembers.isEmpty()) {
             // No body members - empty body
             writer.write("body = Bytes.empty");
         } else {
-            // Serialize body members as XML - pass input directly
-            writer.write("-- Serialize body members as XML");
-            writer.write("body = aws.xml.encode input");
+            // Body members XML serialization not yet generated
+            writer.write("body = Bytes.empty -- TODO: serialize body members as XML");
         }
     }
     
@@ -691,7 +690,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         } else if (targetShape.isStringShape()) {
             writer.write("$L = aws.http.bytesToText (Response.body response)", memberName);
         } else {
-            writer.write("$L = aws.xml.decode (Response.body response)", memberName);
+            writer.write("$L = None -- TODO: parse $L", memberName, targetShape.getType());
         }
     }
     

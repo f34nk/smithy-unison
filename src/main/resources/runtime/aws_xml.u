@@ -751,29 +751,6 @@ aws.xml.prettyPrint xml =
 -- XML Encoding (Placeholder)
 -- =============================================================================
 
-{{
-Encode a value to XML bytes.
-
-This is a placeholder function that needs to be implemented
-for each specific type that needs XML serialization.
-Currently returns empty bytes.
-
-TODO: Implement type-specific XML serialization for AWS request bodies.
-}}
-aws.xml.encode : a -> Bytes
-aws.xml.encode value = Bytes.empty
-
-{{
-Encode a value to XML text.
-
-This is a placeholder function that needs to be implemented
-for each specific type that needs XML serialization.
-Currently returns empty text.
-
-TODO: Implement type-specific XML serialization for AWS request bodies.
-}}
-aws.xml.toXml : a -> Text
-aws.xml.toXml value = ""
 
 -- =============================================================================
 -- XML to Record Mapping (Text-based)
@@ -861,30 +838,3 @@ aws.xml.parseOptionalWrappedListFromXml containerTag itemTag parser xmlText =
       else
         Some wrappedItems
 
--- =============================================================================
--- XML Decoding (Placeholder)
--- =============================================================================
-
-{{
-Decode XML bytes to a value.
-
-This is a placeholder function that needs to be implemented
-for each specific type that needs XML deserialization.
-Currently crashes with an error.
-
-TODO: Implement type-specific XML deserialization for AWS response bodies.
-}}
-aws.xml.decode : Bytes -> a
-aws.xml.decode bytes = bug "aws.xml.decode not implemented"
-
-{{
-Decode XML text to a value.
-
-This is a placeholder function that needs to be implemented
-for each specific type that needs XML deserialization.
-Currently crashes with an error.
-
-TODO: Implement type-specific XML deserialization for AWS response bodies.
-}}
-aws.xml.fromXml : Text -> a
-aws.xml.fromXml text = bug "aws.xml.fromXml not implemented"
