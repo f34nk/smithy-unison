@@ -692,33 +692,61 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     /**
      * Generates flattened structure serialization with dot notation.
      */
-    private void generateFlattenedStructure(StructureShape structure, String prefix, String varName, 
+    private void generateFlattenedStructure(StructureShape structure, String prefix, String varName,
                                             Model model, String clientNamespace, UnisonWriter writer) {
         List<String> fieldParams = new ArrayList<>();
-        
+        List<String> optionalFieldLists = new ArrayList<>();
+
         for (MemberShape nestedMember : structure.getAllMembers().values()) {
             String nestedParamName = prefix + "." + getQueryParamName(nestedMember);
             String nestedMemberName = UnisonSymbolProvider.toUnisonFunctionName(nestedMember.getMemberName());
             String nestedTypeName = UnisonSymbolProvider.toNamespacedTypeName(structure.getId().getName(), clientNamespace);
             String nestedAccessor = nestedTypeName + "." + nestedMemberName + " " + varName;
-            
+
             Shape nestedTarget = model.expectShape(nestedMember.getTarget());
             String toTextFunc = getToTextFunction(nestedTarget, clientNamespace);
-            
-            // For simplicity, only handle scalar fields in nested structures
+
             if (isScalarShape(nestedTarget)) {
                 if (nestedMember.isRequired()) {
                     fieldParams.add("(\"" + nestedParamName + "\", " + toTextFunc + " (" + nestedAccessor + "))");
                 } else {
-                    writer.write("-- TODO: Handle optional nested field: $L", nestedMemberName);
+                    String optFieldName = "opt_" + nestedMember.getMemberName();
+                    boolean isFieldText = isTextType(nestedTarget);
+
+                    writer.write("$L = match $L with", optFieldName, nestedAccessor);
+                    writer.indent();
+                    writer.write("None -> []");
+                    if (isFieldText) {
+                        writer.write("Some v -> [(\"$L\", v)]", nestedParamName);
+                    } else {
+                        writer.write("Some v -> [(\"$L\", $L v)]", nestedParamName, toTextFunc);
+                    }
+                    writer.dedent();
+
+                    optionalFieldLists.add(optFieldName);
                 }
             }
         }
-        
-        if (fieldParams.isEmpty()) {
+
+        if (fieldParams.isEmpty() && optionalFieldLists.isEmpty()) {
             writer.write("[]");
+        } else if (fieldParams.isEmpty()) {
+            String result = optionalFieldLists.get(0);
+            for (int i = 1; i < optionalFieldLists.size(); i++) {
+                result = result + " List.++ " + optionalFieldLists.get(i);
+            }
+            writer.write(result);
         } else {
-            writer.write("[ " + String.join(", ", fieldParams) + " ]");
+            String requiredList = "[ " + String.join(",\n  ", fieldParams) + " ]";
+            if (optionalFieldLists.isEmpty()) {
+                writer.write(requiredList);
+            } else {
+                String result = requiredList;
+                for (String optList : optionalFieldLists) {
+                    result = result + " List.++ " + optList;
+                }
+                writer.write(result);
+            }
         }
     }
     

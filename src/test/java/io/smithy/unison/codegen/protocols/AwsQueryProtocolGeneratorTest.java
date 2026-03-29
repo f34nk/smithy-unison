@@ -10,9 +10,14 @@ import software.amazon.smithy.build.FileManifest;
 import software.amazon.smithy.codegen.core.SymbolProvider;
 import software.amazon.smithy.codegen.core.WriterDelegator;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.shapes.IntegerShape;
+import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.ShapeId;
+import software.amazon.smithy.model.shapes.StringShape;
+import software.amazon.smithy.model.shapes.StructureShape;
+import software.amazon.smithy.model.traits.RequiredTrait;
 
 import java.nio.file.Paths;
 
@@ -323,5 +328,81 @@ public class AwsQueryProtocolGeneratorTest {
         // Verify signing service name is lowercase (used in AWSEnv.sign call)
         assertTrue(code.contains("AWSEnv.sign \"sqs\""), 
                 "Should use lowercase service name for signing");
+    }
+
+    @Test
+    public void testOptionalNestedFieldInFlattenedStruct() {
+        // SpotOptions has one required (spotInstanceType: Integer) and one optional (maxPrice: String).
+        // When serialized as a flattened struct, the optional field must produce an opt_* let-binding
+        // with a match expression instead of a -- TODO comment.
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+        IntegerShape intShape = IntegerShape.builder()
+                .id("smithy.api#Integer")
+                .build();
+
+        StructureShape spotOptions = StructureShape.builder()
+                .id("test.ec2#SpotOptions")
+                .addMember(MemberShape.builder()
+                        .id("test.ec2#SpotOptions$spotInstanceType")
+                        .target("smithy.api#Integer")
+                        .addTrait(new RequiredTrait())
+                        .build())
+                .addMember(MemberShape.builder()
+                        .id("test.ec2#SpotOptions$maxPrice")
+                        .target("smithy.api#String")
+                        .build())
+                .build();
+
+        StructureShape inputShape = StructureShape.builder()
+                .id("test.ec2#RunInput")
+                .addMember(MemberShape.builder()
+                        .id("test.ec2#RunInput$spotOptions")
+                        .target("test.ec2#SpotOptions")
+                        .build())
+                .build();
+
+        StructureShape outputShape = StructureShape.builder()
+                .id("test.ec2#RunOutput")
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("test.ec2#RunInstances")
+                .input(inputShape.getId())
+                .output(outputShape.getId())
+                .build();
+
+        ServiceShape testService = ServiceShape.builder()
+                .id("test.ec2#EC2")
+                .version("2016-11-15")
+                .addOperation(operation.getId())
+                .build();
+
+        Model testModel = Model.builder()
+                .addShape(stringShape)
+                .addShape(intShape)
+                .addShape(spotOptions)
+                .addShape(inputShape)
+                .addShape(outputShape)
+                .addShape(operation)
+                .addShape(testService)
+                .build();
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        // Optional field should produce an opt_ let-binding with a match expression
+        assertTrue(code.contains("opt_maxPrice"), "Should emit opt_maxPrice binding. Got:\n" + code);
+        assertTrue(code.contains("None -> []"), "opt_ binding should have None -> [] arm. Got:\n" + code);
+        assertTrue(code.contains("Some v ->"), "opt_ binding should have Some v -> arm. Got:\n" + code);
+        // The result expression must concatenate required list and optional list
+        assertTrue(code.contains("List.++"), "Should concatenate required and optional lists with List.++. Got:\n" + code);
+        // No TODO stubs
+        assertFalse(code.contains("-- TODO: Handle optional nested field"),
+                "Should not emit TODO stub for optional nested field. Got:\n" + code);
     }
 }
