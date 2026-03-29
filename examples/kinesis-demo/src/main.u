@@ -169,8 +169,8 @@ describeStreamDemo = do
   printLine "  → Creating DescribeStreamInput..."
   printLine ("    StreamName: " ++ testStreamName)
   
-  -- DescribeStreamInput: exclusiveStartShardId, limit, streamARN, streamName
-  request = aws.kinesis.DescribeStreamInput.DescribeStreamInput None None None (Some testStreamName)
+  -- DescribeStreamInput: exclusiveStartShardId, limit, streamARN, streamId, streamName
+  request = aws.kinesis.DescribeStreamInput.DescribeStreamInput None None None None (Some testStreamName)
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling describeStream..."
@@ -212,8 +212,8 @@ putRecordDemo = do
   -- Convert the message to Bytes
   dataBytes = Text.toUtf8 testMessageData
   
-  -- PutRecordInput: data, explicitHashKey, partitionKey, sequenceNumberForOrdering, streamARN, streamName
-  request = aws.kinesis.PutRecordInput.PutRecordInput dataBytes None testPartitionKey None None (Some testStreamName)
+  -- PutRecordInput: data, explicitHashKey, partitionKey, sequenceNumberForOrdering, streamARN, streamId, streamName
+  request = aws.kinesis.PutRecordInput.PutRecordInput dataBytes None testPartitionKey None None None (Some testStreamName)
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling putRecord..."
@@ -241,8 +241,8 @@ getShardIteratorDemo shardId = do
   printLine ("    ShardId: " ++ shardId)
   printLine "    ShardIteratorType: TRIM_HORIZON"
   
-  -- GetShardIteratorInput: shardId, shardIteratorType, startingSequenceNumber, streamARN, streamName, timestamp
-  request = aws.kinesis.GetShardIteratorInput.GetShardIteratorInput shardId aws.kinesis.ShardIteratorType'TRIM_HORIZON None None (Some testStreamName) None
+  -- GetShardIteratorInput: shardId, shardIteratorType, startingSequenceNumber, streamARN, streamId, streamName, timestamp
+  request = aws.kinesis.GetShardIteratorInput.GetShardIteratorInput shardId aws.kinesis.ShardIteratorType'TRIM_HORIZON None None None (Some testStreamName) None
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling getShardIterator..."
@@ -264,8 +264,8 @@ getRecordsDemo shardIterator = do
   printLine "  → Creating GetRecordsInput..."
   printLine "    Limit: 10"
   
-  -- GetRecordsInput: limit, shardIterator, streamARN
-  request = aws.kinesis.GetRecordsInput.GetRecordsInput (Some +10) shardIterator None
+  -- GetRecordsInput: limit, shardIterator, streamARN, streamId
+  request = aws.kinesis.GetRecordsInput.GetRecordsInput (Some +10) shardIterator None None
   
   -- Call the Kinesis client (no config needed - uses AWSEnv)
   printLine "  → Calling getRecords..."
