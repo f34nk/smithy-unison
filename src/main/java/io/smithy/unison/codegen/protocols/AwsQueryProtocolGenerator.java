@@ -947,17 +947,15 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                                                    Model model, String clientNamespace, UnisonWriter writer) {
         String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
         String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                "parse" + baseTypeName + "FromXml", clientNamespace);
+                "parse" + baseTypeName + "FromSoup", clientNamespace);
         
         if (isNonOptional) {
-            // Required nested structure - parse and extract, bug if missing
             String optVarName = varName + "Opt";
-            writer.write("$L = aws.xml.parseNested \"$L\" $L resultSoup", optVarName, xmlName, parserName);
+            writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L resultSoup", optVarName, xmlName, parserName);
             writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
                     varName, xmlName, optVarName);
         } else {
-            // Optional nested structure
-            writer.write("$L = aws.xml.parseNested \"$L\" $L resultSoup", varName, xmlName, parserName);
+            writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L resultSoup", varName, xmlName, parserName);
         }
     }
     
@@ -972,10 +970,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 elementStructure.getId().getName(), clientNamespace);
         String parserName = varName + "_parseElement";
         
-        // Generate helper function to parse a single element
+        // Generate helper function to parse a single element (Exception when nested Soup parsers are used)
         writer.write("");
-        writer.write("$L : Soup -> $L", parserName, structTypeName);
-        writer.write("$L elemSoup =", parserName);
+        writer.write("$L : Soup ->{Exception} $L", parserName, structTypeName);
+        writer.write("$L elemSoup = do", parserName);
         writer.indent();
         writer.write("");
         
@@ -1007,6 +1005,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                         String fromTextFunc = UnisonSymbolProvider.toUnisonFunctionName(
                                 fieldListElementShape.getId().getName() + "FromText");
                         String enumTypeNamespace = clientNamespace;
+                        String innerListMemberTag = getListElementTag(structMember, fieldListShape);
                         
                         // Generate helper function for enum conversion
                         String enumConverterName = fieldVarName + "_convertEnum";
@@ -1028,27 +1027,26 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                             writer.write("None -> None");
                             writer.write("Some wrapperSoup ->");
                             writer.indent();
-                            writer.write("texts = aws.xml.findAllText \"member\" wrapperSoup");
+                            writer.write("texts = aws.xml.findAllText \"$L\" wrapperSoup", innerListMemberTag);
                             writer.write("enums = List.map $L texts", enumConverterName);
                             writer.write("Some enums");
                             writer.dedent();
                             writer.dedent();
                         }
                     } else if (fieldListElementShape.isStructureShape()) {
-                        // List of structures - need to parse each element
+                        // List of structures - Soup-native list parsing per element
                         String elemStructTypeName = UnisonSymbolProvider.toNamespacedTypeName(
                                 fieldListElementShape.getId().getName(), clientNamespace);
                         String elemParserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                                "parse" + fieldListElementShape.getId().getName() + "FromXml", clientNamespace);
+                                "parse" + fieldListElementShape.getId().getName() + "FromSoup", clientNamespace);
                         
-                        // Get the member tag name for the list elements
                         String memberTag = getListElementTag(structMember, fieldListShape);
                         
                         if (isFieldNonOptional) {
-                            writer.write("$L = aws.xml.parseList \"$L\" $L elemSoup", 
+                            writer.write("$L = aws.xml.parseListSoup \"$L\" $L elemSoup", 
                                     fieldVarName, memberTag, elemParserName);
                         } else {
-                            writer.write("$L = aws.xml.parseOptionalWrappedList \"$L\" \"$L\" $L elemSoup",
+                            writer.write("$L = aws.xml.parseOptionalWrappedListSoup \"$L\" \"$L\" $L elemSoup",
                                     fieldVarName, fieldXmlName, memberTag, elemParserName);
                         }
                     } else {
@@ -1058,18 +1056,17 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                     }
                     break;
                 case STRUCTURE:
-                    // Nested structure field - use parseNested with Soup-based parser
                     String nestedTypeName = UnisonSymbolProvider.toUnisonTypeName(fieldTarget.getId().getName());
                     String nestedParserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                            "parse" + nestedTypeName + "FromXml", clientNamespace);
+                            "parse" + nestedTypeName + "FromSoup", clientNamespace);
                     
                     if (isFieldNonOptional) {
                         String optVarName = fieldVarName + "Opt";
-                        writer.write("$L = aws.xml.parseNested \"$L\" $L elemSoup", optVarName, fieldXmlName, nestedParserName);
+                        writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L elemSoup", optVarName, fieldXmlName, nestedParserName);
                         writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
                                 fieldVarName, fieldXmlName, optVarName);
                     } else {
-                        writer.write("$L = aws.xml.parseNested \"$L\" $L elemSoup", fieldVarName, fieldXmlName, nestedParserName);
+                        writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L elemSoup", fieldVarName, fieldXmlName, nestedParserName);
                     }
                     break;
                 default:

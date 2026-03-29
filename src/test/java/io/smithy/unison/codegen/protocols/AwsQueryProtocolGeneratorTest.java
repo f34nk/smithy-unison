@@ -198,6 +198,30 @@ public class AwsQueryProtocolGeneratorTest {
         // No Soup.toXML / extractAllBlocks round-trips in generated response parsers
         assertFalse(code.contains("Soup.toXML"), "Should not emit Soup.toXML in response deserializer");
         assertFalse(code.contains("extractAllBlocks"), "Should not emit extractAllBlocks in response deserializer");
+        
+        assertFalse(code.contains("aws.xml.parseNested \""),
+                "Response parser should use parseNestedSoup, not text-based parseNested");
+        assertFalse(code.contains("aws.xml.parseList \""),
+                "Response parser should use parseListSoup, not text-based parseList");
+    }
+
+    @Test
+    public void testBatchResponseUsesSoupNativeListParsing() {
+        OperationShape operation = model.expectShape(
+                ShapeId.from("example.sqs#SendMessageBatch"), OperationShape.class);
+        
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateResponseDeserializer(operation, writer, context);
+        
+        String code = writer.toString();
+        
+        assertTrue(code.contains("aws.xml.parseListSoup"),
+                "Batch response should use parseListSoup for list-of-structure fields. Got: " + code);
+        // Inline *_parseElement helpers use Soup ->{Exception} and do not always reference *FromSoup names
+        assertTrue(code.contains("Soup ->{Exception}") || code.contains("FromSoup"),
+                "Should use Soup-native element parsing (inline helper or *FromSoup). Got: " + code);
+        assertFalse(code.contains("aws.xml.parseList \""),
+                "Should not use text-based parseList in response deserializer");
     }
 
     @Test

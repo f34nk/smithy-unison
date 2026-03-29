@@ -919,18 +919,17 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     writer.write("$L = aws.xml.findAllText \"$L\" soup", varName, itemElementName);
                 }
             } else if (memberTarget instanceof StructureShape) {
-                // List of structures - use parseList with Soup-based parser
+                // List of structures - Soup-native parser (no text round-trip)
                 StructureShape structShape = (StructureShape) memberTarget;
                 String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
                 String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                        "parse" + baseTypeName + "FromXml", clientNamespace);
+                        "parse" + baseTypeName + "FromSoup", clientNamespace);
                 
-                // Generate Soup-based list parsing
                 if (isOptional) {
-                    writer.write("$L = aws.xml.parseOptionalWrappedList \"$L\" \"$L\" $L soup",
+                    writer.write("$L = aws.xml.parseOptionalWrappedListSoup \"$L\" \"$L\" $L soup",
                             varName, xmlElementName, itemElementName, parserName);
                 } else {
-                    writer.write("$L = aws.xml.parseList \"$L\" $L soup",
+                    writer.write("$L = aws.xml.parseListSoup \"$L\" $L soup",
                             varName, itemElementName, parserName);
                 }
             } else if (memberTarget instanceof EnumShape || 
@@ -969,18 +968,17 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 }
             }
         } else if (targetShape instanceof StructureShape) {
-            // Nested structure - use parseNested with Soup-based parser
+            // Nested structure - Soup-native nested parse
             StructureShape structShape = (StructureShape) targetShape;
             String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
             String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                    "parse" + baseTypeName + "FromXml", clientNamespace);
+                    "parse" + baseTypeName + "FromSoup", clientNamespace);
             
             if (isOptional) {
-                writer.write("$L = aws.xml.parseNested \"$L\" $L soup", varName, xmlElementName, parserName);
+                writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L soup", varName, xmlElementName, parserName);
             } else {
-                // Required nested structure - parse and extract, bug if missing
                 String optVarName = varName + "Opt";
-                writer.write("$L = aws.xml.parseNested \"$L\" $L soup", optVarName, xmlElementName, parserName);
+                writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L soup", optVarName, xmlElementName, parserName);
                 writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
                         varName, xmlElementName, optVarName);
             }

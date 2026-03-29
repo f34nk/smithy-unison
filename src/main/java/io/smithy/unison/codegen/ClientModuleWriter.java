@@ -897,6 +897,8 @@ public final class ClientModuleWriter {
         for (StructureShape structure : structures) {
             generateXmlParserForStructure(structure, writer);
             writer.writeBlankLine();
+            generateXmlParserForStructureFromSoup(structure, writer);
+            writer.writeBlankLine();
         }
     }
     
@@ -1319,6 +1321,132 @@ public final class ClientModuleWriter {
         
         writer.dedent();
         writer.dedent();
+    }
+    
+    /**
+     * Generates an XML parser function for a single structure using Soup-based field extractors.
+     */
+    private void generateXmlParserForStructureFromSoup(StructureShape structure, UnisonWriter writer) {
+        String typeName = getNamespacedTypeName(structure.getId().getName());
+        String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structure.getId().getName());
+        String funcName = getNamespacedFunctionName("parse" + baseTypeName + "FromSoup");
+        
+        writer.writeDocComment("Parse " + typeName + " from a Soup cursor (Soup-native extractors).");
+        
+        writer.writeSignature(funcName, "Soup ->{Exception} " + typeName);
+        
+        writer.write("$L soup =", funcName);
+        writer.indent();
+        
+        writer.write("$L", baseTypeName);
+        writer.indent();
+        
+        for (MemberShape member : structure.getAllMembers().values()) {
+            String xmlElementName = getXmlElementName(member);
+            Shape targetShape = model.expectShape(member.getTarget());
+            String extraction = generateFieldExtractionFromSoup(member, targetShape, xmlElementName);
+            writer.write(extraction);
+        }
+        
+        writer.dedent();
+        writer.dedent();
+    }
+    
+    /**
+     * Generates Soup-based field extraction for {@link #generateXmlParserForStructureFromSoup}.
+     */
+    private String generateFieldExtractionFromSoup(MemberShape member, Shape targetShape, String xmlElementName) {
+        boolean isRequired = member.hasTrait(software.amazon.smithy.model.traits.RequiredTrait.class);
+        boolean hasDefault = member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
+        boolean isHttpOptional = member.hasTrait(software.amazon.smithy.model.traits.HttpQueryTrait.class)
+                || member.hasTrait(software.amazon.smithy.model.traits.HttpHeaderTrait.class);
+        boolean isOptional = !isRequired && !hasDefault || isHttpOptional;
+        
+        if (targetShape instanceof StructureShape) {
+            String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(targetShape.getId().getName());
+            String parserName = getNamespacedFunctionName("parse" + baseTypeName + "FromSoup");
+            if (isOptional) {
+                return "(aws.xml.parseNestedSoup \"" + xmlElementName + "\" " + parserName + " soup)";
+            } else {
+                return "(Optional.getOrElse (bug \"Required nested field '" + xmlElementName + "' not found\") "
+                        + "(aws.xml.parseNestedSoup \"" + xmlElementName + "\" " + parserName + " soup))";
+            }
+        } else if (targetShape instanceof ListShape) {
+            ListShape listShape = (ListShape) targetShape;
+            Shape memberTarget = model.expectShape(listShape.getMember().getTarget());
+            String itemElementName = getXmlElementName(listShape.getMember());
+            
+            if (memberTarget instanceof StructureShape) {
+                String baseItemTypeName = UnisonSymbolProvider.toUnisonTypeName(memberTarget.getId().getName());
+                String parserName = getNamespacedFunctionName("parse" + baseItemTypeName + "FromSoup");
+                if (isOptional) {
+                    return "(aws.xml.parseOptionalWrappedListSoup \"" + xmlElementName + "\" \"" + itemElementName + "\" "
+                            + parserName + " soup)";
+                } else {
+                    return "(match aws.xml.findOpt \"" + xmlElementName + "\" soup with None -> [] | Some containerSoup -> "
+                            + "aws.xml.parseListSoup \"" + itemElementName + "\" " + parserName + " containerSoup)";
+                }
+            } else if (memberTarget instanceof EnumShape
+                    || memberTarget.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
+                String enumFromText = getNamespacedFunctionName(memberTarget.getId().getName() + "FromText");
+                if (isOptional) {
+                    return "(Some (List.filterMap " + enumFromText + " (aws.xml.findAllText \"" + itemElementName + "\" soup)))";
+                } else {
+                    return "(List.filterMap " + enumFromText + " (aws.xml.findAllText \"" + itemElementName + "\" soup))";
+                }
+            } else if (memberTarget.isStringShape()) {
+                if (isOptional) {
+                    return "(Some (aws.xml.findAllText \"" + itemElementName + "\" soup))";
+                } else {
+                    return "(aws.xml.findAllText \"" + itemElementName + "\" soup)";
+                }
+            } else {
+                if (isOptional) {
+                    return "None -- list parsing: " + memberTarget.getType();
+                } else {
+                    return "[] -- list parsing: " + memberTarget.getType();
+                }
+            }
+        } else if (targetShape instanceof EnumShape
+                || targetShape.hasTrait(software.amazon.smithy.model.traits.EnumTrait.class)) {
+            String enumFromText = getNamespacedFunctionName(targetShape.getId().getName() + "FromText");
+            if (isOptional) {
+                return "(Optional.flatMap " + enumFromText + " (aws.xml.findText \"" + xmlElementName + "\" soup))";
+            } else {
+                return "(Optional.getOrElse (bug \"Required enum field '" + xmlElementName + "' not found or invalid\") "
+                        + "(" + enumFromText + " (Optional.getOrElse \"\" (aws.xml.findText \"" + xmlElementName + "\" soup))))";
+            }
+        } else if (targetShape.isStringShape()) {
+            if (isOptional) {
+                return "(aws.xml.findText \"" + xmlElementName + "\" soup)";
+            } else {
+                return "(Optional.getOrElse \"\" (aws.xml.findText \"" + xmlElementName + "\" soup))";
+            }
+        } else if (targetShape.isIntegerShape() || targetShape.isLongShape()) {
+            if (isOptional) {
+                return "(aws.xml.findInt \"" + xmlElementName + "\" soup)";
+            } else {
+                return "(Optional.getOrElse +0 (aws.xml.findInt \"" + xmlElementName + "\" soup))";
+            }
+        } else if (targetShape.isBooleanShape()) {
+            if (isOptional) {
+                return "(aws.xml.findBool \"" + xmlElementName + "\" soup)";
+            } else {
+                return "(Optional.getOrElse false (aws.xml.findBool \"" + xmlElementName + "\" soup))";
+            }
+        } else if (targetShape.isBlobShape()) {
+            if (isOptional) {
+                return "(Optional.map toUtf8 (aws.xml.findText \"" + xmlElementName + "\" soup))";
+            } else {
+                return "(toUtf8 (Optional.getOrElse \"\" (aws.xml.findText \"" + xmlElementName + "\" soup)))";
+            }
+        } else {
+            if (isOptional) {
+                return "None -- " + targetShape.getType();
+            } else {
+                return "(bug \"unsupported required field type: " + targetShape.getType() + "\")";
+            }
+        }
     }
     
     /**

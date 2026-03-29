@@ -472,6 +472,12 @@ aws.xml.parseFlatList : Text -> (Text -> a) -> Soup -> [a]
 aws.xml.parseFlatList = aws.xml.parseList
 
 {{
+Soup-native alias for flattened lists (same behaviour as parseListSoup).
+}}
+aws.xml.parseFlatListSoup : Text -> (Soup -> a) -> Soup ->{Exception} [a]
+aws.xml.parseFlatListSoup = aws.xml.parseListSoup
+
+{{
 Parse a list of child elements using a Soup-based mapper function.
 
 Finds all child elements with the given tag name and applies the parser
