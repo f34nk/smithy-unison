@@ -234,9 +234,9 @@ runInstancesDemo = do
   -- ipv6AddressCount, ipv6Addresses, kernelId, keyName, launchTemplate,
   -- licenseSpecifications, maintenanceOptions, maxCount, metadataOptions, minCount,
   -- monitoring, networkInterfaces, networkPerformanceOptions, operator, placement,
-  -- privateDnsNameOptions, privateIpAddress, ramdiskId, securityGroupIds, securityGroups,
-  -- subnetId, tagSpecifications, userData
-  request = aws.ec2.RunInstancesRequest.RunInstancesRequest None None None None None None None None None None None None None None None None (Some "ami-12345678") None None (Some aws.ec2.InstanceType't2_micro) None None None None None None None +1 None +1 None None None None None None None None None None None None None
+  -- privateDnsNameOptions, privateIpAddress, ramdiskId, secondaryInterfaces, securityGroupIds,
+  -- securityGroups, subnetId, tagSpecifications, userData
+  request = aws.ec2.RunInstancesRequest.RunInstancesRequest None None None None None None None None None None None None None None None None (Some "ami-12345678") None None (Some aws.ec2.InstanceType't2_micro) None None None None None None None +1 None +1 None None None None None None None None None None None None None None
   
   -- Call the API (no config needed - uses AWSEnv)
   response = !(aws.ec2.runInstances request)
