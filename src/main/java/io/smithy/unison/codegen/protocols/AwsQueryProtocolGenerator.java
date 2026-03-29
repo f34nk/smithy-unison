@@ -856,15 +856,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             writer.write("$LList = match $LMapSoup with", varName, varName);
             writer.indent();
             writer.write("None -> []");
-            writer.write("Some mapSoup ->");
-            writer.indent();
-            writer.write("xmlText = handle Soup.toXML mapSoup with cases");
-            writer.indent();
-            writer.write("{ x } -> x");
-            writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
-            writer.dedent();
-            writer.write("aws.xml.extractMap \"$L\" \"$L\" \"$L\" xmlText", entryTag, keyTag, valueTag);
-            writer.dedent();
+            writer.write("Some mapSoup -> aws.xml.extractMapSoup \"$L\" \"$L\" \"$L\" mapSoup",
+                    entryTag, keyTag, valueTag);
             writer.dedent();
             writer.write("$L = Map.fromList $LList", varName, varName);
         } else {
@@ -873,16 +866,8 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
             writer.write("$L = match $LMapSoup with", varName, varName);
             writer.indent();
             writer.write("None -> None");
-            writer.write("Some mapSoup ->");
-            writer.indent();
-            writer.write("xmlText = handle Soup.toXML mapSoup with cases");
-            writer.indent();
-            writer.write("{ x } -> x");
-            writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
-            writer.dedent();
-            writer.write("mapList = aws.xml.extractMap \"$L\" \"$L\" \"$L\" xmlText", entryTag, keyTag, valueTag);
-            writer.write("Some (Map.fromList mapList)");
-            writer.dedent();
+            writer.write("Some mapSoup -> Some (Map.fromList (aws.xml.extractMapSoup \"$L\" \"$L\" \"$L\" mapSoup))",
+                    entryTag, keyTag, valueTag);
             writer.dedent();
         }
     }
@@ -989,12 +974,9 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         
         // Generate helper function to parse a single element
         writer.write("");
-        writer.write("$L : Text -> $L", parserName, structTypeName);
-        writer.write("$L elemXml =", parserName);
+        writer.write("$L : Soup -> $L", parserName, structTypeName);
+        writer.write("$L elemSoup =", parserName);
         writer.indent();
-        
-        // Convert XML text to Soup for field extraction
-        writer.write("elemSoup = aws.xml.parse elemXml");
         writer.write("");
         
         // Extract each field from the element - handle all types properly
@@ -1011,7 +993,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                 case MAP:
                     // Map field in nested structure
                     generateMapExtractionInline(structMember, (MapShape) fieldTarget, fieldXmlName, 
-                            fieldVarName, isFieldNonOptional, model, "elemXml", writer);
+                            fieldVarName, isFieldNonOptional, model, "elemSoup", writer);
                     break;
                 case LIST:
                     // Handle list fields in nested structures
@@ -1038,15 +1020,15 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                         writer.write("");
                         
                         if (isFieldNonOptional) {
-                            writer.write("$LTexts = aws.xml.extractAll \"$L\" elemXml", fieldVarName, fieldXmlName);
+                            writer.write("$LTexts = aws.xml.findAllText \"$L\" elemSoup", fieldVarName, fieldXmlName);
                             writer.write("$L = List.map $L $LTexts", fieldVarName, enumConverterName, fieldVarName);
                         } else {
-                            writer.write("$L = match aws.xml.extractElementOpt \"$L\" elemXml with", fieldVarName, fieldXmlName);
+                            writer.write("$L = match aws.xml.findOpt \"$L\" elemSoup with", fieldVarName, fieldXmlName);
                             writer.indent();
                             writer.write("None -> None");
-                            writer.write("Some elem ->");
+                            writer.write("Some wrapperSoup ->");
                             writer.indent();
-                            writer.write("texts = aws.xml.extractAll \"member\" elem");
+                            writer.write("texts = aws.xml.findAllText \"member\" wrapperSoup");
                             writer.write("enums = List.map $L texts", enumConverterName);
                             writer.write("Some enums");
                             writer.dedent();
@@ -1100,7 +1082,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                         String enumTypeNamespace = clientNamespace;
                         
                         if (isFieldNonOptional) {
-                            writer.write("$LText = aws.xml.extractElement \"$L\" elemXml", fieldVarName, fieldXmlName);
+                            writer.write("$LText = Optional.getOrElse \"\" (aws.xml.findText \"$L\" elemSoup)", fieldVarName, fieldXmlName);
                             writer.write("$L = match $L.$L $LText with", fieldVarName, enumTypeNamespace, fromTextFunc, fieldVarName);
                             writer.indent();
                             writer.write("Some v -> v");
@@ -1108,7 +1090,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
                             writer.dedent();
                         } else {
                             // For optional enum fields, return None for unrecognized values
-                            writer.write("$L = Optional.flatMap $L.$L (aws.xml.extractElementOpt \"$L\" elemXml)", 
+                            writer.write("$L = Optional.flatMap $L.$L (aws.xml.findText \"$L\" elemSoup)", 
                                     fieldVarName, enumTypeNamespace, fromTextFunc, fieldXmlName);
                         }
                     } else {
@@ -1153,39 +1135,18 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.dedent();
         writer.write("");
         
-        // Now extract the list using Soup
+        // Now extract the list using Soup-native list parsing (no Soup.toXML round-trip)
         if (isNonOptional) {
-            writer.write("$LListSoup = aws.xml.findOpt \"$L\" resultSoup", varName, xmlName);
-            writer.write("$LBlocks = match $LListSoup with", varName, varName);
+            writer.write("$LContainerSoup = aws.xml.findOpt \"$L\" resultSoup", varName, xmlName);
+            writer.write("$L = match $LContainerSoup with", varName, varName);
             writer.indent();
             writer.write("None -> []");
-            writer.write("Some listSoup ->");
-            writer.indent();
-            writer.write("xmlText = handle Soup.toXML listSoup with cases");
-            writer.indent();
-            writer.write("{ x } -> x");
-            writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
+            writer.write("Some containerSoup -> aws.xml.parseListSoup \"$L\" $L containerSoup",
+                    elementTag, parserName);
             writer.dedent();
-            writer.write("aws.xml.extractAllBlocks \"$L\" xmlText", elementTag);
-            writer.dedent();
-            writer.dedent();
-            writer.write("$L = List.map $L $LBlocks", varName, parserName, varName);
         } else {
-            writer.write("$LListSoup = aws.xml.findOpt \"$L\" resultSoup", varName, xmlName);
-            writer.write("$L = match $LListSoup with", varName, varName);
-            writer.indent();
-            writer.write("None -> None");
-            writer.write("Some listSoup ->");
-            writer.indent();
-            writer.write("xmlText = handle Soup.toXML listSoup with cases");
-            writer.indent();
-            writer.write("{ x } -> x");
-            writer.write("{ Throw.throw err -> _ } -> Exception.raise (aws.xml.xmlErrorToFailure err)");
-            writer.dedent();
-            writer.write("blocks = aws.xml.extractAllBlocks \"$L\" xmlText", elementTag);
-            writer.write("Some (List.map $L blocks)", parserName);
-            writer.dedent();
-            writer.dedent();
+            writer.write("$L = aws.xml.parseOptionalWrappedListSoup \"$L\" \"$L\" $L resultSoup",
+                    varName, xmlName, elementTag, parserName);
         }
     }
     
@@ -1201,23 +1162,21 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String valueTag = getMapValueTag(mapShape);
         
         if (isNonOptional) {
-            writer.write("$LElement = aws.xml.extractElementOpt \"$L\" $L", varName, xmlName, rootVar);
-            writer.write("$LList = match $LElement with", varName, varName);
+            writer.write("$LMapSoup = aws.xml.findOpt \"$L\" $L", varName, xmlName, rootVar);
+            writer.write("$LList = match $LMapSoup with", varName, varName);
             writer.indent();
             writer.write("None -> []");
-            writer.write("Some elem -> aws.xml.extractMap \"$L\" \"$L\" \"$L\" elem", entryTag, keyTag, valueTag);
+            writer.write("Some mapSoup -> aws.xml.extractMapSoup \"$L\" \"$L\" \"$L\" mapSoup",
+                    entryTag, keyTag, valueTag);
             writer.dedent();
             writer.write("$L = Map.fromList $LList", varName, varName);
         } else {
-            writer.write("$LElement = aws.xml.extractElementOpt \"$L\" $L", varName, xmlName, rootVar);
-            writer.write("$L = match $LElement with", varName, varName);
+            writer.write("$LMapSoup = aws.xml.findOpt \"$L\" $L", varName, xmlName, rootVar);
+            writer.write("$L = match $LMapSoup with", varName, varName);
             writer.indent();
             writer.write("None -> None");
-            writer.write("Some elem ->");
-            writer.indent();
-            writer.write("mapList = aws.xml.extractMap \"$L\" \"$L\" \"$L\" elem", entryTag, keyTag, valueTag);
-            writer.write("Some (Map.fromList mapList)");
-            writer.dedent();
+            writer.write("Some mapSoup -> Some (Map.fromList (aws.xml.extractMapSoup \"$L\" \"$L\" \"$L\" mapSoup))",
+                    entryTag, keyTag, valueTag);
             writer.dedent();
         }
     }
@@ -1225,6 +1184,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     /**
      * Gets the XML tag name for list elements.
      * Checks the list member for @xmlName trait, defaults to "member".
+     * AWS Query protocol encodes list items as <member> elements by default.
      */
     private String getListElementTag(MemberShape listMember, ListShape listShape) {
         MemberShape elementMember = listShape.getMember();

@@ -194,6 +194,10 @@ public class AwsQueryProtocolGeneratorTest {
         
         // Verify field extraction
         assertTrue(code.contains("MessageId"), "Should extract MessageId field");
+        
+        // No Soup.toXML / extractAllBlocks round-trips in generated response parsers
+        assertFalse(code.contains("Soup.toXML"), "Should not emit Soup.toXML in response deserializer");
+        assertFalse(code.contains("extractAllBlocks"), "Should not emit extractAllBlocks in response deserializer");
     }
 
     @Test
