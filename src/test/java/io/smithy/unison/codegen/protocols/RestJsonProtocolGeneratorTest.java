@@ -14,6 +14,7 @@ import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.StructureShape;
+import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.IntegerShape;
@@ -35,12 +36,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * 
  * <p>Tests cover:
  * <ul>
- *   <li>HTTP binding detection (Step 1.10.2)</li>
- *   <li>Path parameter substitution (Step 1.10.3)</li>
- *   <li>Query parameter building (Step 1.10.4)</li>
- *   <li>Request body generation (Step 1.10.5)</li>
- *   <li>Error parsing (Step 1.10.6)</li>
- *   <li>Response deserialization (Step 1.10.7)</li>
+ *   <li>HTTP binding detection</li>
+ *   <li>Path parameter substitution</li>
+ *   <li>Query parameter building</li>
+ *   <li>Request body generation</li>
+ *   <li>Error parsing</li>
+ *   <li>Response deserialization</li>
  * </ul>
  */
 public class RestJsonProtocolGeneratorTest {
@@ -91,7 +92,7 @@ public class RestJsonProtocolGeneratorTest {
     }
     
     // =============================================================================
-    // Step 1.10.2: Test HTTP Binding Detection
+    // Test HTTP Binding Detection
     // =============================================================================
     
     @Test
@@ -238,7 +239,7 @@ public class RestJsonProtocolGeneratorTest {
     }
     
     // =============================================================================
-    // Step 1.10.3: Test Path Parameter Substitution
+    // Test Path Parameter Substitution
     // =============================================================================
     
     @Test
@@ -367,7 +368,7 @@ public class RestJsonProtocolGeneratorTest {
     }
     
     // =============================================================================
-    // Step 1.10.4: Test Query Parameter Building
+    // Test Query Parameter Building
     // =============================================================================
     
     @Test
@@ -496,7 +497,7 @@ public class RestJsonProtocolGeneratorTest {
     }
     
     // =============================================================================
-    // Step 1.10.5: Test Request Body Generation
+    // Test Request Body Generation
     // =============================================================================
     
     @Test
@@ -659,7 +660,7 @@ public class RestJsonProtocolGeneratorTest {
     }
     
     // =============================================================================
-    // Step 1.10.6: Test Error Parsing
+    // Test Error Parsing
     // =============================================================================
     
     @Test
@@ -725,7 +726,7 @@ public class RestJsonProtocolGeneratorTest {
     }
     
     // =============================================================================
-    // Step 1.10.7: Test Response Deserialization
+    // Test Response Deserialization
     // =============================================================================
     
     @Test
@@ -870,6 +871,100 @@ public class RestJsonProtocolGeneratorTest {
                 "Should respect @jsonName trait. Got: " + output);
     }
     
+    // =============================================================================
+    // Test List-Valued Query Parameters
+    // =============================================================================
+
+    @Test
+    void testListQueryParameterExpansion() {
+        // A list<string> member bound to @httpQuery must expand into repeated key=value
+        // pairs, not a single None placeholder.
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+
+        IntegerShape intShape = IntegerShape.builder()
+                .id("smithy.api#Integer")
+                .build();
+
+        // list<string> — member is embedded in the ListShape, NOT added separately
+        ListShape statusList = ListShape.builder()
+                .id("test.api#StatusList")
+                .member(ShapeId.from("smithy.api#String"))
+                .build();
+
+        StructureShape inputShape = StructureShape.builder()
+                .id("test.api#ListFilterInput")
+                // list-valued @httpQuery param
+                .addMember(MemberShape.builder()
+                        .id("test.api#ListFilterInput$Status")
+                        .target("test.api#StatusList")
+                        .addTrait(new HttpQueryTrait("Status"))
+                        .build())
+                // scalar @httpQuery param alongside it
+                .addMember(MemberShape.builder()
+                        .id("test.api#ListFilterInput$MaxResults")
+                        .target("smithy.api#Integer")
+                        .addTrait(new HttpQueryTrait("MaxResults"))
+                        .build())
+                .build();
+
+        StructureShape outputShape = StructureShape.builder()
+                .id("test.api#ListFilterOutput")
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("test.api#ListFilter")
+                .input(inputShape.getId())
+                .output(outputShape.getId())
+                .addTrait(HttpTrait.builder()
+                        .method("GET")
+                        .uri(UriPattern.parse("/items"))
+                        .code(200)
+                        .build())
+                .build();
+
+        ServiceShape service = ServiceShape.builder()
+                .id("test.api#TestService")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+
+        Model model = Model.builder()
+                .addShape(stringShape)
+                .addShape(intShape)
+                .addShape(statusList)
+                .addShape(inputShape)
+                .addShape(outputShape)
+                .addShape(operation)
+                .addShape(service)
+                .build();
+
+        UnisonContext context = createTestContext(model, service);
+        generator.generateOperation(operation, writer, context);
+        String output = writer.toString();
+
+        // scalarParts should be emitted (not the old queryParts)
+        assertTrue(output.contains("scalarParts"),
+                "Should use scalarParts for scalar query params. Got: " + output);
+
+        // List expansion: should contain List.map and urlEncode for the list param
+        assertTrue(output.contains("statusQueryParts") || output.contains("StatusQueryParts"),
+                "Should emit a listPartsVar for the list param. Got: " + output);
+        assertTrue(output.contains("List.map"),
+                "Should use List.map to expand list query param. Got: " + output);
+
+        // filteredParts must concatenate both
+        assertTrue(output.contains("List.++"),
+                "filteredParts should concat scalarParts and list parts with List.++. Got: " + output);
+
+        // No None stub
+        assertFalse(output.contains("-- TODO: list-valued query parameter not supported"),
+                "Should not emit TODO stub for list query param. Got: " + output);
+        assertFalse(output.contains("queryParts"),
+                "Should not use old queryParts variable name. Got: " + output);
+    }
+
     /**
      * Creates a test UnisonContext with minimal configuration.
      */
