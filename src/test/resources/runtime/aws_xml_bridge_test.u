@@ -10,32 +10,32 @@ use Text ++
 
 -- === Text-based Parsing Tests ===
 
-testParseListFromText : '{Exception} Boolean
-testParseListFromText = 'let
+testParseListFromXml : '{Exception} Boolean
+testParseListFromXml = 'let
   xml = "<Root><Item>a</Item><Item>b</Item></Root>"
   parser text = aws.xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
-  result = aws.xml.parseListFromText "Item" parser xml
+  result = aws.xml.parseListFromXml "Item" parser xml
   List.size result === 2
 
-testParseWrappedListFromText : '{Exception} Boolean
-testParseWrappedListFromText = 'let
+testParseWrappedListFromXml : '{Exception} Boolean
+testParseWrappedListFromXml = 'let
   xml = "<Root><Container><Item>x</Item><Item>y</Item></Container></Root>"
   parser text = aws.xml.extractElement "Item" ("<Wrapper>" ++ text ++ "</Wrapper>")
-  result = aws.xml.parseWrappedListFromText "Container" "Item" parser xml
+  result = aws.xml.parseWrappedListFromXml "Container" "Item" parser xml
   List.size result === 2
 
-testParseNestedFromText : '{Exception} Boolean
-testParseNestedFromText = 'let
+testParseNestedFromXml : '{Exception} Boolean
+testParseNestedFromXml = 'let
   xml = "<Root><Nested><Value>test</Value></Nested></Root>"
   parser text = aws.xml.extractElement "Value" text
-  result = aws.xml.parseNestedFromText "Nested" parser xml
+  result = aws.xml.parseNestedFromXml "Nested" parser xml
   result === Some "test"
 
-testParseNestedFromTextNotFound : '{Exception} Boolean
-testParseNestedFromTextNotFound = 'let
+testParseNestedFromXmlNotFound : '{Exception} Boolean
+testParseNestedFromXmlNotFound = 'let
   xml = "<Root></Root>"
   parser text = aws.xml.extractElement "Value" text
-  result = aws.xml.parseNestedFromText "Missing" parser xml
+  result = aws.xml.parseNestedFromXml "Missing" parser xml
   result === None
 
 -- === Integration Tests ===
@@ -50,7 +50,7 @@ testComplexStructure = 'let
       Some a -> a
       None -> +0
     (name, age)
-  users = aws.xml.parseListFromText "User" parseUser xml
+  users = aws.xml.parseListFromXml "User" parseUser xml
   (List.size users === 2) && match List.at 0 users with
     Some (name, age) -> name === "Alice" && age === +30
     None -> false
@@ -76,7 +76,7 @@ testS3ListBucketsResponse = 'let
     name = aws.xml.extractElement "Name" text
     date = aws.xml.extractElement "CreationDate" text
     (name, date)
-  buckets = aws.xml.parseWrappedListFromText "Buckets" "Bucket" parseBucket xml
+  buckets = aws.xml.parseWrappedListFromXml "Buckets" "Bucket" parseBucket xml
   (List.size buckets === 2) && match List.at 0 buckets with
     Some (name, _) -> name === "bucket1"
     None -> false
@@ -109,10 +109,10 @@ runAllTests = do
   printLine ""
   
   -- Text-based parsing tests
-  !(runTest "parseListFromText" testParseListFromText)
-  !(runTest "parseWrappedListFromText" testParseWrappedListFromText)
-  !(runTest "parseNestedFromText" testParseNestedFromText)
-  !(runTest "parseNestedFromTextNotFound" testParseNestedFromTextNotFound)
+  !(runTest "parseListFromXml" testParseListFromXml)
+  !(runTest "parseWrappedListFromXml" testParseWrappedListFromXml)
+  !(runTest "parseNestedFromXml" testParseNestedFromXml)
+  !(runTest "parseNestedFromXmlNotFound" testParseNestedFromXmlNotFound)
   
   -- Integration tests
   !(runTest "complexStructure" testComplexStructure)

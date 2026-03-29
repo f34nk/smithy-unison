@@ -50,17 +50,21 @@ scratch/main> load test/resources/runtime/aws_xml_parse_test3.u
 scratch/main> add
 scratch/main> run aws.xml.parse.test3.runAllTests
 
+scratch/main> load main/resources/runtime/aws_http.u
+scratch/main> add
+scratch/main> load test/resources/runtime/aws_http_test.u
+scratch/main> add
+scratch/main> run aws.http.test.runAllTests
+
 scratch/main> load main/resources/runtime/aws_xml_bridge.u
 scratch/main> add
 scratch/main> load test/resources/runtime/aws_xml_bridge_test.u
 scratch/main> add
 scratch/main> run aws.xml.bridge.test.runAllTests
 
-scratch/main> load main/resources/runtime/aws_http.u
+scratch/main> load test/resources/runtime/aws_xml_soup_list_test.u
 scratch/main> add
-scratch/main> load test/resources/runtime/aws_http_test.u
-scratch/main> add
-scratch/main> run aws.http.test.runAllTests
+scratch/main> run aws.xml.soup.list.test.runAllTests
 
 scratch/main> load main/resources/runtime/aws_query.u
 scratch/main> add

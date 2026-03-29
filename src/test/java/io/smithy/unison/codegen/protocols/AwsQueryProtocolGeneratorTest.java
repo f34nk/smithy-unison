@@ -188,12 +188,40 @@ public class AwsQueryProtocolGeneratorTest {
         // Verify AWS Query response structure navigation (Soup-based)
         assertTrue(code.contains("SendMessageResponse"), "Should look for operation response wrapper");
         assertTrue(code.contains("SendMessageResult"), "Should extract result element");
-        assertTrue(code.contains("Soup.parseXML") || code.contains("aws.xml.findAndDrill"), 
-                "Should use Soup-based XML parsing");
+        assertTrue(code.contains("aws.xml.parseResponse"), "Should use bridge entry point for response parsing");
+        assertTrue(code.contains("aws.xml.findAndDrill"), "Should use bridge to navigate response wrapper");
         assertTrue(code.contains("resultSoup"), "Should use resultSoup for field extraction");
         
         // Verify field extraction
         assertTrue(code.contains("MessageId"), "Should extract MessageId field");
+        
+        // No Soup.toXML / extractAllBlocks round-trips in generated response parsers
+        assertFalse(code.contains("Soup.toXML"), "Should not emit Soup.toXML in response deserializer");
+        assertFalse(code.contains("extractAllBlocks"), "Should not emit extractAllBlocks in response deserializer");
+        
+        assertFalse(code.contains("aws.xml.parseNested \""),
+                "Response parser should use parseNestedSoup, not text-based parseNested");
+        assertFalse(code.contains("aws.xml.parseList \""),
+                "Response parser should use parseListSoup, not text-based parseList");
+    }
+
+    @Test
+    public void testBatchResponseUsesSoupNativeListParsing() {
+        OperationShape operation = model.expectShape(
+                ShapeId.from("example.sqs#SendMessageBatch"), OperationShape.class);
+        
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateResponseDeserializer(operation, writer, context);
+        
+        String code = writer.toString();
+        
+        assertTrue(code.contains("aws.xml.parseListSoup"),
+                "Batch response should use parseListSoup for list-of-structure fields. Got: " + code);
+        // Inline *_parseElement helpers use Soup ->{Exception} and do not always reference *FromSoup names
+        assertTrue(code.contains("Soup ->{Exception}") || code.contains("FromSoup"),
+                "Should use Soup-native element parsing (inline helper or *FromSoup). Got: " + code);
+        assertFalse(code.contains("aws.xml.parseList \""),
+                "Should not use text-based parseList in response deserializer");
     }
 
     @Test
@@ -224,8 +252,8 @@ public class AwsQueryProtocolGeneratorTest {
         // Verify AWS Query error structure (Soup-based)
         assertTrue(code.contains("ErrorResponse"), "Should parse ErrorResponse wrapper");
         assertTrue(code.contains("Error"), "Should extract Error element");
-        assertTrue(code.contains("Soup.parseXML") || code.contains("aws.xml.findAndDrill"), 
-                "Should use Soup-based parsing");
+        assertTrue(code.contains("aws.xml.parseResponse"), "Should use bridge entry point for error parsing");
+        assertTrue(code.contains("aws.xml.findAndDrill"), "Should use bridge to navigate error wrapper");
         assertTrue(code.contains("aws.xml.findText"), "Should use Soup-based text extraction");
         assertTrue(code.contains("Code"), "Should extract error code");
         assertTrue(code.contains("Message"), "Should extract error message");

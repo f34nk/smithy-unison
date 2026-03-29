@@ -497,16 +497,15 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             } else if (targetShape.isStringShape()) {
                 writer.write("body = Text.toUtf8 ($L.$L input)", inputType, memberName);
             } else {
-                // Structure payload - serialize as XML
-                writer.write("body = aws.xml.encode ($L.$L input)", inputType, memberName);
+                // Structure payload - type-specific XML serialization not yet generated
+                writer.write("body = Bytes.empty -- TODO: serialize $L.$L as XML", inputType, memberName);
             }
         } else if (bodyMembers.isEmpty()) {
             // No body members - empty body
             writer.write("body = Bytes.empty");
         } else {
-            // Serialize body members as XML - pass input directly
-            writer.write("-- Serialize body members as XML");
-            writer.write("body = aws.xml.encode input");
+            // Body members XML serialization not yet generated
+            writer.write("body = Bytes.empty -- TODO: serialize body members as XML");
         }
     }
     
@@ -561,7 +560,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 generatePayloadExtraction(payloadMember.get(), model, writer);
             } else if (!bodyMembers.isEmpty()) {
                 // Generate XML parsing for body members using Soup
-                writer.write("soup = Soup.parseXML (fromUtf8 (Response.body response))");
+                writer.write("soup = !(aws.xml.parseResponse response)");
                 for (MemberShape member : bodyMembers) {
                     String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
                     String varName = memberName + "Val";
@@ -691,7 +690,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         } else if (targetShape.isStringShape()) {
             writer.write("$L = aws.http.bytesToText (Response.body response)", memberName);
         } else {
-            writer.write("$L = aws.xml.decode (Response.body response)", memberName);
+            writer.write("$L = None -- TODO: parse $L", memberName, targetShape.getType());
         }
     }
     
@@ -801,8 +800,8 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
         writer.write("$L.parseError : Response -> $L", clientNamespace, errorTypeName);
         writer.write("$L.parseError response =", clientNamespace);
         writer.indent();
-        writer.write("-- Parse XML error using Soup: <Error><Code>...</Code><Message>...</Message></Error>");
-        writer.write("soup = Soup.parseXML (fromUtf8 (Response.body response))");
+        writer.write("-- Parse XML error response");
+        writer.write("soup = !(aws.xml.parseResponse response)");
         writer.write("code = aws.xml.findText \"Code\" soup |> Optional.getOrElse \"UnknownError\"");
         writer.write("message = aws.xml.findText \"Message\" soup |> Optional.getOrElse \"\"");
         writer.write("$L.fromCodeAndMessage code message", errorTypeName);
@@ -829,7 +828,7 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 output.getId().getName());
         
         // Parse response body to Soup
-        writer.write("soup = Soup.parseXML (fromUtf8 (Response.body response))");
+        writer.write("soup = !(aws.xml.parseResponse response)");
         
         // Get all members in order (important for constructor)
         List<MemberShape> allMembers = new ArrayList<>(output.getAllMembers().values());
@@ -920,18 +919,17 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                     writer.write("$L = aws.xml.findAllText \"$L\" soup", varName, itemElementName);
                 }
             } else if (memberTarget instanceof StructureShape) {
-                // List of structures - use parseList with Soup-based parser
+                // List of structures - Soup-native parser (no text round-trip)
                 StructureShape structShape = (StructureShape) memberTarget;
                 String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
                 String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                        "parse" + baseTypeName + "FromXml", clientNamespace);
+                        "parse" + baseTypeName + "FromSoup", clientNamespace);
                 
-                // Generate Soup-based list parsing
                 if (isOptional) {
-                    writer.write("$L = aws.xml.parseOptionalWrappedList \"$L\" \"$L\" $L soup",
+                    writer.write("$L = aws.xml.parseOptionalWrappedListSoup \"$L\" \"$L\" $L soup",
                             varName, xmlElementName, itemElementName, parserName);
                 } else {
-                    writer.write("$L = aws.xml.parseList \"$L\" $L soup",
+                    writer.write("$L = aws.xml.parseListSoup \"$L\" $L soup",
                             varName, itemElementName, parserName);
                 }
             } else if (memberTarget instanceof EnumShape || 
@@ -970,18 +968,17 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
                 }
             }
         } else if (targetShape instanceof StructureShape) {
-            // Nested structure - use parseNested with Soup-based parser
+            // Nested structure - Soup-native nested parse
             StructureShape structShape = (StructureShape) targetShape;
             String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
             String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
-                    "parse" + baseTypeName + "FromXml", clientNamespace);
+                    "parse" + baseTypeName + "FromSoup", clientNamespace);
             
             if (isOptional) {
-                writer.write("$L = aws.xml.parseNested \"$L\" $L soup", varName, xmlElementName, parserName);
+                writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L soup", varName, xmlElementName, parserName);
             } else {
-                // Required nested structure - parse and extract, bug if missing
                 String optVarName = varName + "Opt";
-                writer.write("$L = aws.xml.parseNested \"$L\" $L soup", optVarName, xmlElementName, parserName);
+                writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L soup", optVarName, xmlElementName, parserName);
                 writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
                         varName, xmlElementName, optVarName);
             }

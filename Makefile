@@ -71,10 +71,21 @@ examples/%: $(EXAMPLES)
 		exit 1 ; \
 	fi; \
 
+# Usage: make examples/generate
+examples/generate:
+	#
+	# Generate $(EXAMPLES)
+	#
+	@for x in $(EXAMPLES); do \
+		cd $$x ; \
+		make ; \
+		cd - ; \
+	done
+
 # Usage: make examples/clean
 examples/clean:
 	#
-	# Build $(EXAMPLES)
+	# Clean $(EXAMPLES)
 	#
 	@for x in $(EXAMPLES); do \
 		cd $$x ; \
