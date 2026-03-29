@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
  *   <li>{@code aws_s3.u} - S3-specific utilities</li>
  *   <li>{@code aws_config.u} - Shared configuration types (Region, Service, Config, Credentials newtypes)</li>
  *   <li>{@code aws_credentials.u} - Credential loading</li>
+ *   <li>{@code aws_env.u} - AWSEnv ability for signing and region access</li>
  * </ul>
  * 
  * <p>These modules are bundled as resources in the generator JAR and copied
@@ -121,7 +122,12 @@ public final class RuntimeModuleCopier {
         /**
          * Credential loading.
          */
-        AWS_CREDENTIALS("aws_credentials.u", "Credential loading");
+        AWS_CREDENTIALS("aws_credentials.u", "Credential loading"),
+        
+        /**
+         * AWSEnv ability for signing and region access.
+         */
+        AWS_ENV("aws_env.u", "AWSEnv ability for signing and region access");
         
         private final String filename;
         private final String description;
@@ -238,6 +244,7 @@ public final class RuntimeModuleCopier {
      *   <li>{@code aws_s3.u} - S3-specific utilities</li>
      *   <li>{@code aws_config.u} - Shared configuration types (Region, Service, Config, Credentials newtypes)</li>
      *   <li>{@code aws_credentials.u} - Credential provider chain</li>
+     *   <li>{@code aws_env.u} - AWSEnv ability for signing and region access</li>
      * </ul>
      * 
      * @return List of successfully copied module names
@@ -313,6 +320,10 @@ public final class RuntimeModuleCopier {
         // HTTP bridge for @unison/http library - enables real HTTP requests
         if (copyModule(RuntimeModule.AWS_HTTP_BRIDGE)) {
             copied.add(RuntimeModule.AWS_HTTP_BRIDGE.getFilename());
+        }
+        // AWSEnv ability for signing and region access
+        if (copyModule(RuntimeModule.AWS_ENV)) {
+            copied.add(RuntimeModule.AWS_ENV.getFilename());
         }
         
         // Protocol-specific modules

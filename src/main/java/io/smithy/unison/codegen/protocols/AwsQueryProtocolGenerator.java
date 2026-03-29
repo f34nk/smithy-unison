@@ -146,7 +146,7 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
      * 
      * <p>AWS Query operations follow the pattern:
      * <pre>
-     * operationName : Config -> InputType -> '{IO, Exception, Threads} OutputType
+     * operationName : InputType ->{AWSEnv, Exception, Http} OutputType
      * </pre>
      * 
      * @param operation The operation shape
@@ -166,11 +166,10 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         String outputType = operation.getOutput()
                 .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
-        // Use shared aws.config.Config type
-        String configType = "aws.config.Config";
         
-        // Write signature
-        String signature = String.format("%s -> %s -> '{IO, Exception, Threads} %s", configType, inputType, outputType);
+        // Write signature - uses AWSEnv ability instead of Config parameter
+        // Returns a delayed computation (note the tick before the brace)
+        String signature = String.format("%s -> '{IO, AWSEnv, Exception, Http, Threads} %s", inputType, outputType);
         writer.writeSignature(opName, signature);
     }
     
@@ -199,14 +198,24 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         // Generate signature
         generateOperationSignature(operation, writer, context);
         
-        // Write function definition with do block
-        writer.write("$L config input = do", opName);
+        // Write function definition with do block - uses AWSEnv ability
+        writer.write("$L input = do", opName);
         writer.indent();
         
+        // Get region from AWSEnv ability
+        writer.write("region = AWSEnv.region");
+        writer.write("");
+        
         // HTTP method and URI (always POST /)
-        writer.write("method = \"POST\"");
         writer.write("uri = \"/\"");
-        writer.write("url = (aws.config.Config.makeUri config) ++ uri");
+        // Extract signing service name (lowercase, without version suffix)
+        String signingServiceName = extractSigningServiceName(service.getId().getName());
+        // Support custom endpoints (e.g., LocalStack) via AWSEnv.endpoint
+        writer.write("url = match AWSEnv.endpoint with");
+        writer.indent();
+        writer.write("Some e -> e ++ uri");
+        writer.write("None -> \"https://\" ++ \"$L.\" ++ region ++ \".amazonaws.com\" ++ uri", signingServiceName);
+        writer.dedent();
         
         // Serialize request to form parameters
         Model model = context.model();
@@ -237,23 +246,16 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
         writer.write("-- Build request headers");
         writer.write("headers = [(\"Content-Type\", \"$L\")]", getContentType(service));
         
-        // Sign request with SigV4
+        // Build base request and sign with AWSEnv ability
         writer.write("");
-        writer.write("-- Sign request with AWS Signature Version 4");
-        writer.write("region = aws.config.Region.name (aws.config.Config.region config)");
-        writer.write("creds = aws.config.Config.credentials config");
-        writer.write("awsCreds = aws.sigv4.Credentials.Credentials (aws.config.Credentials.accessKeyId creds) (aws.config.Credentials.secretAccessKey creds) (aws.config.Credentials.sessionToken creds)");
-        
-        // Extract signing service name (lowercase, without version suffix)
-        String signingServiceName = extractSigningServiceName(service.getId().getName());
-        writer.write("signingConfig = aws.sigv4.SigningConfig.SigningConfig region \"$L\" awsCreds", signingServiceName);
-        writer.write("allHeaders = !(aws.sigv4.addSigningHeaders signingConfig method uri \"\" headers bodyBytes)");
+        writer.write("-- Build and sign request with AWSEnv ability");
+        writer.write("baseRequest = Http.Request.post url headers bodyBytes");
+        writer.write("signedRequest = AWSEnv.sign \"$L\" baseRequest", signingServiceName);
         
         // Execute HTTP POST
         writer.write("");
         writer.write("-- Make HTTP request");
-        writer.write("request = Http.Request.post url allHeaders bodyBytes");
-        writer.write("response = !(executeRequest request)");
+        writer.write("response = !(executeRequest signedRequest)");
         
         // Handle response - check status and parse
         writer.write("");

@@ -1,18 +1,15 @@
 -- Lambda Demo Application
--- Tests the generated Lambda client against LocalStack mock server
+-- Tests the generated Lambda client using AWSEnv ability
 --
 -- REQUIREMENTS:
--- To run actual HTTP requests, install @unison/http:
---   lib.install @unison/http/releases/8.0.0
--- Then load the bridge module after aws_http.u:
---   load aws_http_bridge.u
---   add
+-- Set environment variables: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+-- Optionally AWS_SESSION_TOKEN for temporary credentials
 
 -- =============================================================================
 -- Helpers
 -- =============================================================================
 
--- Get environment variable with default value
+-- Get environment variable with a default value
 envOrDefault : Text -> Text -> '{IO, Exception} Text
 envOrDefault name default = do
   result = catch do getEnv name
@@ -20,34 +17,30 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
+-- Create basic credentials, using env vars when present, otherwise defaults
+defaultCredentials : '{IO, Exception} aws.config.Credentials
+defaultCredentials = do
+  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
+  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
+  aws.config.basicCredentials key secret
+
 -- Fail if a parsed value is "unnamed" or "unknown" (indicates parsing failure)
-requireParsed : Text -> Text -> '{IO, Exception} ()
+requireParsed : Text -> Text -> '{g} ()
 requireParsed fieldName value = do
   if Text.eq value "unnamed" || Text.eq value "unknown" then
-    Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned '" ++ value ++ "'") (Any ()))
+    bug ("Parsing failed: " ++ fieldName ++ " returned '" ++ value ++ "'")
   else ()
 
 -- Fail if a parsed Optional value is None (indicates parsing failure)
-requireSome : Text -> Optional a -> '{IO, Exception} a
+requireSome : Text -> Optional a -> '{g} a
 requireSome fieldName opt = do
   match opt with
     Some value -> value
-    None -> Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned None") (Any ()))
+    None -> bug ("Parsing failed: " ++ fieldName ++ " returned None")
 
 -- =============================================================================
 -- Configuration
 -- =============================================================================
-
--- Create Lambda client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.config.Config
-defaultConfig = do
-  key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
-  secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.config.basicCredentials key secret
-  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  region = aws.config.Region.fromText regionText
-  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "lambda") creds
 
 -- Test function name - created by terraform provisioner
 testFunctionName : Text
@@ -62,52 +55,53 @@ testPayload = """{"message": "Hello from Unison Lambda Client!"}"""
 -- =============================================================================
 
 -- Entry point for UCM compile - must have '{IO, Exception} signature
--- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
-  -- Threads.run requires Random ability, use Random.run to provide it
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║   Lambda Client Demo (AWSEnv Ability)       ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  region = !(envOrDefault "AWS_REGION" "us-east-1")
+  creds = !defaultCredentials
+  endpointEnv = getEnv "AWS_ENDPOINT"
+  endpoint = if Text.isEmpty endpointEnv then None else Some endpointEnv
+  
+  -- Run demo with AWSEnv, Http and Threads abilities using provided defaults
+  -- Threads.run requires Random, so wrap with Random.run
   Random.run do
     systemfw_concurrent_7_3_0.Threads.run do
-      !runDemo
-
--- Actual demo implementation with Threads ability
-runDemo : '{IO, Exception, Threads} ()
-runDemo = do
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║   Lambda Client Demo (LocalStack Backend)   ║"
-  printLine "╚══════════════════════════════════════════════╝"
-  printLine ""
-  
-  config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
-  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
-  printLine ("Function: " ++ testFunctionName)
-  printLine ""
-  
-  -- Demo 1: List Functions
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 1: List Functions"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(listFunctionsDemo config)
-  
-  -- Demo 2: Get Function Configuration
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 2: Get Function Configuration"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(getFunctionDemo config)
-  
-  -- Demo 3: Invoke Function
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 3: Invoke Function"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(invokeFunctionDemo config)
-  
-  printLine ""
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║          Lambda Demo Complete!               ║"
-  printLine "╚══════════════════════════════════════════════╝"
+      handle
+        Http.run do
+          regionVal = AWSEnv.region
+          printLine ("Region: " ++ regionVal)
+          printLine ("Function: " ++ testFunctionName)
+          printLine ""
+          
+          -- Demo 1: List Functions
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 1: List Functions"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !listFunctionsDemo
+          
+          -- Demo 2: Get Function Configuration
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 2: Get Function Configuration"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !getFunctionDemo
+          
+          -- Demo 3: Invoke Function
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 3: Invoke Function"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !invokeFunctionDemo
+          
+          printLine ""
+          printLine "╔══════════════════════════════════════════════╗"
+          printLine "║          Lambda Demo Complete!               ║"
+          printLine "╚══════════════════════════════════════════════╝"
+      with AWSEnv.handler region creds endpoint
 
 -- =============================================================================
 -- Demo Functions
@@ -117,15 +111,15 @@ runDemo = do
 List all Lambda functions.
 Verifies that our test function exists.
 }}
-listFunctionsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-listFunctionsDemo config = do
+listFunctionsDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+listFunctionsDemo = do
   printLine "  → Calling ListFunctions..."
   
   -- Create request with empty options (will list all functions)
   request = aws.lambda.ListFunctionsRequest.ListFunctionsRequest None None None None
   
-  -- Call the API
-  response = !(aws.lambda.listFunctions config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.lambda.listFunctions request)
   
   printLine "  ✓ SUCCESS: ListFunctions returned"
   
@@ -152,16 +146,16 @@ listFunctionsDemo config = do
 {{
 Get configuration details for the test function.
 }}
-getFunctionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-getFunctionDemo config = do
+getFunctionDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+getFunctionDemo = do
   printLine "  → Calling GetFunction..."
   printLine ("    FunctionName: " ++ testFunctionName)
   
   -- Create request with function name
   request = aws.lambda.GetFunctionRequest.GetFunctionRequest testFunctionName None
   
-  -- Call the API
-  response = !(aws.lambda.getFunction config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.lambda.getFunction request)
   
   printLine "  ✓ SUCCESS: GetFunction returned"
   
@@ -190,8 +184,8 @@ getFunctionDemo config = do
 {{
 Invoke the Lambda function with test payload.
 }}
-invokeFunctionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-invokeFunctionDemo config = do
+invokeFunctionDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+invokeFunctionDemo = do
   printLine "  → Calling Invoke..."
   printLine ("    FunctionName: " ++ testFunctionName)
   printLine ("    Payload: " ++ testPayload)
@@ -201,8 +195,8 @@ invokeFunctionDemo config = do
   payloadBytes = Text.toUtf8 testPayload
   request = aws.lambda.InvocationRequest.InvocationRequest None None testFunctionName None None (Some payloadBytes) None None
   
-  -- Call the API
-  response = !(aws.lambda.invoke config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.lambda.invoke request)
   
   -- Extract response details
   statusCode = aws.lambda.InvocationResponse.statusCode response

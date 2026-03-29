@@ -31,16 +31,12 @@ requireParsed fieldName value = do
 -- Configuration
 -- =============================================================================
 
--- Create S3 client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.config.Config
-defaultConfig = do
+-- Create AWS credentials for LocalStack
+defaultCredentials : '{IO, Exception} aws.config.Credentials
+defaultCredentials = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.config.basicCredentials key secret
-  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  region = aws.config.Region.fromText regionText
-  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "s3") creds
+  aws.config.Credentials.Credentials key secret None
 
 -- Test bucket name - created by terraform provisioner in docker-compose
 testBucket : Text
@@ -62,22 +58,34 @@ testObjectContent = "Hello from Unison S3 Client!"
 -- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
+  -- Get AWS configuration from environment
+  regionName = !(envOrDefault "AWS_REGION" "us-east-1")
+  creds = !defaultCredentials
+  endpointEnv = catch do getEnv "AWS_ENDPOINT"
+  endpointUrl = match endpointEnv with
+    Either.Right e -> if Text.isEmpty e then None else Some e
+    _ -> None
+  
   -- Threads.run requires Random ability, use Random.run to provide it
   Random.run do
     systemfw_concurrent_7_3_0.Threads.run do
-      !runDemo
+      Http.run do
+        handle !runDemo with AWSEnv.handler regionName creds endpointUrl
 
 -- Actual demo implementation with Threads ability
-runDemo : '{IO, Exception, Threads} ()
+runDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
 runDemo = do
   printLine "╔══════════════════════════════════════════╗"
   printLine "║      S3 Client Demo (LocalStack Backend) ║"
   printLine "╚══════════════════════════════════════════╝"
   printLine ""
   
-  config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
-  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
+  region = AWSEnv.region
+  endpoint = match AWSEnv.endpoint with
+    Some e -> e
+    None -> "https://s3." ++ region ++ ".amazonaws.com"
+  printLine ("Endpoint: " ++ endpoint)
+  printLine ("Region: " ++ region)
   printLine ("Bucket: " ++ testBucket)
   printLine ""
   
@@ -85,42 +93,42 @@ runDemo = do
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 1: List Buckets"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(listBucketsDemo config)
+  !listBucketsDemo
   
   -- Demo 2: Put Object
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 2: Put Object"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(putObjectDemo config)
+  !putObjectDemo
   
   -- Demo 3: List Objects (should include our new file)
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 3: List Objects"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(listObjectsV2Demo config)
+  !listObjectsV2Demo
   
   -- Demo 4: Get Object
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 4: Get Object"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(getObjectDemo config)
+  !getObjectDemo
   
   -- Demo 5: Delete Object (cleanup)
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 5: Delete Object (cleanup)"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(deleteObjectDemo config)
+  !deleteObjectDemo
   
   -- Demo 6: Verify Deletion
   printLine ""
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printLine "Step 6: Verify Deletion"
   printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(verifyDeletionDemo config)
+  !verifyDeletionDemo
   
   printLine ""
   printLine "╔══════════════════════════════════════════╗"
@@ -135,8 +143,8 @@ runDemo = do
 List all buckets in the account.
 The terraform provisioner creates 'us-east-1-nonprod-configs' bucket.
 }}
-listBucketsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-listBucketsDemo config = do
+listBucketsDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+listBucketsDemo = do
   printLine "  → Creating ListBucketsRequest..."
   
   -- Create request with all optional fields as None
@@ -144,7 +152,7 @@ listBucketsDemo config = do
   
   -- Call the S3 client
   printLine "  → Calling listBuckets..."
-  result = !(aws.s3.listBuckets config request)
+  result = !(aws.s3.listBuckets request)
   
   -- Extract and print buckets
   printLine "  ✓ SUCCESS: ListBuckets returned"
@@ -163,8 +171,8 @@ listBucketsDemo config = do
 {{
 Upload a test object to the configs bucket.
 }}
-putObjectDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-putObjectDemo config = do
+putObjectDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+putObjectDemo = do
   printLine ("  → Creating PutObjectRequest...")
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Key: " ++ testObjectKey)
@@ -180,7 +188,7 @@ putObjectDemo config = do
   
   -- Call the S3 client
   printLine "  → Calling putObject..."
-  result = !(aws.s3.putObject config request)
+  result = !(aws.s3.putObject request)
   
   printLine "  ✓ SUCCESS: PutObject completed"
   -- Print ETag if available
@@ -191,8 +199,8 @@ putObjectDemo config = do
 {{
 List objects in the configs prefix.
 }}
-listObjectsV2Demo : aws.config.Config -> '{IO, Exception, Threads} ()
-listObjectsV2Demo config = do
+listObjectsV2Demo : '{IO, AWSEnv, Exception, Http, Threads} ()
+listObjectsV2Demo = do
   printLine "  → Creating ListObjectsV2Request..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Prefix: configs/")
@@ -202,7 +210,7 @@ listObjectsV2Demo config = do
   
   -- Call the S3 client
   printLine "  → Calling listObjectsV2..."
-  result = !(aws.s3.listObjectsV2 config request)
+  result = !(aws.s3.listObjectsV2 request)
   
   printLine "  ✓ SUCCESS: ListObjectsV2 returned"
   match aws.s3.ListObjectsV2Output.contents result with
@@ -220,8 +228,8 @@ listObjectsV2Demo config = do
 {{
 Get the test object we uploaded.
 }}
-getObjectDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-getObjectDemo config = do
+getObjectDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+getObjectDemo = do
   printLine "  → Creating GetObjectRequest..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Key: " ++ testObjectKey)
@@ -231,7 +239,7 @@ getObjectDemo config = do
   
   -- Call the S3 client
   printLine "  → Calling getObject..."
-  result = !(aws.s3.getObject config request)
+  result = !(aws.s3.getObject request)
   
   -- Extract and print body
   body = aws.s3.GetObjectOutput.body result
@@ -249,8 +257,8 @@ getObjectDemo config = do
 {{
 Delete the test object (cleanup).
 }}
-deleteObjectDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-deleteObjectDemo config = do
+deleteObjectDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+deleteObjectDemo = do
   printLine "  → Creating DeleteObjectRequest..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Key: " ++ testObjectKey)
@@ -260,7 +268,7 @@ deleteObjectDemo config = do
   
   -- Call the S3 client
   printLine "  → Calling deleteObject..."
-  result = !(aws.s3.deleteObject config request)
+  result = !(aws.s3.deleteObject request)
   
   printLine "  ✓ SUCCESS: DeleteObject completed"
   -- Print delete marker if versioned
@@ -271,8 +279,8 @@ deleteObjectDemo config = do
 {{
 Verify the test object was deleted by listing objects.
 }}
-verifyDeletionDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-verifyDeletionDemo config = do
+verifyDeletionDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+verifyDeletionDemo = do
   printLine "  → Listing objects after deletion..."
   printLine ("    Bucket: " ++ testBucket)
   printLine ("    Prefix: configs/")
@@ -281,7 +289,7 @@ verifyDeletionDemo config = do
   request = aws.s3.ListObjectsV2Request.ListObjectsV2Request testBucket None None None None None (Some +100) None (Some "configs/") None None
   
   -- Call the S3 client
-  result = !(aws.s3.listObjectsV2 config request)
+  result = !(aws.s3.listObjectsV2 request)
   
   printLine "  ✓ SUCCESS: ListObjectsV2 returned"
   match aws.s3.ListObjectsV2Output.contents result with

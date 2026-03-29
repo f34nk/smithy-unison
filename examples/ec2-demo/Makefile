@@ -1,7 +1,7 @@
 export HOST_PORT=4572
 export AWS_ACCESS_KEY_ID=dummy
 export AWS_SECRET_ACCESS_KEY=dummy
-export AWS_DEFAULT_REGION=us-east-1
+export AWS_REGION=us-east-1
 export AWS_ENDPOINT=http://localhost:$(HOST_PORT)
 export TF_VAR_endpoint=$(AWS_ENDPOINT)
 export SERVICES=ec2
@@ -13,7 +13,7 @@ all: clean generate
 .PHONY: generate
 generate: model/ec2-2016-11-15.json
 	#
-	# Generate $(CONTAINER_NAME) code from Smithy model
+	# Generate $(CONTAINER_NAME)
 	#
 	smithy build
 	tree -h generated
@@ -28,12 +28,15 @@ clean: docker/stop
 	rm -f terraform/terraform.tfstate
 	rm -f terraform/terraform.tfstate.backup
 
+# Run demo tests with UCM transcript
+# Note: For reproducible tests, set AWS_SIGV4_TIMESTAMP environment variable:
+#   AWS_SIGV4_TIMESTAMP=20260113T120000Z make test
 .PHONY: test
 test: generate docker/start terraform
 	#
-	# Run $(CONTAINER_NAME) demo against LocalStack
+	# Run $(CONTAINER_NAME)
 	#
-	ucm transcript demo.md
+	unset AWS_SESSION_TOKEN && ucm transcript demo.md
 
 .PHONY: compile-with-lib
 compile-with-lib:
@@ -45,7 +48,7 @@ compile-with-lib:
 .PHONY: integration-test
 integration-test: compile-with-lib docker/start terraform
 	#
-	# Run compiled $(CONTAINER_NAME) code
+	# Run compiled $(CONTAINER_NAME)
 	#
 	ucm run.compiled compiled/main.uc
 
@@ -60,15 +63,15 @@ model/ec2-2016-11-15.json:
 .PHONY: terraform
 terraform:
 	#
-	# Run Terraform to create infrastructure
+	# Create $(CONTAINER_NAME) infrastructure
 	#
-	@echo "AWS_DEFAULT_REGION is $$AWS_DEFAULT_REGION"
+	@echo "AWS_REGION is $$AWS_REGION"
 	cd terraform && terraform init && terraform apply -auto-approve
 
 .PHONY: docker/start
 docker/start: docker/stop
 	#
-	# Run LocalStack in Docker
+	# Start $(CONTAINER_NAME) LocalStack
 	#
 	@echo "Forward port $$HOST_PORT to Localstack port 4566"
 	docker run --rm -d -p $(HOST_PORT):4566 -e SERVICES=$(SERVICES) --name $(CONTAINER_NAME) localstack/localstack

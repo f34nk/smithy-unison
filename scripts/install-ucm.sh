@@ -6,7 +6,7 @@ Installs/updates UCM from GitHub releases
     https://github.com/unisonweb/unison/releases
 "
 
-UCM_VERSION="${UCM_VERSION:-1.0.2}"
+UCM_VERSION="${UCM_VERSION:-1.1.1}"
 UCM_INSTALL_DIR=$HOME/.ucm
 UCM_BIN=$UCM_INSTALL_DIR/ucm
 

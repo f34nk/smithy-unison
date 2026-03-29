@@ -1,18 +1,15 @@
 -- EC2 Demo Application
--- Tests the generated EC2 client against LocalStack mock server
+-- Tests the generated EC2 client using AWSEnv ability
 --
 -- REQUIREMENTS:
--- To run actual HTTP requests, install @unison/http:
---   lib.install @unison/http/releases/8.0.0
--- Then load the bridge module after aws_http.u:
---   load aws_http_bridge.u
---   add
+-- Set environment variables: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+-- Optionally AWS_SESSION_TOKEN for temporary credentials
 
 -- =============================================================================
 -- Helpers
 -- =============================================================================
 
--- Get environment variable with default value
+-- Get environment variable with a default value
 envOrDefault : Text -> Text -> '{IO, Exception} Text
 envOrDefault name default = do
   result = catch do getEnv name
@@ -20,92 +17,85 @@ envOrDefault name default = do
     Either.Left _ -> default
     Either.Right value -> if Text.isEmpty value then default else value
 
--- Fail if a parsed value is "unknown" (indicates parsing failure)
-requireParsed : Text -> Text -> '{IO, Exception} ()
-requireParsed fieldName value = do
-  if Text.eq value "unknown" then
-    Exception.raise (Failure (typeLink Text) ("Parsing failed: " ++ fieldName ++ " returned 'unknown'") (Any ()))
-  else ()
-
--- =============================================================================
--- Configuration
--- =============================================================================
-
--- Create EC2 client configuration for LocalStack
-defaultConfig : '{IO, Exception} aws.config.Config
-defaultConfig = do
+-- Create basic credentials, using env vars when present, otherwise defaults
+defaultCredentials : '{IO, Exception} aws.config.Credentials
+defaultCredentials = do
   key = !(envOrDefault "AWS_ACCESS_KEY_ID" "dummy")
   secret = !(envOrDefault "AWS_SECRET_ACCESS_KEY" "dummy")
-  creds = aws.config.basicCredentials key secret
-  endpoint = !(envOrDefault "AWS_ENDPOINT" "http://localhost:4566")
-  regionText = !(envOrDefault "AWS_DEFAULT_REGION" "us-east-1")
-  region = aws.config.Region.fromText regionText
-  aws.config.Config.withEndpoint endpoint region (aws.config.Service.fromText "ec2") creds
+  aws.config.basicCredentials key secret
+
+-- Fail if a parsed value is "unknown" (indicates parsing failure)
+requireParsed : Text -> Text -> '{g} ()
+requireParsed fieldName value = do
+  if Text.eq value "unknown" then
+    bug ("Parsing failed: " ++ fieldName ++ " returned 'unknown'")
+  else ()
 
 -- =============================================================================
 -- Main Demo
 -- =============================================================================
 
 -- Entry point for UCM compile - must have '{IO, Exception} signature
--- Uses Threads.run from @systemfw/concurrent to handle the Threads ability
 main : '{IO, Exception} ()
 main = do
-  -- Threads.run requires Random ability, use Random.run to provide it
+  printLine "╔══════════════════════════════════════════════╗"
+  printLine "║     EC2 Client Demo (AWSEnv Ability)        ║"
+  printLine "╚══════════════════════════════════════════════╝"
+  printLine ""
+  region = !(envOrDefault "AWS_REGION" "us-east-1")
+  creds = !defaultCredentials
+  endpointEnv = getEnv "AWS_ENDPOINT"
+  endpoint = if Text.isEmpty endpointEnv then None else Some endpointEnv
+  
+  -- Run demo with AWSEnv, Http and Threads abilities using provided defaults
+  -- Threads.run requires Random, so wrap with Random.run
   Random.run do
     systemfw_concurrent_7_3_0.Threads.run do
-      !runDemo
-
--- Actual demo implementation with Threads ability
-runDemo : '{IO, Exception, Threads} ()
-runDemo = do
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║     EC2 Client Demo (LocalStack Backend)    ║"
-  printLine "╚══════════════════════════════════════════════╝"
-  printLine ""
-  
-  config = !defaultConfig
-  printLine ("Endpoint: " ++ aws.config.Config.makeUri config)
-  printLine ("Region: " ++ aws.config.Region.name (aws.config.Config.region config))
-  printLine ""
-  
-  -- Demo 1: Describe VPCs
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 1: Describe VPCs"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(describeVpcsDemo config)
-  
-  -- Demo 2: Describe Subnets
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 2: Describe Subnets"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(describeSubnetsDemo config)
-  
-  -- Demo 3: Describe Security Groups
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 3: Describe Security Groups"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(describeSecurityGroupsDemo config)
-  
-  -- Demo 4: Run Instances
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 4: Run Instances"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(runInstancesDemo config)
-  
-  -- Demo 5: Describe Instances (should now show the instance we just launched)
-  printLine ""
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  printLine "Step 5: Describe Instances"
-  printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  !(describeInstancesDemo config)
-  
-  printLine ""
-  printLine "╔══════════════════════════════════════════════╗"
-  printLine "║           EC2 Demo Complete!                 ║"
-  printLine "╚══════════════════════════════════════════════╝"
+      handle
+        Http.run do
+          regionVal = AWSEnv.region
+          printLine ("Region: " ++ regionVal)
+          printLine ""
+          
+          -- Demo 1: Describe VPCs
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 1: Describe VPCs"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !describeVpcsDemo
+          
+          -- Demo 2: Describe Subnets
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 2: Describe Subnets"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !describeSubnetsDemo
+          
+          -- Demo 3: Describe Security Groups
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 3: Describe Security Groups"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !describeSecurityGroupsDemo
+          
+          -- Demo 4: Run Instances
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 4: Run Instances"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !runInstancesDemo
+          
+          -- Demo 5: Describe Instances (should now show the instance we just launched)
+          printLine ""
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          printLine "Step 5: Describe Instances"
+          printLine "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          !describeInstancesDemo
+          
+          printLine ""
+          printLine "╔══════════════════════════════════════════════╗"
+          printLine "║           EC2 Demo Complete!                 ║"
+          printLine "╚══════════════════════════════════════════════╝"
+      with AWSEnv.handler region creds endpoint
 
 -- =============================================================================
 -- Demo Functions
@@ -114,16 +104,16 @@ runDemo = do
 {{
 Describe VPCs created by Terraform.
 }}
-describeVpcsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-describeVpcsDemo config = do
+describeVpcsDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+describeVpcsDemo = do
   printLine "  → Calling DescribeVpcs..."
   
   -- Create request with empty options (will list all VPCs)
   -- Fields: dryRun, filters, maxResults, nextToken, vpcIds
   request = aws.ec2.DescribeVpcsRequest.DescribeVpcsRequest None None None None None
   
-  -- Call the API
-  response = !(aws.ec2.describeVpcs config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.ec2.describeVpcs request)
   
   printLine "  ✓ SUCCESS: DescribeVpcs returned"
   
@@ -149,16 +139,16 @@ describeVpcsDemo config = do
 {{
 Describe Subnets created by Terraform.
 }}
-describeSubnetsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-describeSubnetsDemo config = do
+describeSubnetsDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+describeSubnetsDemo = do
   printLine "  → Calling DescribeSubnets..."
   
   -- Create request with empty options (will list all subnets)
   -- Fields: dryRun, filters, maxResults, nextToken, subnetIds
   request = aws.ec2.DescribeSubnetsRequest.DescribeSubnetsRequest None None None None None
   
-  -- Call the API
-  response = !(aws.ec2.describeSubnets config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.ec2.describeSubnets request)
   
   printLine "  ✓ SUCCESS: DescribeSubnets returned"
   
@@ -188,16 +178,16 @@ describeSubnetsDemo config = do
 {{
 Describe Security Groups created by Terraform.
 }}
-describeSecurityGroupsDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-describeSecurityGroupsDemo config = do
+describeSecurityGroupsDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+describeSecurityGroupsDemo = do
   printLine "  → Calling DescribeSecurityGroups..."
   
   -- Create request with empty options (will list all security groups)
   -- Fields: dryRun, filters, groupIds, groupNames, maxResults, nextToken
   request = aws.ec2.DescribeSecurityGroupsRequest.DescribeSecurityGroupsRequest None None None None None None
   
-  -- Call the API
-  response = !(aws.ec2.describeSecurityGroups config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.ec2.describeSecurityGroups request)
   
   printLine "  ✓ SUCCESS: DescribeSecurityGroups returned"
   
@@ -228,8 +218,8 @@ describeSecurityGroupsDemo config = do
 Run an EC2 instance using the LocalStack backend.
 Uses a dummy AMI ID that LocalStack accepts.
 }}
-runInstancesDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-runInstancesDemo config = do
+runInstancesDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+runInstancesDemo = do
   printLine "  → Calling RunInstances..."
   
   -- Create a minimal RunInstances request
@@ -244,12 +234,12 @@ runInstancesDemo config = do
   -- ipv6AddressCount, ipv6Addresses, kernelId, keyName, launchTemplate,
   -- licenseSpecifications, maintenanceOptions, maxCount, metadataOptions, minCount,
   -- monitoring, networkInterfaces, networkPerformanceOptions, operator, placement,
-  -- privateDnsNameOptions, privateIpAddress, ramdiskId, securityGroupIds, securityGroups,
-  -- subnetId, tagSpecifications, userData
-  request = aws.ec2.RunInstancesRequest.RunInstancesRequest None None None None None None None None None None None None None None None None (Some "ami-12345678") None None (Some aws.ec2.InstanceType't2_micro) None None None None None None None +1 None +1 None None None None None None None None None None None None None
+  -- privateDnsNameOptions, privateIpAddress, ramdiskId, secondaryInterfaces, securityGroupIds,
+  -- securityGroups, subnetId, tagSpecifications, userData
+  request = aws.ec2.RunInstancesRequest.RunInstancesRequest None None None None None None None None None None None None None None None None (Some "ami-12345678") None None (Some aws.ec2.InstanceType't2_micro) None None None None None None None +1 None +1 None None None None None None None None None None None None None None
   
-  -- Call the API
-  response = !(aws.ec2.runInstances config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.ec2.runInstances request)
   
   printLine "  ✓ SUCCESS: RunInstances returned"
       
@@ -289,16 +279,16 @@ runInstancesDemo config = do
 {{
 Describe EC2 instances (if any are running).
 }}
-describeInstancesDemo : aws.config.Config -> '{IO, Exception, Threads} ()
-describeInstancesDemo config = do
+describeInstancesDemo : '{IO, AWSEnv, Exception, Http, Threads} ()
+describeInstancesDemo = do
   printLine "  → Calling DescribeInstances..."
   
   -- Create request with empty options (will list all instances)
   -- Fields: dryRun, filters, instanceIds, maxResults, nextToken
   request = aws.ec2.DescribeInstancesRequest.DescribeInstancesRequest None None None None None
   
-  -- Call the API
-  response = !(aws.ec2.describeInstances config request)
+  -- Call the API (no config needed - uses AWSEnv)
+  response = !(aws.ec2.describeInstances request)
   
   printLine "  ✓ SUCCESS: DescribeInstances returned"
   

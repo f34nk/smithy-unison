@@ -187,9 +187,6 @@ public class PaginationGenerator {
                 .map(id -> UnisonSymbolProvider.toNamespacedTypeName(id.getName(), clientNamespace))
                 .orElse("()");
         
-        // Config type - always use shared aws.config.Config for AWS services
-        String configType = "aws.config.Config";
-        
         // Determine the token type from the input structure
         String tokenType = "Text"; // default
         if (operation.getInput().isPresent()) {
@@ -256,11 +253,11 @@ public class PaginationGenerator {
             "Uses '" + inputToken + "' (type: " + tokenType + ") as input token and '" + outputToken + "' as output token.");
         
         // Function signature with concrete item type and namespaced types
-        // Note: HTTP operations use {IO, Http, Exception, Threads} abilities for real HTTP via @unison/http
+        // Note: HTTP operations use {IO, AWSEnv, Http, Exception, Threads} abilities for real HTTP via @unison/http
         String helperName = opName + "All";
-        writer.writeSignature(helperName, configType + " -> " + inputType + " -> '{IO, Http, Exception, Threads} [" + itemType + "]");
+        writer.writeSignature(helperName, inputType + " -> '{IO, AWSEnv, Http, Exception, Threads} [" + itemType + "]");
         
-        writer.write("$L config input =", helperName);
+        writer.write("$L input =", helperName);
         writer.indent();
         writer.write("let");
         writer.indent();
@@ -269,7 +266,7 @@ public class PaginationGenerator {
         // Token type is determined from the input structure's pagination field
         // Wrap complex types in parentheses for Optional
         String wrappedTokenType = tokenType.contains(" ") ? "(" + tokenType + ")" : tokenType;
-        writer.write("go : Optional " + wrappedTokenType + " -> [" + itemType + "] -> '{IO, Http, Exception, Threads} [" + itemType + "]");
+        writer.write("go : Optional " + wrappedTokenType + " -> [" + itemType + "] -> '{IO, AWSEnv, Http, Exception, Threads} [" + itemType + "]");
         writer.write("go token acc = do");
         writer.indent();
         
@@ -277,8 +274,8 @@ public class PaginationGenerator {
         // Unison record update syntax: TypeName.field.set newValue record
         String inputTokenField = UnisonSymbolProvider.toUnisonFunctionName(inputToken);
         writer.write("inputWithToken = $L.$L.set token input", inputType, inputTokenField);
-        // Force the delayed computation with !
-        writer.write("response = !($L config inputWithToken)", opName);
+        // Execute the operation with current input token - force the delayed computation with !
+        writer.write("response = !($L inputWithToken)", opName);
         // Note: Unison uses accessor functions: TypeName.field record, not record.field
         // If items field is required, access it directly; if optional, use Optional.getOrElse
         if (itemsFieldIsRequired) {
@@ -349,9 +346,9 @@ public class PaginationGenerator {
             "pages one at a time without loading all results into memory.");
         
         String helperName = opName + "Pages";
-        writer.writeSignature(helperName, "Config -> " + inputType + " -> '{IO, Exception, Stream} " + outputType);
+        writer.writeSignature(helperName, inputType + " -> '{IO, AWSEnv, Exception, Stream} " + outputType);
         
-        writer.write("$L config input =", helperName);
+        writer.write("$L input =", helperName);
         writer.indent();
         writer.write("let");
         writer.indent();
@@ -359,15 +356,15 @@ public class PaginationGenerator {
         String inputTokenField = UnisonSymbolProvider.toUnisonFunctionName(inputToken);
         String outputTokenField = UnisonSymbolProvider.toUnisonFunctionName(outputToken);
         
-        writer.write("go : Optional Text -> '{IO, Exception, Stream} ()");
+        writer.write("go : Optional Text -> '{IO, AWSEnv, Exception, Stream} ()");
         writer.write("go token =");
         writer.indent();
         writer.write("let");
         writer.indent();
         // Unison record update syntax: TypeName.field.set newValue record
         writer.write("inputWithToken = $L.$L.set token input", inputType, inputTokenField);
-        // Force the delayed computation with !
-        writer.write("response = !($L config inputWithToken)", opName);
+        // Execute the operation with current input token - force the delayed computation with !
+        writer.write("response = !($L inputWithToken)", opName);
         writer.write("Stream.emit response");
         writer.dedent();
         // Note: Unison uses accessor functions: TypeName.field record, not record.field
