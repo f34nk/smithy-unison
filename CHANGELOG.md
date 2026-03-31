@@ -4,6 +4,32 @@
 
 ### Added
 
+#### Runtime Tests for XML Map, Float, and Timestamp Extraction
+- `aws_xml_bridge_test.u`: tests for `aws.xml.extractMapSoup` (default tags, custom tags, empty container)
+- `aws_xml_bridge_test.u`: tests for the `findText |> Optional.flatMap Float.fromText` float extraction pattern
+- `aws_xml_bridge_test.u`: tests for the `findText` timestamp extraction pattern
+
+### Fixed
+
+#### REST-XML Response Fields of Previously Unsupported Types
+- Timestamp fields now extract as `Optional Text` (or `Text`) via `aws.xml.findText` instead of a `None` stub
+- Float and Double fields now extract via `aws.xml.findText |> Optional.flatMap Float.fromText`
+- Map fields now extract via `aws.xml.findOpt` + `aws.xml.extractMapSoup` + `Map.fromList`; key/value tag names are resolved from `@xmlName` traits
+- Union and Document response fields emit a type-specific `None -- TODO` stub instead of the generic `None -- TODO: parse <type>` placeholder
+- The generic catch-all in `generateXmlFieldExtraction` is replaced with an `IllegalArgumentException` to surface unrecognised types at code-generation time
+
+#### Optional Scalar Fields in Flattened Nested Structs (AWS Query)
+- `generateFlattenedStructure` now emits `opt_* = match ... with None -> [] | Some v -> [...]` let-bindings for optional scalar members
+- Optional lists are concatenated to the required field list via `List.++`
+- Removes the `-- TODO: Handle optional nested field` stub
+
+#### List-Valued Query Parameters (REST-JSON)
+- `generateQueryString` separates scalar and list-valued `@httpQuery` members
+- Each list element becomes a separate `key=value` repetition via `List.map` and `aws.http.urlEncode`
+- Removes the `None -- TODO: list-valued query parameter not supported` stub
+
+### Added
+
 #### Shared AWS Configuration Types
 - Shared `aws.config.Config` and `aws.config.Credentials` types replacing per-service duplicates
 - Type-safe newtype wrappers: `Region`, `Service`, `HostName`, `Port`

@@ -529,7 +529,7 @@ public class RestXmlProtocolGeneratorTest {
     }
     
     // =========================================================================
-    // Tests for previously-unsupported field types (Step 8, plan 04)
+    // Tests for previously-unsupported field types
     // =========================================================================
 
     @Test

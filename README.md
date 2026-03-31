@@ -25,6 +25,7 @@ Reference: https://smithy.io/2.0/index.html
   - Full operation implementation (all 106 S3 operations)
   - HTTP binding traits: `@http`, `@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`, `@httpResponseCode`
   - Request serialization / Response deserialization
+  - Response field extraction for strings, integers, booleans, blobs, enums, lists, nested structures, timestamps, floats, and maps
   - Error parsing
 - **AWS JSON 1.0/1.1 protocols** (DynamoDB, Lambda, Kinesis)
   - Full operation implementation with request serialization and response deserialization
@@ -35,6 +36,7 @@ Reference: https://smithy.io/2.0/index.html
   - Full operation implementation with HTTP bindings and JSON serialization/deserialization
   - Complete response deserializer generation (structures, enums, lists, maps, unions)
   - Path parameter substitution and query string building
+  - Scalar and list-valued `@httpQuery` parameter serialization (repeated `key=value` per element)
   - HTTP header extraction and body serialization
   - Error parsing with multiple format support
   - Resource operation support
@@ -43,7 +45,7 @@ Reference: https://smithy.io/2.0/index.html
   - Full operation implementation with XML request serialization and response deserialization
   - Form-encoded parameter serialization with proper Query format
   - XML map and list extraction with @xmlFlattened trait support
-  - Structure list serialization with required/optional field handling
+  - Structure list serialization with required and optional scalar field handling
   - Error parsing from XML error responses
 - **EC2 Query protocol** (EC2)
   - Extends AWS Query with EC2-specific response and error format handling
@@ -99,13 +101,13 @@ The ***-demo** examples generate client code from the official [AWS SDK smithy m
 
 |  |
 |--|
-| make [examples/s3-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u)  |
 | make [examples/dynamodb-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/dynamodb-demo/src/main.u)  |
-| make [examples/sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
-| make [examples/kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
-| make [examples/sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
-| make [examples/lambda-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/lambda-demo/src/main.u)  |
 | make [examples/ec2-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/ec2-demo/src/main.u)  |
+| make [examples/kinesis-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/kinesis-demo/src/main.u)  |
+| make [examples/lambda-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/lambda-demo/src/main.u)  |
+| make [examples/s3-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/s3-demo/src/main.u)  |
+| make [examples/sns-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sns-demo/src/main.u)  |
+| make [examples/sqs-demo](https://github.com/f34nk/smithy-unison/blob/main/examples/sqs-demo/src/main.u)  |
 
 Run integration-test:
 
