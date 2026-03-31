@@ -10,15 +10,18 @@ import software.amazon.smithy.build.FileManifest;
 import software.amazon.smithy.codegen.core.SymbolProvider;
 import software.amazon.smithy.codegen.core.WriterDelegator;
 import software.amazon.smithy.model.Model;
+import software.amazon.smithy.model.shapes.FloatShape;
+import software.amazon.smithy.model.shapes.MapShape;
+import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
 import software.amazon.smithy.model.shapes.ShapeId;
 import software.amazon.smithy.model.shapes.StructureShape;
-import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.BlobShape;
 import software.amazon.smithy.model.shapes.IntegerShape;
 import software.amazon.smithy.model.shapes.ListShape;
+import software.amazon.smithy.model.shapes.TimestampShape;
 import software.amazon.smithy.model.traits.HttpTrait;
 import software.amazon.smithy.model.traits.HttpLabelTrait;
 import software.amazon.smithy.model.traits.HttpQueryTrait;
@@ -525,6 +528,210 @@ public class RestXmlProtocolGeneratorTest {
                 "Should not apply to service without REST-XML protocol");
     }
     
+    // =========================================================================
+    // Tests for previously-unsupported field types (Step 8, plan 04)
+    // =========================================================================
+
+    @Test
+    void testTimestampFieldGeneratesFindText() {
+        TimestampShape tsShape = TimestampShape.builder()
+                .id("smithy.api#Timestamp")
+                .build();
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+
+        StructureShape inputShape = StructureShape.builder()
+                .id("com.example#HeadObjectInput")
+                .addMember(MemberShape.builder()
+                        .id("com.example#HeadObjectInput$Bucket")
+                        .target("smithy.api#String")
+                        .addTrait(new RequiredTrait())
+                        .addTrait(new HttpLabelTrait())
+                        .build())
+                .build();
+
+        StructureShape outputShape = StructureShape.builder()
+                .id("com.example#HeadObjectOutput")
+                .addMember(MemberShape.builder()
+                        .id("com.example#HeadObjectOutput$LastModified")
+                        .target("smithy.api#Timestamp")
+                        .build())
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("com.example#HeadObject")
+                .input(inputShape.getId())
+                .output(outputShape.getId())
+                .addTrait(HttpTrait.builder()
+                        .method("HEAD")
+                        .uri(UriPattern.parse("/{Bucket}"))
+                        .code(200)
+                        .build())
+                .build();
+
+        ServiceShape service = ServiceShape.builder()
+                .id("com.example#S3Service")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+
+        Model model = Model.builder()
+                .addShape(tsShape)
+                .addShape(stringShape)
+                .addShape(inputShape)
+                .addShape(outputShape)
+                .addShape(operation)
+                .addShape(service)
+                .build();
+
+        UnisonContext context = createTestContext(model, service);
+        generator.generateOperation(operation, writer, context);
+        String output = writer.toString();
+
+        assertTrue(output.contains("aws.xml.findText \"LastModified\" soup"),
+                "Timestamp field should use aws.xml.findText. Got:\n" + output);
+        assertFalse(output.contains("-- TODO: parse"),
+                "Should not emit generic TODO stub. Got:\n" + output);
+    }
+
+    @Test
+    void testFloatFieldGeneratesFromText() {
+        FloatShape floatShape = FloatShape.builder()
+                .id("smithy.api#Float")
+                .build();
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+
+        StructureShape inputShape = StructureShape.builder()
+                .id("com.example#GetProgressInput")
+                .addMember(MemberShape.builder()
+                        .id("com.example#GetProgressInput$UploadId")
+                        .target("smithy.api#String")
+                        .addTrait(new RequiredTrait())
+                        .addTrait(new HttpLabelTrait())
+                        .build())
+                .build();
+
+        StructureShape outputShape = StructureShape.builder()
+                .id("com.example#GetProgressOutput")
+                .addMember(MemberShape.builder()
+                        .id("com.example#GetProgressOutput$Progress")
+                        .target("smithy.api#Float")
+                        .build())
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("com.example#GetProgress")
+                .input(inputShape.getId())
+                .output(outputShape.getId())
+                .addTrait(HttpTrait.builder()
+                        .method("GET")
+                        .uri(UriPattern.parse("/{UploadId}"))
+                        .code(200)
+                        .build())
+                .build();
+
+        ServiceShape service = ServiceShape.builder()
+                .id("com.example#S3Service")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+
+        Model model = Model.builder()
+                .addShape(floatShape)
+                .addShape(stringShape)
+                .addShape(inputShape)
+                .addShape(outputShape)
+                .addShape(operation)
+                .addShape(service)
+                .build();
+
+        UnisonContext context = createTestContext(model, service);
+        generator.generateOperation(operation, writer, context);
+        String output = writer.toString();
+
+        assertTrue(output.contains("Optional.flatMap Float.fromText"),
+                "Float field should use Optional.flatMap Float.fromText. Got:\n" + output);
+        assertFalse(output.contains("-- TODO: parse"),
+                "Should not emit generic TODO stub. Got:\n" + output);
+    }
+
+    @Test
+    void testMapFieldGeneratesExtractMapSoup() {
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+
+        MapShape metadataMap = MapShape.builder()
+                .id("com.example#MetadataMap")
+                .key(MemberShape.builder()
+                        .id("com.example#MetadataMap$key")
+                        .target("smithy.api#String")
+                        .build())
+                .value(MemberShape.builder()
+                        .id("com.example#MetadataMap$value")
+                        .target("smithy.api#String")
+                        .build())
+                .build();
+
+        StructureShape inputShape = StructureShape.builder()
+                .id("com.example#GetMetaInput")
+                .addMember(MemberShape.builder()
+                        .id("com.example#GetMetaInput$Bucket")
+                        .target("smithy.api#String")
+                        .addTrait(new RequiredTrait())
+                        .addTrait(new HttpLabelTrait())
+                        .build())
+                .build();
+
+        StructureShape outputShape = StructureShape.builder()
+                .id("com.example#GetMetaOutput")
+                .addMember(MemberShape.builder()
+                        .id("com.example#GetMetaOutput$Metadata")
+                        .target("com.example#MetadataMap")
+                        .build())
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("com.example#GetMeta")
+                .input(inputShape.getId())
+                .output(outputShape.getId())
+                .addTrait(HttpTrait.builder()
+                        .method("GET")
+                        .uri(UriPattern.parse("/{Bucket}"))
+                        .code(200)
+                        .build())
+                .build();
+
+        ServiceShape service = ServiceShape.builder()
+                .id("com.example#S3Service")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+
+        Model model = Model.builder()
+                .addShape(stringShape)
+                .addShape(metadataMap)
+                .addShape(inputShape)
+                .addShape(outputShape)
+                .addShape(operation)
+                .addShape(service)
+                .build();
+
+        UnisonContext context = createTestContext(model, service);
+        generator.generateOperation(operation, writer, context);
+        String output = writer.toString();
+
+        assertTrue(output.contains("aws.xml.extractMapSoup"),
+                "Map field should use aws.xml.extractMapSoup. Got:\n" + output);
+        assertTrue(output.contains("Map.fromList"),
+                "Map field should call Map.fromList on extracted entries. Got:\n" + output);
+        assertFalse(output.contains("-- TODO: parse"),
+                "Should not emit generic TODO stub. Got:\n" + output);
+    }
+
     /**
      * Creates a test UnisonContext with minimal configuration.
      */
