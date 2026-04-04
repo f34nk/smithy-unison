@@ -554,53 +554,208 @@ public class AwsQueryProtocolGenerator implements ProtocolGenerator {
     
     /**
      * Generates serialization for a map field.
-     * AWS Query format: MapName.1.Key=k1&MapName.1.Value=v1
+     *
+     * <p>Scalar values use the existing {@code MapName.N.Key=k&MapName.N.Value=v} format.
+     * Complex value types use the AWS Query entry notation:
+     * <ul>
+     *   <li>Structure values: {@code MapName.entry.N.key=k&MapName.entry.N.value.Field=v}</li>
+     *   <li>List (scalar) values: {@code MapName.entry.N.key=k&MapName.entry.N.value.M=item}</li>
+     *   <li>Nested map values: {@code MapName.entry.N.key=k&MapName.entry.N.value.entry.M.key=...}</li>
+     * </ul>
+     * Both required (non-optional) and optional fields are handled.
      */
-    private void generateMapSerialization(MemberShape member, MapShape mapShape, String paramName, 
+    private void generateMapSerialization(MemberShape member, MapShape mapShape, String paramName,
                                           String varName, String memberName, String inputTypeName,
                                           Model model, String clientNamespace, UnisonWriter writer) {
         String accessor = inputTypeName + "." + memberName + " input";
         Shape keyShape = model.expectShape(mapShape.getKey().getTarget());
         Shape valueShape = model.expectShape(mapShape.getValue().getTarget());
-        
-        // Skip maps with complex value types (structures, lists, or nested maps)
-        // These would require recursive/nested serialization which is complex
-        if (valueShape.isStructureShape() || valueShape.isListShape() || valueShape.isMapShape()) {
-            // TODO: Implement nested complex type serialization for map values
-            writer.write("$L = [] -- TODO: Map with complex value type not yet supported", varName);
-            return;
-        }
-        
-        boolean isKeyText = isTextType(keyShape);
-        boolean isValueText = isTextType(valueShape);
-        String keyToText = getToTextFunction(keyShape, clientNamespace);
-        String valueToText = getToTextFunction(valueShape, clientNamespace);
-        
-        // Check if field is non-optional (required or has default)
         boolean isNonOptional = member.isRequired() || member.hasTrait(DefaultTrait.class);
-        
-        if (isNonOptional) {
-            String keyExpr = isKeyText ? "k" : keyToText + " k";
-            String valueExpr = isValueText ? "v" : valueToText + " v";
-            writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let", varName, accessor);
+        boolean isKeyText = isTextType(keyShape);
+        String keyToText = getToTextFunction(keyShape, clientNamespace);
+        String keyExpr = isKeyText ? "k" : keyToText + " k";
+
+        if (valueShape.isStructureShape()) {
+            // Map with struct values:
+            //   MapName.entry.N.key=k  &  MapName.entry.N.value.Field=v
+            StructureShape valueStruct = (StructureShape) valueShape;
+            String structTypeName = UnisonSymbolProvider.toNamespacedTypeName(
+                    valueStruct.getId().getName(), clientNamespace);
+            String valuePrefix = paramName + ".entry.\" ++ idxText ++ \".value";
+            String keyTuple = "(\"" + paramName + ".entry.\" ++ idxText ++ \".key\", " + keyExpr + ")";
+
+            if (isNonOptional) {
+                writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let",
+                        varName, accessor);
+            } else {
+                writer.write("$L = match $L with", varName, accessor);
+                writer.indent();
+                writer.write("None -> []");
+                writer.write("Some map -> (Map.toList map) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let");
+            }
             writer.indent();
             writer.write("idxText = Nat.toText (idx + 1)");
-            writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L),", paramName, keyExpr);
-            writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L) ])", paramName, valueExpr);
+
+            // Collect and write struct field let-bindings for value 'v'
+            List<String> subRequiredFields = new ArrayList<>();
+            List<String> subOptionalLists = new ArrayList<>();
+            for (MemberShape subMember : valueStruct.getAllMembers().values()) {
+                String subFieldName = getQueryParamName(subMember);
+                String subFieldParamName = valuePrefix + "." + subFieldName;
+                String subMemberName = UnisonSymbolProvider.toUnisonFunctionName(subMember.getMemberName());
+                String subAccessor = structTypeName + "." + subMemberName + " v";
+                String subOptVarName = "opt_" + subMemberName;
+                Shape subFieldShape = model.expectShape(subMember.getTarget());
+                generateFlattenedField(subMember, subFieldShape, subFieldParamName, subAccessor,
+                        subOptVarName, subMember.isRequired(), model, clientNamespace,
+                        subRequiredFields, subOptionalLists, writer);
+            }
+
+            // Prepend key entry to required fields and write the combined result
+            List<String> allRequired = new ArrayList<>();
+            allRequired.add(keyTuple);
+            allRequired.addAll(subRequiredFields);
+            writer.write("$L)", buildResultExpressionString(allRequired, subOptionalLists));
             writer.dedent();
+            if (!isNonOptional) {
+                writer.dedent();
+            }
+
+        } else if (valueShape.isListShape()) {
+            // Map with list values:
+            //   MapName.entry.N.key=k  &  MapName.entry.N.value.M=item
+            ListShape valueList = (ListShape) valueShape;
+            Shape elementShape = model.expectShape(valueList.getMember().getTarget());
+            if (elementShape.isStructureShape()) {
+                writer.write("$L = [] -- TODO: Map with list-of-structures value type not yet supported", varName);
+                return;
+            }
+            boolean isElementText = isTextType(elementShape);
+            String elementToText = getToTextFunction(elementShape, clientNamespace);
+            String elemExpr = isElementText ? "item" : elementToText + " item";
+            String keyTuple = "(\"" + paramName + ".entry.\" ++ idxText ++ \".key\", " + keyExpr + ")";
+
+            if (isNonOptional) {
+                writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, items), idx) -> let",
+                        varName, accessor);
+            } else {
+                writer.write("$L = match $L with", varName, accessor);
+                writer.indent();
+                writer.write("None -> []");
+                writer.write("Some map -> (Map.toList map) |> List.indexed |> List.flatMap (cases ((k, items), idx) -> let");
+            }
+            writer.indent();
+            writer.write("idxText = Nat.toText (idx + 1)");
+            writer.write(
+                "valueParts = items |> List.indexed |> List.map (cases (item, i) -> (\"$L.entry.\" ++ idxText ++ \".value.\" ++ Nat.toText (i + 1), $L))",
+                paramName, elemExpr);
+            writer.write("[$L] List.++ valueParts)", keyTuple);
+            writer.dedent();
+            if (!isNonOptional) {
+                writer.dedent();
+            }
+
+        } else if (valueShape.isMapShape()) {
+            // Map with nested map values:
+            //   MapName.entry.N.key=k  &  MapName.entry.N.value.entry.M.key=ik  &  ...value=iv
+            MapShape innerMapShape = (MapShape) valueShape;
+            Shape innerKeyShape = model.expectShape(innerMapShape.getKey().getTarget());
+            Shape innerValueShape = model.expectShape(innerMapShape.getValue().getTarget());
+            if (innerValueShape.isStructureShape() || innerValueShape.isListShape() || innerValueShape.isMapShape()) {
+                writer.write("$L = [] -- TODO: Map with deeply nested complex value type not yet supported", varName);
+                return;
+            }
+            boolean isInnerKeyText = isTextType(innerKeyShape);
+            boolean isInnerValueText = isTextType(innerValueShape);
+            String innerKeyToText = getToTextFunction(innerKeyShape, clientNamespace);
+            String innerValueToText = getToTextFunction(innerValueShape, clientNamespace);
+            String innerKeyExpr = isInnerKeyText ? "ik" : innerKeyToText + " ik";
+            String innerValueExpr = isInnerValueText ? "iv" : innerValueToText + " iv";
+            String keyTuple = "(\"" + paramName + ".entry.\" ++ idxText ++ \".key\", " + keyExpr + ")";
+
+            if (isNonOptional) {
+                writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, innerMap), idx) -> let",
+                        varName, accessor);
+            } else {
+                writer.write("$L = match $L with", varName, accessor);
+                writer.indent();
+                writer.write("None -> []");
+                writer.write("Some map -> (Map.toList map) |> List.indexed |> List.flatMap (cases ((k, innerMap), idx) -> let");
+            }
+            writer.indent();
+            writer.write("idxText = Nat.toText (idx + 1)");
+            writer.write("innerParts = (Map.toList innerMap) |> List.indexed |> List.flatMap (cases ((ik, iv), i) -> let");
+            writer.indent();
+            writer.write("iText = Nat.toText (i + 1)");
+            writer.write("[ (\"$L.entry.\" ++ idxText ++ \".value.entry.\" ++ iText ++ \".key\", $L),",
+                    paramName, innerKeyExpr);
+            writer.write("  (\"$L.entry.\" ++ idxText ++ \".value.entry.\" ++ iText ++ \".value\", $L) ])",
+                    paramName, innerValueExpr);
+            writer.dedent();
+            writer.write("[$L] List.++ innerParts)", keyTuple);
+            writer.dedent();
+            if (!isNonOptional) {
+                writer.dedent();
+            }
+
         } else {
-            String keyExpr = isKeyText ? "k" : keyToText + " k";
+            // Scalar value type: existing format MapName.N.Key=k & MapName.N.Value=v
+            boolean isValueText = isTextType(valueShape);
+            String valueToText = getToTextFunction(valueShape, clientNamespace);
             String valueExpr = isValueText ? "v" : valueToText + " v";
-            writer.write("$L = match $L with", varName, accessor);
-            writer.indent();
-            writer.write("None -> []");
-            writer.write("Some map -> (Map.toList map) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let");
-            writer.indent();
-            writer.write("idxText = Nat.toText (idx + 1)");
-            writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L),", paramName, keyExpr);
-            writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L) ])", paramName, valueExpr);
-            writer.dedent();
-            writer.dedent();
+
+            if (isNonOptional) {
+                writer.write("$L = (Map.toList ($L)) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let",
+                        varName, accessor);
+                writer.indent();
+                writer.write("idxText = Nat.toText (idx + 1)");
+                writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L),", paramName, keyExpr);
+                writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L) ])", paramName, valueExpr);
+                writer.dedent();
+            } else {
+                writer.write("$L = match $L with", varName, accessor);
+                writer.indent();
+                writer.write("None -> []");
+                writer.write("Some map -> (Map.toList map) |> List.indexed |> List.flatMap (cases ((k, v), idx) -> let");
+                writer.indent();
+                writer.write("idxText = Nat.toText (idx + 1)");
+                writer.write("[ (\"$L.\" ++ idxText ++ \".Key\", $L),", paramName, keyExpr);
+                writer.write("  (\"$L.\" ++ idxText ++ \".Value\", $L) ])", paramName, valueExpr);
+                writer.dedent();
+                writer.dedent();
+            }
+        }
+    }
+
+    /**
+     * Builds a single-line {@code [(Text, Text)]} result expression string from required
+     * field tuples and optional field-list variable names, suitable for embedding in a
+     * larger expression (e.g. appending a closing {@code )} for a flatMap call).
+     *
+     * <p>Unlike {@link #writeResultExpression}, this method returns the expression as a
+     * Java {@code String} rather than writing it to the writer, so callers can compose it
+     * with additional text (e.g. a key entry tuple or a closing parenthesis).
+     */
+    private String buildResultExpressionString(List<String> requiredFields, List<String> optionalFieldLists) {
+        if (requiredFields.isEmpty() && optionalFieldLists.isEmpty()) {
+            return "[]";
+        } else if (requiredFields.isEmpty()) {
+            String result = optionalFieldLists.get(0);
+            for (int i = 1; i < optionalFieldLists.size(); i++) {
+                result = result + " List.++ " + optionalFieldLists.get(i);
+            }
+            return result;
+        } else {
+            String requiredList = "[ " + String.join(", ", requiredFields) + " ]";
+            if (optionalFieldLists.isEmpty()) {
+                return requiredList;
+            } else {
+                String result = requiredList;
+                for (String optList : optionalFieldLists) {
+                    result = result + " List.++ " + optList;
+                }
+                return result;
+            }
         }
     }
     

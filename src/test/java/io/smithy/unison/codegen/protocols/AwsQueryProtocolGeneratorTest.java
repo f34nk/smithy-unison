@@ -19,11 +19,8 @@ import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.RequiredTrait;
 
-import software.amazon.smithy.model.shapes.BooleanShape;
 import software.amazon.smithy.model.shapes.ListShape;
 import software.amazon.smithy.model.shapes.MapShape;
-import software.amazon.smithy.model.traits.DefaultTrait;
-import software.amazon.smithy.model.node.Node;
 
 import java.nio.file.Paths;
 
@@ -639,5 +636,162 @@ public class AwsQueryProtocolGeneratorTest {
 
         assertFalse(code.contains("Implement nested complex type serialization"),
                 "Should not emit old nested-complex TODO stub. Got:\n" + code);
+    }
+
+    // ========== Tests for map with complex value types ==========
+
+    /**
+     * Builds a model with a top-level map field whose value type is a structure.
+     *
+     * <pre>
+     * TestInput
+     *   attrs: Map(String, AttrValue)   (optional map with struct values)
+     *
+     * AttrValue
+     *   dataType:   String   (required)
+     *   stringValue: String  (optional)
+     * </pre>
+     */
+    private Model buildMapWithStructValueModel() {
+        StringShape stringShape = StringShape.builder().id("smithy.api#String").build();
+        IntegerShape intShape = IntegerShape.builder().id("smithy.api#Integer").build();
+
+        StructureShape attrValue = StructureShape.builder()
+                .id("test.ns#AttrValue")
+                .addMember(MemberShape.builder()
+                        .id("test.ns#AttrValue$dataType")
+                        .target("smithy.api#String")
+                        .addTrait(new RequiredTrait())
+                        .build())
+                .addMember(MemberShape.builder()
+                        .id("test.ns#AttrValue$stringValue")
+                        .target("smithy.api#String")
+                        .build())
+                .build();
+
+        MapShape attrsMap = MapShape.builder()
+                .id("test.ns#AttrsMap")
+                .key(MemberShape.builder()
+                        .id("test.ns#AttrsMap$key")
+                        .target("smithy.api#String")
+                        .build())
+                .value(MemberShape.builder()
+                        .id("test.ns#AttrsMap$value")
+                        .target("test.ns#AttrValue")
+                        .build())
+                .build();
+
+        StructureShape testInput = StructureShape.builder()
+                .id("test.ns#TestInput")
+                .addMember(MemberShape.builder()
+                        .id("test.ns#TestInput$attrs")
+                        .target("test.ns#AttrsMap")
+                        .build())
+                .build();
+
+        StructureShape testOutput = StructureShape.builder()
+                .id("test.ns#TestOutput")
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("test.ns#TestOp")
+                .input(testInput.getId())
+                .output(testOutput.getId())
+                .build();
+
+        ServiceShape testService = ServiceShape.builder()
+                .id("test.ns#TestService")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+
+        return Model.builder()
+                .addShape(stringShape)
+                .addShape(intShape)
+                .addShape(attrValue)
+                .addShape(attrsMap)
+                .addShape(testInput)
+                .addShape(testOutput)
+                .addShape(operation)
+                .addShape(testService)
+                .build();
+    }
+
+    @Test
+    public void testMapWithStructValueEmitsEntryKeyNotation() {
+        // Verifies that a map field with a structure value type generates
+        // "MapName.entry.N.key=k" and "MapName.entry.N.value.Field=v"
+        // instead of the old "MapName = [] -- TODO" stub.
+        Model testModel = buildMapWithStructValueModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        // Should use entry.N.key notation for the map key
+        assertTrue(code.contains(".entry.\" ++ idxText ++ \".key") || code.contains("entry."),
+                "Should emit entry.N.key notation for map key. Got:\n" + code);
+        // Should emit struct field under entry.N.value prefix
+        assertTrue(code.contains(".value.dataType") || code.contains("value."),
+                "Should emit entry.N.value.Field notation for map struct value. Got:\n" + code);
+        // Should NOT emit the old TODO stub
+        assertFalse(code.contains("TODO: Map with complex value type not yet supported"),
+                "Should not emit map-complex-value TODO stub. Got:\n" + code);
+        assertFalse(code.contains("= [] -- TODO"),
+                "Map field should not be an empty-list stub. Got:\n" + code);
+    }
+
+    @Test
+    public void testMapWithStructValueHandlesRequiredAndOptionalFields() {
+        // The struct value (AttrValue) has a required field (dataType) and an optional
+        // field (stringValue). Both must appear in the serialized output.
+        Model testModel = buildMapWithStructValueModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        // Required struct field should appear as a plain tuple (not in opt_ binding)
+        assertTrue(code.contains("dataType"),
+                "Required struct field dataType should appear in output. Got:\n" + code);
+        // Optional struct field should produce an opt_ let-binding
+        assertTrue(code.contains("opt_stringValue"),
+                "Optional struct field should produce opt_stringValue binding. Got:\n" + code);
+        assertTrue(code.contains("None -> []"),
+                "Optional struct field binding should have None -> [] arm. Got:\n" + code);
+    }
+
+    @Test
+    public void testMapWithStructValueUsesListFlatMap() {
+        // The generated code must use List.flatMap to expand each map entry into
+        // multiple (key, value) tuples (one for the map key, several for the struct fields).
+        Model testModel = buildMapWithStructValueModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        assertTrue(code.contains("List.flatMap"),
+                "Map with struct values should use List.flatMap. Got:\n" + code);
+        assertTrue(code.contains("List.indexed"),
+                "Map with struct values should use List.indexed for entry numbering. Got:\n" + code);
     }
 }
