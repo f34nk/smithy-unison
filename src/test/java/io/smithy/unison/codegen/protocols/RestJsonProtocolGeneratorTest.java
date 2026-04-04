@@ -19,6 +19,7 @@ import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.IntegerShape;
 import software.amazon.smithy.model.shapes.BooleanShape;
+import software.amazon.smithy.model.shapes.UnionShape;
 import software.amazon.smithy.model.traits.HttpTrait;
 import software.amazon.smithy.model.traits.HttpLabelTrait;
 import software.amazon.smithy.model.traits.HttpQueryTrait;
@@ -963,6 +964,106 @@ public class RestJsonProtocolGeneratorTest {
                 "Should not emit TODO stub for list query param. Got: " + output);
         assertFalse(output.contains("queryParts"),
                 "Should not use old queryParts variable name. Got: " + output);
+    }
+
+    // =============================================================================
+    // Test Union Deserialization — Key-dispatch strategy
+    // =============================================================================
+
+    @Test
+    void testUnionDeserializerUsesKeyDispatch() {
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+
+        IntegerShape intShape = IntegerShape.builder()
+                .id("smithy.api#Integer")
+                .build();
+
+        UnionShape myUnion = UnionShape.builder()
+                .id("test.api#MyUnion")
+                .addMember(MemberShape.builder()
+                        .id("test.api#MyUnion$StringMember")
+                        .target("smithy.api#String")
+                        .build())
+                .addMember(MemberShape.builder()
+                        .id("test.api#MyUnion$IntMember")
+                        .target("smithy.api#Integer")
+                        .build())
+                .build();
+
+        ServiceShape service = ServiceShape.builder()
+                .id("test.api#TestService")
+                .version("2024-01-01")
+                .build();
+
+        Model model = Model.builder()
+                .addShape(stringShape)
+                .addShape(intShape)
+                .addShape(myUnion)
+                .addShape(service)
+                .build();
+
+        UnisonContext context = createTestContext(model, service);
+        generator.generateUnionDeserializer(myUnion, writer, context);
+        String output = writer.toString();
+
+        // Key-dispatch: must extract discriminant key from the JSON object
+        assertTrue(output.contains("coreJsonObjectKey"),
+                "Should use coreJsonObjectKey for key-dispatch. Got: " + output);
+
+        // Must dispatch on the extracted key
+        assertTrue(output.contains("match key with"),
+                "Should emit 'match key with' dispatch. Got: " + output);
+
+        // Must include both variant names as string match arms
+        assertTrue(output.contains("\"StringMember\""),
+                "Should match on StringMember key. Got: " + output);
+        assertTrue(output.contains("\"IntMember\""),
+                "Should match on IntMember key. Got: " + output);
+
+        // Must not use the old try-each catch/Left-_ approach
+        assertFalse(output.contains("Left _ ->"),
+                "Should not use try-each Left _ -> approach. Got: " + output);
+        assertFalse(output.contains("match catch do"),
+                "Should not use match catch do. Got: " + output);
+    }
+
+    @Test
+    void testUnionDeserializerRespectsJsonNameTrait() {
+        StringShape stringShape = StringShape.builder()
+                .id("smithy.api#String")
+                .build();
+
+        UnionShape myUnion = UnionShape.builder()
+                .id("test.api#TaggedUnion")
+                .addMember(MemberShape.builder()
+                        .id("test.api#TaggedUnion$StringValue")
+                        .target("smithy.api#String")
+                        .addTrait(new JsonNameTrait("string_value"))
+                        .build())
+                .build();
+
+        ServiceShape service = ServiceShape.builder()
+                .id("test.api#TestService")
+                .version("2024-01-01")
+                .build();
+
+        Model model = Model.builder()
+                .addShape(stringShape)
+                .addShape(myUnion)
+                .addShape(service)
+                .build();
+
+        UnisonContext context = createTestContext(model, service);
+        generator.generateUnionDeserializer(myUnion, writer, context);
+        String output = writer.toString();
+
+        // The @jsonName value should be used as the match key, not the member name
+        assertTrue(output.contains("\"string_value\""),
+                "Should use @jsonName value as match key. Got: " + output);
+        assertFalse(output.contains("\"StringValue\""),
+                "Should not use raw member name when @jsonName is present. Got: " + output);
     }
 
     /**

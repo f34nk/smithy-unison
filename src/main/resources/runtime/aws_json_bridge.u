@@ -822,3 +822,37 @@ parseCoreJsonError json =
     (Some et, None) -> Some (JsonError.JsonError et "")
     (None, Some em) -> Some (JsonError.JsonError "UnknownError" em)
     (None, None) -> None
+
+{{
+  Extract the single discriminant key from a JSON object representing an AWS REST-JSON
+  tagged union.
+
+  AWS REST-JSON encodes union variants as single-key objects:
+    { "VariantName": <value> }
+
+  Returns None if json is not an Object or has no keys.
+}}
+coreJsonObjectKey : core.Json -> Optional Text
+coreJsonObjectKey json =
+  match json with
+    core.Json.Object fields ->
+      match List.head fields with
+        Some (key, _) -> Some key
+        None -> None
+    _ -> None
+
+{{
+  Extract the value associated with a given key from a JSON object.
+
+  Returns None if the key is not found or json is not an Object.
+  Unlike coreJsonFindObject, this returns any core.Json value (not just nested objects),
+  so it works for all union variant value types (strings, numbers, booleans, objects).
+}}
+coreJsonObjectValue : Text -> core.Json -> Optional core.Json
+coreJsonObjectValue key json =
+  match json with
+    core.Json.Object fields ->
+      match List.find (cases (k, _) -> k === key) fields with
+        Some (_, v) -> Some v
+        None -> None
+    _ -> None

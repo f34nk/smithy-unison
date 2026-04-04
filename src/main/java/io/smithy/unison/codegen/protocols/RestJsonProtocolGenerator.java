@@ -1719,58 +1719,48 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     public void generateUnionDeserializer(software.amazon.smithy.model.shapes.UnionShape unionShape, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
-        
+
         String unionType = UnisonSymbolProvider.toNamespacedTypeName(unionShape.getId().getName(), clientNamespace);
         String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                 unionShape.getId().getName() + "FromJson");
-        
+
         writer.writeComment("Deserialize " + unionShape.getId().getName() + " from JSON (union type)");
         writer.writeSignature(functionName, "core.Json -> '{Exception} " + unionType);
         writer.write("$L json = do", functionName);
         writer.indent();
-        
-        // For REST-JSON unions, try to parse as each variant
-        // We attempt each variant and use the first that succeeds
+
         List<MemberShape> members = new ArrayList<>(unionShape.getAllMembers().values());
-        
+
         if (members.isEmpty()) {
             writer.write("Exception.raise (Generic.failure \"Empty union\" \"No members\")");
         } else {
-            // Generate try-parse logic for each member
-            // Use nested match on Either to try each variant
-            for (int i = 0; i < members.size(); i++) {
-                MemberShape member = members.get(i);
-                Shape memberTarget = model.expectShape(member.getTarget());
-                String constructorName = UnisonSymbolProvider.toUnisonTypeName(unionShape.getId().getName()) + "'" +
+            // AWS REST-JSON encodes unions as single-key discriminated objects.
+            // Extract the key and dispatch — no trial-and-error needed.
+            writer.write("key = aws.json.bridge.coreJsonObjectKey json |> Optional.getOrElse \"\"");
+            writer.write("valueJson = match aws.json.bridge.coreJsonObjectValue key json with");
+            writer.indent();
+            writer.write("Some v -> v");
+            writer.write("None -> core.Json.Object []");
+            writer.dedent();
+
+            writer.write("match key with");
+            writer.indent();
+            for (MemberShape member : members) {
+                String variantName = getJsonName(member);
+                String constructorName = UnisonSymbolProvider.toNamespacedTypeName(
+                        unionShape.getId().getName(), clientNamespace) + "'" +
                         UnisonSymbolProvider.toUnisonTypeName(member.getMemberName());
-                String memberDeserializer = getDeserializerForType(memberTarget, model, clientNamespace);
-                
-                writer.write("match catch do");
+                Shape memberTarget = model.expectShape(member.getTarget());
+                String deserializer = getDeserializerForType(memberTarget, model, clientNamespace);
+                writer.write("\"$L\" ->", variantName);
                 writer.indent();
-                writer.write("value = !($L json)", memberDeserializer);
-                writer.write("$L value", constructorName);
+                writer.write("$L !($L valueJson)", constructorName, deserializer);
                 writer.dedent();
-                writer.write("with");
-                writer.indent();
-                writer.write("Right result -> result");
-                
-                if (i < members.size() - 1) {
-                    writer.write("Left _ ->");
-                    writer.indent();
-                } else {
-                    // Last variant - re-raise the exception
-                    writer.write("Left err -> Exception.raise err");
-                    writer.dedent(); // Close match
-                }
             }
-            
-            // Close all the nested "Left _ ->" blocks
-            for (int i = 0; i < members.size() - 1; i++) {
-                writer.dedent(); // Close the "Left _ ->" indent
-                writer.dedent(); // Close match indent
-            }
+            writer.write("_ -> Exception.raise (Failure (typeLink Generic) (\"Unknown union variant: \" ++ key) (Any key))");
+            writer.dedent();
         }
-        
+
         writer.dedent();
         writer.writeBlankLine();
     }
@@ -2423,7 +2413,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isUnionShape()) {
-            // Union - use generated FromJson deserializer (TODO: implement union deserializers)
+            // Union - use generated key-dispatch FromJson deserializer
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isDocumentShape()) {
