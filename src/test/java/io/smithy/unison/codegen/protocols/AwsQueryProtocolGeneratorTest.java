@@ -19,6 +19,12 @@ import software.amazon.smithy.model.shapes.StringShape;
 import software.amazon.smithy.model.shapes.StructureShape;
 import software.amazon.smithy.model.traits.RequiredTrait;
 
+import software.amazon.smithy.model.shapes.BooleanShape;
+import software.amazon.smithy.model.shapes.ListShape;
+import software.amazon.smithy.model.shapes.MapShape;
+import software.amazon.smithy.model.traits.DefaultTrait;
+import software.amazon.smithy.model.node.Node;
+
 import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -404,5 +410,234 @@ public class AwsQueryProtocolGeneratorTest {
         // No TODO stubs
         assertFalse(code.contains("-- TODO: Handle optional nested field"),
                 "Should not emit TODO stub for optional nested field. Got:\n" + code);
+    }
+
+    // ========== Tests for nested complex type serialization in struct-list members ==========
+
+    /**
+     * Builds a minimal model for nested-complex-type tests.
+     *
+     * <p>Shape tree:
+     * <pre>
+     * TestInput
+     *   entries: [EntryItem]   (required list of structs)
+     *
+     * EntryItem
+     *   name:     String          (required scalar)
+     *   tags:     [String]        (optional list of scalars)
+     *   metadata: Map(String,String)  (optional map with scalar values)
+     *   info:     EntryInfo       (optional nested struct)
+     *
+     * EntryInfo
+     *   label: String             (optional scalar)
+     * </pre>
+     */
+    private Model buildNestedComplexModel() {
+        StringShape stringShape = StringShape.builder().id("smithy.api#String").build();
+        IntegerShape intShape = IntegerShape.builder().id("smithy.api#Integer").build();
+
+        // EntryInfo (nested struct with one optional scalar field)
+        StructureShape entryInfo = StructureShape.builder()
+                .id("test.ns#EntryInfo")
+                .addMember(MemberShape.builder()
+                        .id("test.ns#EntryInfo$label")
+                        .target("smithy.api#String")
+                        .build())
+                .build();
+
+        // [String] list
+        ListShape tagList = ListShape.builder()
+                .id("test.ns#TagList")
+                .member(MemberShape.builder()
+                        .id("test.ns#TagList$member")
+                        .target("smithy.api#String")
+                        .build())
+                .build();
+
+        // Map(String, String)
+        MapShape metaMap = MapShape.builder()
+                .id("test.ns#MetaMap")
+                .key(MemberShape.builder()
+                        .id("test.ns#MetaMap$key")
+                        .target("smithy.api#String")
+                        .build())
+                .value(MemberShape.builder()
+                        .id("test.ns#MetaMap$value")
+                        .target("smithy.api#String")
+                        .build())
+                .build();
+
+        // EntryItem with all complex field kinds
+        StructureShape entryItem = StructureShape.builder()
+                .id("test.ns#EntryItem")
+                .addMember(MemberShape.builder()
+                        .id("test.ns#EntryItem$name")
+                        .target("smithy.api#String")
+                        .addTrait(new RequiredTrait())
+                        .build())
+                .addMember(MemberShape.builder()
+                        .id("test.ns#EntryItem$tags")
+                        .target("test.ns#TagList")
+                        .build())
+                .addMember(MemberShape.builder()
+                        .id("test.ns#EntryItem$metadata")
+                        .target("test.ns#MetaMap")
+                        .build())
+                .addMember(MemberShape.builder()
+                        .id("test.ns#EntryItem$info")
+                        .target("test.ns#EntryInfo")
+                        .build())
+                .build();
+
+        // [EntryItem] list
+        ListShape entryList = ListShape.builder()
+                .id("test.ns#EntryList")
+                .member(MemberShape.builder()
+                        .id("test.ns#EntryList$member")
+                        .target("test.ns#EntryItem")
+                        .build())
+                .build();
+
+        // TestInput
+        StructureShape testInput = StructureShape.builder()
+                .id("test.ns#TestInput")
+                .addMember(MemberShape.builder()
+                        .id("test.ns#TestInput$entries")
+                        .target("test.ns#EntryList")
+                        .addTrait(new RequiredTrait())
+                        .build())
+                .build();
+
+        StructureShape testOutput = StructureShape.builder()
+                .id("test.ns#TestOutput")
+                .build();
+
+        OperationShape operation = OperationShape.builder()
+                .id("test.ns#TestOp")
+                .input(testInput.getId())
+                .output(testOutput.getId())
+                .build();
+
+        ServiceShape testService = ServiceShape.builder()
+                .id("test.ns#TestService")
+                .version("2024-01-01")
+                .addOperation(operation.getId())
+                .build();
+
+        return Model.builder()
+                .addShape(stringShape)
+                .addShape(intShape)
+                .addShape(entryInfo)
+                .addShape(tagList)
+                .addShape(metaMap)
+                .addShape(entryItem)
+                .addShape(entryList)
+                .addShape(testInput)
+                .addShape(testOutput)
+                .addShape(operation)
+                .addShape(testService)
+                .build();
+    }
+
+    @Test
+    public void testNestedStructSubFieldInStructList() {
+        // Verifies that an optional nested struct field inside a struct-list member
+        // produces indexed dot-notation keys like "Entries.1.info.label"
+        // and no longer emits a TODO comment.
+        Model testModel = buildNestedComplexModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        // Should produce a binding for the nested struct field
+        assertTrue(code.contains("opt_info"), "Should emit opt_info binding. Got:\n" + code);
+        // The nested struct's label field should appear with a dotted key containing "info"
+        assertTrue(code.contains("info.label") || code.contains("\"info\""),
+                "Should emit info.label key or info reference. Got:\n" + code);
+        // No longer silently skipped with a TODO
+        assertFalse(code.contains("// TODO: Implement nested complex type"),
+                "Should not emit nested-complex TODO. Got:\n" + code);
+        // No silent continue (absence of the old guard comment)
+        assertFalse(code.contains("Implement nested complex type serialization"),
+                "Should not have old TODO comment. Got:\n" + code);
+    }
+
+    @Test
+    public void testNestedListOfScalarsSubFieldInStructList() {
+        // Verifies that an optional list-of-strings field inside a struct-list member
+        // produces indexed keys like "Entries.1.tags.1".
+        Model testModel = buildNestedComplexModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        // Should produce a binding for the list field
+        assertTrue(code.contains("opt_tags"), "Should emit opt_tags binding. Got:\n" + code);
+        // Should use indexed map to produce per-element keys
+        assertTrue(code.contains("List.indexed"),
+                "Should use List.indexed for list field serialization. Got:\n" + code);
+        // The key pattern should include "tags." ++ index
+        assertTrue(code.contains("tags."),
+                "Should emit dotted tags key. Got:\n" + code);
+    }
+
+    @Test
+    public void testNestedMapSubFieldInStructList() {
+        // Verifies that an optional map field inside a struct-list member
+        // produces key/value entry keys like "Entries.1.metadata.1.Key".
+        Model testModel = buildNestedComplexModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        // Should produce a binding for the map field
+        assertTrue(code.contains("opt_metadata"), "Should emit opt_metadata binding. Got:\n" + code);
+        // Should produce Key and Value suffixes for map entries
+        assertTrue(code.contains(".Key") && code.contains(".Value"),
+                "Should emit .Key and .Value entries for map field. Got:\n" + code);
+        // Should use flatMap for map iteration
+        assertTrue(code.contains("List.flatMap"),
+                "Should use List.flatMap for map serialization. Got:\n" + code);
+    }
+
+    @Test
+    public void testNestedComplexFieldsNoTodoComment() {
+        // Regression test: none of the complex nested fields should produce a silent
+        // "TODO: Implement nested complex type" comment (the old guard).
+        Model testModel = buildNestedComplexModel();
+        ServiceShape testService = testModel.expectShape(
+                ShapeId.from("test.ns#TestService"), ServiceShape.class);
+        OperationShape operation = testModel.expectShape(
+                ShapeId.from("test.ns#TestOp"), OperationShape.class);
+
+        UnisonContext testContext = createTestContext(testModel, testService);
+        UnisonWriter writer = new UnisonWriter("aws.sqs");
+        generator.generateRequestSerializer(operation, writer, testContext);
+
+        String code = writer.toString();
+
+        assertFalse(code.contains("Implement nested complex type serialization"),
+                "Should not emit old nested-complex TODO stub. Got:\n" + code);
     }
 }
