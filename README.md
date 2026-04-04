@@ -34,7 +34,7 @@ Reference: https://smithy.io/2.0/index.html
   - Service error union types with exception handling
 - **REST-JSON protocol** (EventBridge, Step Functions, API Gateway, Lambda)
   - Full operation implementation with HTTP bindings and JSON serialization/deserialization
-  - Complete response deserializer generation (structures, enums, lists, maps, unions)
+  - Complete response deserializer generation (structures, enums, lists, maps, unions with key-dispatch)
   - Path parameter substitution and query string building
   - Scalar and list-valued `@httpQuery` parameter serialization (repeated `key=value` per element)
   - HTTP header extraction and body serialization

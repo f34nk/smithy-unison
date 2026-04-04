@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+#### Union Deserialization in REST-JSON (key-dispatch)
+- `generateUnionDeserializer` in `RestJsonProtocolGenerator` now uses the correct AWS REST-JSON wire format: extract the single discriminant key from the JSON object and `match key with` to construct the right union variant
+- Replaces the fragile try-each-variant `match catch do` / `Left _ ->` approach, which failed for variants whose value types share a shape
+- `coreJsonObjectKey` and `coreJsonObjectValue` helpers added to `aws_json_bridge.u` for extracting the discriminant key and its value from a `core.Json` object
+- `@jsonName` trait is respected when matching variant keys
+
 ### Added
 
 #### Runtime Tests for XML Map, Float, and Timestamp Extraction
