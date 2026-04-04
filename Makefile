@@ -1,5 +1,6 @@
 X:=$(shell find examples -type d -not -name examples -maxdepth 1 -exec basename {} \;)
 EXAMPLES:=$(foreach x,$(X),examples/$(x)/)
+EXAMPLES_COUNT:=$(words $(EXAMPLES))
 
 .PHONY: all
 all: clean build
@@ -40,23 +41,28 @@ clean:
 	#
 	# Clean the build
 	#
-	rm -rf build bin test-errors.log build-errors.log
+	rm -rf build bin test-errors.log build-errors.log example-*.log
 	rm -rf ~/.m2/repository/io/smithy/unison/smithy-unison
 
 # Usage: make examples
 .PHONY: examples
-examples: examples/clean
+examples:
+	rm -rf example-*.log
 	#
-	# Build $(EXAMPLES)
+	# Run $(EXAMPLES_COUNT) examples in parallel
 	#
-	@for x in $(EXAMPLES); do \
-		example=`echo $$x|sed 's/\/$$//g'` ; \
-		make $$example ; \
+	find examples -type d -not -name examples -maxdepth 1 -exec basename {} \; | xargs -P $(EXAMPLES_COUNT) -I {} sh -c ' \
+		example="{}"; \
+		logfile="example-$$example.log"; \
+		sleep 1; \
+		echo "Running: $$example" ; \
+		make examples/$$example > $$logfile 2>&1; \
 		if [ $$? -ne 0 ]; then \
-			echo "The example $$example failed" ; \
+			echo "$$example failed" ; \
 			break ; \
 		fi ; \
-	done
+		echo "$$example passed" ; \
+	'
 
 # Usage: make examples/simple-service
 .PHONY: $(EXAMPLES)
