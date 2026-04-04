@@ -272,6 +272,7 @@ Action=CreateTopic&Name=MyTopic&Version=2010-03-31
 - Parameters serialized using dot notation: `Tags.member.1.Key=env`
 - Lists numbered starting from 1: `.member.1`, `.member.2`
 - Maps serialized as entries: `.entry.1.key`, `.entry.1.value`
+- Optional scalar fields in flattened nested structs emit `opt_* = match ... with None -> [] | Some v -> [...]` bindings concatenated with `List.++`
 - Response wrapper: `<OperationNameResponse><OperationNameResult>`
 - Error format: `<ErrorResponse><Error><Code>...</Code></Error></ErrorResponse>`
 
@@ -394,6 +395,8 @@ The generator extracts HTTP bindings from Smithy traits to determine where each 
 **Binding Priority:**
 1. Members with explicit HTTP traits (`@httpLabel`, `@httpQuery`, `@httpHeader`, `@httpPayload`)
 2. Remaining members serialize to JSON body
+
+**List-valued `@httpQuery` members** are expanded so each element becomes a separate `key=value` repetition (e.g. `Status=A&Status=B`). Scalar params are collected in `scalarParts`; list params generate `<memberName>QueryParts` via `List.map`. Both are concatenated into `filteredParts`.
 
 #### Request Generation Flow
 

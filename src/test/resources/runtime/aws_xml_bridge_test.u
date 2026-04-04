@@ -101,19 +101,88 @@ testFlatList = 'let
     Some items -> List.size items === 2
     None -> false
 
+-- === Soup-Native Extraction Tests ===
+
+-- extractMapSoup: entry-list form (key/value children of each entry element)
+testExtractMapSoup : '{Exception} Boolean
+testExtractMapSoup = 'let
+  xml =
+    "<Metadata>" ++
+    "<entry><key>Content-Type</key><value>text/plain</value></entry>" ++
+    "<entry><key>x-amz-meta-author</key><value>alice</value></entry>" ++
+    "</Metadata>"
+  soup = aws.xml.parse xml
+  containerSoup = Soup.root soup
+  entries = aws.xml.extractMapSoup "entry" "key" "value" containerSoup
+  result = Map.fromList entries
+  (Map.size result === 2)
+    && (Map.lookup "Content-Type" result === Some "text/plain")
+    && (Map.lookup "x-amz-meta-author" result === Some "alice")
+
+-- extractMapSoup: empty container returns empty list
+testExtractMapSoupEmpty : '{Exception} Boolean
+testExtractMapSoupEmpty = 'let
+  xml = "<Metadata></Metadata>"
+  soup = aws.xml.parse xml
+  containerSoup = Soup.root soup
+  entries = aws.xml.extractMapSoup "entry" "key" "value" containerSoup
+  List.isEmpty entries
+
+-- extractMapSoup: custom entry/key/value tag names
+testExtractMapSoupCustomTags : '{Exception} Boolean
+testExtractMapSoupCustomTags = 'let
+  xml =
+    "<Tags>" ++
+    "<item><name>Env</name><val>prod</val></item>" ++
+    "<item><name>Team</name><val>platform</val></item>" ++
+    "</Tags>"
+  soup = aws.xml.parse xml
+  containerSoup = Soup.root soup
+  entries = aws.xml.extractMapSoup "item" "name" "val" containerSoup
+  result = Map.fromList entries
+  (Map.size result === 2)
+    && (Map.lookup "Env" result === Some "prod")
+    && (Map.lookup "Team" result === Some "platform")
+
+-- Float extraction pattern used by the REST-XML generator for Float/Double fields:
+--   aws.xml.findText "Field" soup |> Optional.flatMap Float.fromText
+testFloatExtractionPattern : '{Exception} Boolean
+testFloatExtractionPattern = 'let
+  xml = "<Response><Progress>0.75</Progress><Ratio>1.5</Ratio></Response>"
+  soup = aws.xml.parse xml
+  rootSoup = Soup.root soup
+  progressOpt = aws.xml.findText "Progress" rootSoup |> Optional.flatMap Float.fromText
+  ratioOpt    = aws.xml.findText "Ratio"    rootSoup |> Optional.flatMap Float.fromText
+  missingOpt  = aws.xml.findText "Missing"  rootSoup |> Optional.flatMap Float.fromText
+  (progressOpt === Some 0.75)
+    && (ratioOpt === Some 1.5)
+    && (missingOpt === None)
+
+-- Timestamp extraction pattern: aws.xml.findText returns Optional Text
+-- (timestamps are ISO-8601 strings in XML; no conversion needed at this layer)
+testTimestampExtractionPattern : '{Exception} Boolean
+testTimestampExtractionPattern = 'let
+  xml = "<Response><LastModified>2024-01-15T10:30:00Z</LastModified></Response>"
+  soup = aws.xml.parse xml
+  rootSoup = Soup.root soup
+  tsOpt      = aws.xml.findText "LastModified" rootSoup
+  missingOpt = aws.xml.findText "CreatedAt"    rootSoup
+  (tsOpt === Some "2024-01-15T10:30:00Z")
+    && (missingOpt === None)
+
 -- === Test Runner ===
 
 runAllTests : '{IO, Exception} ()
 runAllTests = do
   printLine "Running AWS XML Bridge Tests..."
   printLine ""
-  
+
   -- Text-based parsing tests
   !(runTest "parseListFromXml" testParseListFromXml)
   !(runTest "parseWrappedListFromXml" testParseWrappedListFromXml)
   !(runTest "parseNestedFromXml" testParseNestedFromXml)
   !(runTest "parseNestedFromXmlNotFound" testParseNestedFromXmlNotFound)
-  
+
   -- Integration tests
   !(runTest "complexStructure" testComplexStructure)
   !(runTest "nestedStructureWithAttributes" testNestedStructureWithAttributes)
@@ -121,7 +190,14 @@ runAllTests = do
   !(runTest "s3ListBucketsResponse" testS3ListBucketsResponse)
   !(runTest "optionalWrappedList" testOptionalWrappedList)
   !(runTest "flatList" testFlatList)
-  
+
+  -- Soup-native extraction tests
+  !(runTest "extractMapSoup" testExtractMapSoup)
+  !(runTest "extractMapSoupEmpty" testExtractMapSoupEmpty)
+  !(runTest "extractMapSoupCustomTags" testExtractMapSoupCustomTags)
+  !(runTest "floatExtractionPattern" testFloatExtractionPattern)
+  !(runTest "timestampExtractionPattern" testTimestampExtractionPattern)
+
   printLine ""
   printLine "All tests completed!"
 

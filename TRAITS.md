@@ -20,7 +20,7 @@ Traits for HTTP protocol bindings.
 | [`smithy.api#httpHeader`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpheader-trait) | ✅ | Implemented in RestXmlProtocolGenerator |
 | [`smithy.api#httpLabel`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httplabel-trait) | ✅ | Implemented in RestXmlProtocolGenerator for path parameters |
 | [`smithy.api#httpPayload`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httppayload-trait) | ✅ | Implemented in RestXmlProtocolGenerator |
-| [`smithy.api#httpQuery`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpquery-trait) | ✅ | Implemented in RestXmlProtocolGenerator for query params |
+| [`smithy.api#httpQuery`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpquery-trait) | ✅ | Implemented in RestXmlProtocolGenerator and RestJsonProtocolGenerator; list-valued members expand to repeated `key=value` pairs in REST-JSON |
 | [`smithy.api#cors`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-cors-trait) | ❌ | CORS configuration for service |
 | [`smithy.api#httpChecksumRequired`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httpchecksumrequired-trait) | ❌ | Requires checksum header |
 | [`smithy.api#httpError`](https://smithy.io/2.0/spec/http-bindings.html#smithy-api-httperror-trait) | ✅ | Included in error type documentation |

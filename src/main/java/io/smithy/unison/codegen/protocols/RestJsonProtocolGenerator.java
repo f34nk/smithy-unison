@@ -378,32 +378,32 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("method = \"$L\"", method);
         writer.write("uri = \"$L\"", uri);
         
-        // Build URL (Step 1.3 will implement path parameter substitution)
+        // Build URL
         generateUrlBuilding(operation, writer, context);
         
-        // Build query string (Step 1.3 will implement query parameter serialization)
+        // Build query string
         generateQueryString(operation, writer, context);
         
         // Build full URL
         writer.write("fullUrl = url ++ queryString");
         
-        // Build headers (Step 1.5 will implement header serialization)
+        // Build headers
         generateRequestHeaders(operation, writer, context);
         
-        // Build request body (Step 1.4 will implement JSON body serialization)
+        // Build request body
         generateRequestBody(operation, writer, context);
         
-        // Make HTTP call (Step 1.6 will implement full HTTP call with signing)
+        // Make HTTP call
         generateHttpCall(operation, writer, context);
         
-        // Handle response (Step 1.7 will implement full response parsing)
+        // Handle response
         generateResponseHandling(operation, writer, context);
         
         writer.dedent();
         writer.writeBlankLine();
     }
     
-    // ========== URL Building (Step 1.3) ==========
+    // ========== URL Building ==========
     
     /**
      * Generates URL building code with path parameter substitution.
@@ -481,10 +481,12 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     
     /**
      * Generates query string building code.
-     * 
+     *
      * <p>Extracts {@code @httpQuery} members and builds a query string.
-     * Example: maxResults=10&filter=active becomes "?maxResults=10&filter=active"
-     * 
+     * Scalar parameters become a single {@code Optional Text} slot each.
+     * List-valued parameters are expanded so every element becomes a
+     * separate {@code key=value} repetition (e.g. {@code Status=A&Status=B}).
+     *
      * @param operation The operation shape
      * @param writer The Unison code writer
      * @param context The code generation context
@@ -493,57 +495,107 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
         String inputType = getInputTypeName(operation, context);
-        
+
         Optional<StructureShape> inputShape = ProtocolUtils.getInputShape(operation, model);
         if (inputShape.isEmpty()) {
             writer.write("queryString = \"\"");
             return;
         }
-        
+
         List<MemberShape> queryParams = getQueryParameterMembers(inputShape.get());
-        
+
         if (queryParams.isEmpty()) {
             writer.write("queryString = \"\"");
         } else {
+            // Separate scalar vs list-valued query params
+            List<MemberShape> scalarParams = queryParams.stream()
+                    .filter(m -> !(model.expectShape(m.getTarget()) instanceof ListShape))
+                    .collect(Collectors.toList());
+            List<MemberShape> listParams = queryParams.stream()
+                    .filter(m -> model.expectShape(m.getTarget()) instanceof ListShape)
+                    .collect(Collectors.toList());
+
             writer.write("");
             writer.write("-- Build query string from @httpQuery members");
-            writer.write("queryParts : [Optional Text]");
-            writer.write("queryParts = [");
-            writer.indent();
-            
-            for (int i = 0; i < queryParams.size(); i++) {
-                MemberShape member = queryParams.get(i);
-                String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
-                String queryName = getQueryParamName(member);
-                boolean isLast = (i == queryParams.size() - 1);
-                
-                // Get the target shape to determine serialization
-                software.amazon.smithy.model.shapes.Shape targetShape = model.expectShape(member.getTarget());
-                
-                // Skip list-valued query parameters for now (TODO: implement proper list serialization)
-                if (targetShape instanceof ListShape) {
-                    writer.write("None$L  -- TODO: list-valued query parameter not supported: $L",
-                               isLast ? "" : ",", queryName);
-                    continue;
+
+            // Phase A: scalar parameters (one Optional Text slot each)
+            writer.write("scalarParts : [Optional Text]");
+            if (scalarParams.isEmpty()) {
+                writer.write("scalarParts = []");
+            } else {
+                writer.write("scalarParts = [");
+                writer.indent();
+                for (int i = 0; i < scalarParams.size(); i++) {
+                    MemberShape member = scalarParams.get(i);
+                    String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                    String queryName = getQueryParamName(member);
+                    boolean isLast = (i == scalarParams.size() - 1);
+                    Shape targetShape = model.expectShape(member.getTarget());
+                    String toTextFunc = getToTextFunction(targetShape, clientNamespace);
+
+                    // HTTP query parameters are always optional in the generated types
+                    if (toTextFunc.isEmpty()) {
+                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
+                                queryName, inputType, memberName, isLast ? "" : ",");
+                    } else {
+                        writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
+                                queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
+                    }
                 }
-                
-                String toTextFunc = getToTextFunction(targetShape, clientNamespace);
-                
-                // HTTP query parameters are always optional in the generated types
-                // (even if marked @required in Smithy) because they can be omitted from the HTTP request
-                // So we always use Optional.map here
-                if (toTextFunc.isEmpty()) {
-                    writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode v) ($L.$L input)$L",
-                            queryName, inputType, memberName, isLast ? "" : ",");
-                } else {
-                    writer.write("Optional.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v)) ($L.$L input)$L",
-                            queryName, toTextFunc, inputType, memberName, isLast ? "" : ",");
+                writer.dedent();
+                writer.write("]");
+            }
+
+            // Phase B: list-valued parameters (each element becomes one repetition)
+            List<String> listPartsVars = new ArrayList<>();
+            if (!listParams.isEmpty()) {
+                writer.write("-- List-valued query parameters (each element becomes one repetition)");
+                for (MemberShape member : listParams) {
+                    String memberName = UnisonSymbolProvider.toUnisonFunctionName(member.getMemberName());
+                    String queryName = getQueryParamName(member);
+                    ListShape listShape = (ListShape) model.expectShape(member.getTarget());
+                    Shape elementShape = model.expectShape(listShape.getMember().getTarget());
+                    String accessor = inputType + "." + memberName + " input";
+                    String listPartsVar = memberName + "QueryParts";
+                    listPartsVars.add(listPartsVar);
+
+                    if (elementShape.isStructureShape()) {
+                        // Structures in query params are very rare; not supported
+                        writer.write("$L = [] -- TODO: list of structures in query parameter not supported: $L",
+                                listPartsVar, elementShape.getId().getName());
+                    } else {
+                        boolean isNonOptional = member.isRequired() ||
+                                member.hasTrait(software.amazon.smithy.model.traits.DefaultTrait.class);
+                        String toTextFunc = getToTextFunction(elementShape, clientNamespace);
+
+                        if (toTextFunc.isEmpty()) {
+                            // Element is already Text
+                            if (isNonOptional) {
+                                writer.write("$L = $L |> List.map (v -> \"$L=\" ++ aws.http.urlEncode v)",
+                                        listPartsVar, accessor, queryName);
+                            } else {
+                                writer.write("$L = Optional.getOrElse [] ($L) |> List.map (v -> \"$L=\" ++ aws.http.urlEncode v)",
+                                        listPartsVar, accessor, queryName);
+                            }
+                        } else {
+                            if (isNonOptional) {
+                                writer.write("$L = $L |> List.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v))",
+                                        listPartsVar, accessor, queryName, toTextFunc);
+                            } else {
+                                writer.write("$L = Optional.getOrElse [] ($L) |> List.map (v -> \"$L=\" ++ aws.http.urlEncode ($L v))",
+                                        listPartsVar, accessor, queryName, toTextFunc);
+                            }
+                        }
+                    }
                 }
             }
-            
-            writer.dedent();
-            writer.write("]");
-            writer.write("filteredParts = List.filterMap (x -> x) queryParts");
+
+            // Merge scalar and list parts
+            String filteredParts = "List.filterMap (x -> x) scalarParts";
+            for (String listPartsVar : listPartsVars) {
+                filteredParts += " List.++ " + listPartsVar;
+            }
+            writer.write("filteredParts = $L", filteredParts);
             writer.write("queryString = if List.isEmpty filteredParts then \"\" else \"?\" ++ Text.join \"&\" filteredParts");
         }
     }
@@ -591,7 +643,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         }
     }
     
-    // ========== Request Headers (Step 1.5) ==========
+    // ========== Request Headers ==========
     
     /**
      * Generates request header building code.
@@ -694,7 +746,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
                 .orElse(member.getMemberName());
     }
     
-    // ========== Request Body (Step 1.4) ==========
+    // ========== Request Body ==========
     
     /**
      * Generates request body serialization code.
@@ -804,7 +856,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         }
     }
     
-    // ========== HTTP Call (Step 1.6) ==========
+    // ========== HTTP Call ==========
     
     /**
      * Generates HTTP call code with SigV4 signing.
@@ -858,12 +910,12 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         return baseName.toLowerCase();
     }
     
-    // ========== Response Handling (Step 1.7) ==========
+    // ========== Response Handling ==========
     
     /**
      * Generates response handling code.
      * 
-     * <p>TODO: Step 1.7 will implement:
+     * <p>TODO:
      * <ul>
      *   <li>Error response parsing</li>
      *   <li>Success response JSON parsing</li>
@@ -889,7 +941,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
         writer.write("if Nat.lt statusCode 300 then");
         writer.indent();
         
-        // Success case - basic output (Step 1.7 will add proper response parsing)
+        // Success case - basic output
         if (operation.getOutput().isPresent()) {
             String parserName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     operation.getId().getName() + "ResponseParser");
@@ -1667,58 +1719,48 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
     public void generateUnionDeserializer(software.amazon.smithy.model.shapes.UnionShape unionShape, UnisonWriter writer, UnisonContext context) {
         Model model = context.model();
         String clientNamespace = context.settings().getClientNamespace();
-        
+
         String unionType = UnisonSymbolProvider.toNamespacedTypeName(unionShape.getId().getName(), clientNamespace);
         String functionName = clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                 unionShape.getId().getName() + "FromJson");
-        
+
         writer.writeComment("Deserialize " + unionShape.getId().getName() + " from JSON (union type)");
         writer.writeSignature(functionName, "core.Json -> '{Exception} " + unionType);
         writer.write("$L json = do", functionName);
         writer.indent();
-        
-        // For REST-JSON unions, try to parse as each variant
-        // We attempt each variant and use the first that succeeds
+
         List<MemberShape> members = new ArrayList<>(unionShape.getAllMembers().values());
-        
+
         if (members.isEmpty()) {
             writer.write("Exception.raise (Generic.failure \"Empty union\" \"No members\")");
         } else {
-            // Generate try-parse logic for each member
-            // Use nested match on Either to try each variant
-            for (int i = 0; i < members.size(); i++) {
-                MemberShape member = members.get(i);
-                Shape memberTarget = model.expectShape(member.getTarget());
-                String constructorName = UnisonSymbolProvider.toUnisonTypeName(unionShape.getId().getName()) + "'" +
+            // AWS REST-JSON encodes unions as single-key discriminated objects.
+            // Extract the key and dispatch — no trial-and-error needed.
+            writer.write("key = aws.json.bridge.coreJsonObjectKey json |> Optional.getOrElse \"\"");
+            writer.write("valueJson = match aws.json.bridge.coreJsonObjectValue key json with");
+            writer.indent();
+            writer.write("Some v -> v");
+            writer.write("None -> core.Json.Object []");
+            writer.dedent();
+
+            writer.write("match key with");
+            writer.indent();
+            for (MemberShape member : members) {
+                String variantName = getJsonName(member);
+                String constructorName = UnisonSymbolProvider.toNamespacedTypeName(
+                        unionShape.getId().getName(), clientNamespace) + "'" +
                         UnisonSymbolProvider.toUnisonTypeName(member.getMemberName());
-                String memberDeserializer = getDeserializerForType(memberTarget, model, clientNamespace);
-                
-                writer.write("match catch do");
+                Shape memberTarget = model.expectShape(member.getTarget());
+                String deserializer = getDeserializerForType(memberTarget, model, clientNamespace);
+                writer.write("\"$L\" ->", variantName);
                 writer.indent();
-                writer.write("value = !($L json)", memberDeserializer);
-                writer.write("$L value", constructorName);
+                writer.write("$L !($L valueJson)", constructorName, deserializer);
                 writer.dedent();
-                writer.write("with");
-                writer.indent();
-                writer.write("Right result -> result");
-                
-                if (i < members.size() - 1) {
-                    writer.write("Left _ ->");
-                    writer.indent();
-                } else {
-                    // Last variant - re-raise the exception
-                    writer.write("Left err -> Exception.raise err");
-                    writer.dedent(); // Close match
-                }
             }
-            
-            // Close all the nested "Left _ ->" blocks
-            for (int i = 0; i < members.size() - 1; i++) {
-                writer.dedent(); // Close the "Left _ ->" indent
-                writer.dedent(); // Close match indent
-            }
+            writer.write("_ -> Exception.raise (Failure (typeLink Generic) (\"Unknown union variant: \" ++ key) (Any key))");
+            writer.dedent();
         }
-        
+
         writer.dedent();
         writer.writeBlankLine();
     }
@@ -2371,7 +2413,7 @@ public class RestJsonProtocolGenerator implements ProtocolGenerator {
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isUnionShape()) {
-            // Union - use generated FromJson deserializer (TODO: implement union deserializers)
+            // Union - use generated key-dispatch FromJson deserializer
             return clientNamespace + "." + UnisonSymbolProvider.toUnisonFunctionName(
                     shape.getId().getName() + "FromJson");
         } else if (shape.isDocumentShape()) {

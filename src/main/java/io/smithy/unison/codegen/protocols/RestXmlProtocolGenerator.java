@@ -13,6 +13,7 @@ import io.smithy.unison.codegen.symbol.UnisonSymbolProvider;
 import software.amazon.smithy.model.Model;
 import software.amazon.smithy.model.shapes.EnumShape;
 import software.amazon.smithy.model.shapes.ListShape;
+import software.amazon.smithy.model.shapes.MapShape;
 import software.amazon.smithy.model.shapes.MemberShape;
 import software.amazon.smithy.model.shapes.OperationShape;
 import software.amazon.smithy.model.shapes.ServiceShape;
@@ -973,18 +974,96 @@ public class RestXmlProtocolGenerator implements ProtocolGenerator {
             String baseTypeName = UnisonSymbolProvider.toUnisonTypeName(structShape.getId().getName());
             String parserName = UnisonSymbolProvider.toNamespacedFunctionName(
                     "parse" + baseTypeName + "FromSoup", clientNamespace);
-            
+
             if (isOptional) {
                 writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L soup", varName, xmlElementName, parserName);
             } else {
                 String optVarName = varName + "Opt";
                 writer.write("$L = aws.xml.parseNestedSoup \"$L\" $L soup", optVarName, xmlElementName, parserName);
-                writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L", 
+                writer.write("$L = Optional.getOrElse (bug \"Required nested structure '$L' not found\") $L",
                         varName, xmlElementName, optVarName);
             }
+        } else if (targetShape.isTimestampShape()) {
+            // Timestamps are ISO-8601 text in an XML element
+            if (isOptional) {
+                writer.write("$L = aws.xml.findText \"$L\" soup", varName, xmlElementName);
+            } else {
+                writer.write("$L = aws.xml.findText \"$L\" soup |> Optional.getOrElse \"\"",
+                        varName, xmlElementName);
+            }
+        } else if (targetShape.isFloatShape() || targetShape.isDoubleShape()) {
+            // Float/Double encoded as decimal text
+            if (isOptional) {
+                writer.write("$L = aws.xml.findText \"$L\" soup |> Optional.flatMap Float.fromText",
+                        varName, xmlElementName);
+            } else {
+                writer.write("$L = aws.xml.findText \"$L\" soup |> Optional.flatMap Float.fromText" +
+                        " |> Optional.getOrElse 0.0", varName, xmlElementName);
+            }
+        } else if (targetShape instanceof MapShape) {
+            // Map - entry-list form using aws.xml.extractMapSoup
+            generateXmlMapExtraction(member, (MapShape) targetShape, xmlElementName, varName, isOptional, writer);
+        } else if (targetShape.isUnionShape()) {
+            // Union fields are very rare in REST-XML; deferred to plan 06
+            writer.write("$L = None -- TODO: union field not yet supported in REST-XML: $L",
+                    varName, targetShape.getId().getName());
+        } else if (targetShape.isDocumentShape()) {
+            // Document fields are rare in REST-XML
+            writer.write("$L = None -- TODO: document field not yet supported in REST-XML: $L",
+                    varName, targetShape.getId().getName());
         } else {
-            // Unknown type - use None as placeholder
-            writer.write("$L = None -- TODO: parse $L", varName, targetShape.getType());
+            // Truly unrecognised shape — fail at code-gen time so gaps surface early
+            throw new IllegalArgumentException(
+                    "generateXmlFieldExtraction: unsupported shape type " +
+                    targetShape.getType() + " for shape " + targetShape.getId());
+        }
+    }
+
+    /**
+     * Generates XML map extraction code using aws.xml.extractMapSoup.
+     *
+     * <p>Handles the entry-list form common in AWS REST-XML responses:
+     * {@code <Container><entry><key>k</key><value>v</value></entry>...</Container>}
+     *
+     * <p>The entry, key, and value element names are resolved from {@code @xmlName}
+     * traits on the map's key and value members, defaulting to "entry", "key", "value".
+     */
+    private void generateXmlMapExtraction(MemberShape member, MapShape mapShape,
+            String xmlElementName, String varName, boolean isOptional, UnisonWriter writer) {
+        String entryTag = "entry";
+        String keyTag = mapShape.getKey()
+                .getTrait(software.amazon.smithy.model.traits.XmlNameTrait.class)
+                .map(t -> t.getValue())
+                .orElse("key");
+        String valueTag = mapShape.getValue()
+                .getTrait(software.amazon.smithy.model.traits.XmlNameTrait.class)
+                .map(t -> t.getValue())
+                .orElse("value");
+
+        if (isOptional) {
+            writer.write("$L = match aws.xml.findOpt \"$L\" soup with", varName, xmlElementName);
+            writer.indent();
+            writer.write("None -> None");
+            writer.write("Some containerSoup ->");
+            writer.indent();
+            writer.write("entries = aws.xml.extractMapSoup \"$L\" \"$L\" \"$L\" containerSoup",
+                    entryTag, keyTag, valueTag);
+            writer.write("Some (Map.fromList entries)");
+            writer.dedent();
+            writer.dedent();
+        } else {
+            String optVarName = varName + "Opt";
+            writer.write("$L = match aws.xml.findOpt \"$L\" soup with", optVarName, xmlElementName);
+            writer.indent();
+            writer.write("None -> None");
+            writer.write("Some containerSoup ->");
+            writer.indent();
+            writer.write("entries = aws.xml.extractMapSoup \"$L\" \"$L\" \"$L\" containerSoup",
+                    entryTag, keyTag, valueTag);
+            writer.write("Some (Map.fromList entries)");
+            writer.dedent();
+            writer.dedent();
+            writer.write("$L = $L |> Optional.getOrElse Map.empty", varName, optVarName);
         }
     }
     
